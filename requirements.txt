@@ -10,3 +10,4 @@ Flask-Cors
 Flask-Session
 requests
 sendgrid
+gunicorn
