@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ lang.dashboard_title.replace('{name}', data.name) }} - Tyra</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary-gradient: linear-gradient(135deg, #8B4A9C 0%, #A855A8 100%);
+            --background-color: #fcfaff;
+            --text-color: #333;
+            --light-text-color: #666;
+            --card-bg: #fff;
+            --card-shadow: 0 8px 30px rgba(139, 74, 156, 0.1);
+        }
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+        }
+        .dashboard-container { max-width: 800px; margin: auto; }
+        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        header h1 {
+            background: var(--primary-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            font-size: 2.5em; margin: 0;
+        }
+        header .header-controls { display: flex; align-items: center; gap: 20px; }
+        header a { color: #8B4A9C; text-decoration: none; font-weight: 500; }
+        .widget-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+        .widget { background: var(--card-bg); border-radius: 16px; padding: 20px; box-shadow: var(--card-shadow); transition: opacity 0.3s, transform 0.3s; }
+        .widget.hidden { display: none; }
+        .widget h2 { margin-top: 0; font-size: 1.2em; border-bottom: 2px solid #f3eef7; padding-bottom: 10px; margin-bottom: 15px; }
+        .widget ul { list-style: none; padding: 0; margin: 0; }
+        .widget li {
+            padding: 8px 0; border-bottom: 1px solid #f8f5fa; font-size: 0.9em; color: var(--light-text-color);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .widget li:last-child { border-bottom: none; }
+        .widget li strong { color: var(--text-color); }
+        .meds-item .meds-details {
+            display: block; font-size: 0.9em; color: var(--light-text-color);
+        }
+        .goals-item { padding: 10px 5px; font-size: 1em; color: var(--text-color); }
+        .cycle-stats p { margin: 5px 0; font-size: 1.1em; }
+        .cycle-stats .stat-value { font-weight: 700; font-size: 1.5em; color: #8B4A9C; }
+        .chart-widget { height: 250px; }
+        .done-btn { background: none; border: none; color: #a0a0a0; font-size: 1.5em; cursor: pointer; padding: 0 5px; line-height: 1; transition: color 0.2s; }
+        .done-btn:hover { color: #4CAF50; }
+        .export-buttons { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+        .export-btn, .customize-btn, #save-prefs-btn, #share-report-btn, #copy-link-btn {
+            background-image: var(--primary-gradient); color: white; font-weight: bold; border: none;
+            cursor: pointer; padding: 10px 15px; border-radius: 8px; transition: transform 0.2s;
+        }
+        #share-report-btn { background: #6c5ce7; }
+        .export-btn:hover, .customize-btn:hover, #save-prefs-btn:hover, #share-report-btn:hover, #copy-link-btn:hover { transform: translateY(-1px); }
+        .customize-btn { padding: 8px 12px; font-size: 0.9em; }
+
+        /* Modal Styles */
+        .modal {
+            display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%;
+            overflow: auto; background-color: rgba(0,0,0,0.5);
+        }
+        .modal-content {
+            background-color: #fefefe; margin: 15% auto; padding: 20px; border: 1px solid #888;
+            width: 80%; max-width: 500px; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 15px; }
+        .modal-header h2 { margin: 0; font-size: 1.4em; }
+        .close-btn { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+        .close-btn:hover, .close-btn:focus { color: black; text-decoration: none; }
+        .prefs-list { list-style: none; padding: 0; }
+        .prefs-list li { padding: 10px 5px; }
+        .prefs-list label { font-size: 1.1em; cursor: pointer; display: flex; align-items: center; gap: 10px; }
+        .prefs-list input[type="checkbox"] { width: 20px; height: 20px; }
+        #share-link-container { margin-top: 15px; display: flex; gap: 10px; }
+        #share-link { flex-grow: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <header>
+            <h1>{{ lang.dashboard_title.replace('{name}', data.name) }}</h1>
+            <div class="header-controls">
+                {% if enable_dashboard_customization %}
+                <button id="customize-dashboard-btn" class="customize-btn">{{ lang.dashboard_customize_link }}</button>
+                {% endif %}
+                <a href="{{ url_for('index') }}">{{ lang.back_to_chat_link }}</a>
+            </div>
+        </header>
+
+        <div class="widget-grid">
+            <div class="widget cycle-stats" id="cycle-widget">
+                <h2>{{ lang.widget_title_cycle }}</h2>
+                {% if data.cycle_stats.current_day %}
+                    {# BUG FIX v92.3: Convert integer to string before using .replace() #}
+                    <p>{{ lang.cycle_current_day_p1 }} <span class="stat-value">{{ lang.cycle_day_N.replace('{day}', data.cycle_stats.current_day|string) }}</span></p>
+                {% elif data.cycle_stats.predicted_next %}
+                    <p>{{ lang.cycle_no_active_cycle }}</p>
+                {% else %}
+                    <p>{{ lang.cycle_log_first_period }}</p>
+                {% endif %}
+                {% if data.cycle_stats.predicted_next %}
+                    <p>{{ lang.cycle_predicted_next }}: <strong>{{ data.cycle_stats.predicted_next }}</strong></p>
+                {% endif %}
+                 {% if data.cycle_stats.avg_cycle_length %}
+                    <p>{{ lang.cycle_avg_length }}: <strong>{{ lang.cycle_N_days.replace('{days}', data.cycle_stats.avg_cycle_length|string) }}</strong></p>
+                {% endif %}
+            </div>
+            
+            <div class="widget" id="reminders-widget">
+                <h2>{{ lang.widget_title_reminders }}</h2>
+                <ul id="reminders-list">
+                    {% for reminder in data.reminders %}
+                        <li data-reminder-id="{{ reminder.id }}">
+                            <span><strong>{{ reminder.text }}</strong> {{ lang.reminder_on_date }} {{ reminder.date }}</span>
+                            <button class="done-btn" title="Mark as Done">✓</button>
+                        </li>
+                    {% else %}
+                        <li>{{ lang.no_reminders_text }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            {% if enable_medication_tracking %}
+            <div class="widget" id="meds-widget">
+                <h2>{{ lang.widget_title_meds }}</h2>
+                <ul>
+                    {% for med in data.medications %}
+                    <li class="meds-item">
+                        <div>
+                            <strong>{{ med.name }}</strong>
+                            <span class="meds-details">{{ lang.meds_dosage }}: {{ med.dosage }} | {{ lang.meds_freq }}: {{ med.frequency }}</span>
+                        </div>
+                    </li>
+                    {% else %}
+                    <li>{{ lang.no_meds_logged }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            {% if enable_goal_tracking %}
+            <div class="widget" id="goals-widget">
+                <h2>{{ lang.widget_title_goals }}</h2>
+                <ul>
+                    {% for goal in data.goals %}
+                    <li class="goals-item">
+                       <span>{{ goal.text }}</span>
+                    </li>
+                    {% else %}
+                    <li>{{ lang.no_goals_set }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <div class="widget chart-widget" id="cycle-chart-widget">
+                <h2>{{ lang.widget_title_cycle_history }}</h2>
+                <canvas id="cycleLengthChart"></canvas>
+                <p id="cycleChartStatus" style="text-align:center; display:none;">{{ lang.no_chart_data_text }}</p>
+            </div>
+            <div class="widget chart-widget" id="interaction-chart-widget">
+                <h2>{{ lang.widget_title_interaction }}</h2>
+                <canvas id="interactionTimeChart"></canvas>
+                <p id="interactionChartStatus" style="text-align:center; display:none;">{{ lang.no_chart_data_text }}</p>
+            </div>
+
+            <div class="widget" id="logs-widget">
+                <h2>{{ lang.widget_title_health_logs }}</h2>
+                <ul>
+                    {% for log in data.health_logs %}
+                        <li>{{ log }}</li>
+                    {% else %}
+                        <li>{{ lang.no_logs_text }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            
+            <div class="widget" id="export-widget">
+                <h2>{{ lang.widget_title_export }}</h2>
+                <p>{{ lang.export_description }}</p>
+                <div class="export-buttons">
+                    <form action="{{ url_for('export') }}" method="post" style="display: inline;">
+                        <input type="hidden" name="format" value="pdf">
+                        <button type="submit" class="export-btn">{{ lang.export_pdf_button }}</button>
+                    </form>
+                    <form action="{{ url_for('export') }}" method="post" style="display: inline;">
+                        <input type="hidden" name="format" value="csv">
+                        <button type="submit" class="export-btn">{{ lang.export_csv_button }}</button>
+                    </form>
+                    {% if enable_shareable_reports %}
+                    <button id="share-report-btn" class="export-btn" style="background: #6c5ce7;">{{ lang.share_report_button }}</button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    {% if enable_dashboard_customization %}
+    <div id="prefs-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>{{ lang.customize_modal_title }}</h2>
+                <span class="close-btn" id="close-prefs-modal">×</span>
+            </div>
+            <ul class="prefs-list">
+                <li><label><input type="checkbox" data-widget-id="cycle-widget"> {{ lang.widget_title_cycle }}</label></li>
+                <li><label><input type="checkbox" data-widget-id="reminders-widget"> {{ lang.widget_title_reminders }}</label></li>
+                {% if enable_medication_tracking %}
+                <li><label><input type="checkbox" data-widget-id="meds-widget"> {{ lang.widget_title_meds }}</label></li>
+                {% endif %}
+                {% if enable_goal_tracking %}
+                <li><label><input type="checkbox" data-widget-id="goals-widget"> {{ lang.widget_title_goals }}</label></li>
+                {% endif %}
+                <li><label><input type="checkbox" data-widget-id="cycle-chart-widget"> {{ lang.widget_title_cycle_history }}</label></li>
+                <li><label><input type="checkbox" data-widget-id="interaction-chart-widget"> {{ lang.widget_title_interaction }}</label></li>
+                <li><label><input type="checkbox" data-widget-id="logs-widget"> {{ lang.widget_title_health_logs }}</label></li>
+                <li><label><input type="checkbox" data-widget-id="export-widget"> {{ lang.widget_title_export }}</label></li>
+            </ul>
+            <button id="save-prefs-btn">{{ lang.customize_modal_save_button }}</button>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if enable_shareable_reports %}
+    <div id="share-modal" class="modal">
+         <div class="modal-content">
+            <div class="modal-header">
+                <h2>{{ lang.share_modal_title }}</h2>
+                <span class="close-btn" id="close-share-modal">×</span>
+            </div>
+            <p>{{ lang.share_modal_description }}</p>
+            <div id="share-link-container">
+                <input type="text" id="share-link" readonly>
+                <button id="copy-link-btn" class="export-btn">{{ lang.copy_button }}</button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // --- Chart Rendering Logic ---
+            async function renderChart(canvasId, statusId, endpoint) {
+                const canvas = document.getElementById(canvasId);
+                const status = document.getElementById(statusId);
+                if (!canvas) return;
+                try {
+                    const response = await fetch(endpoint);
+                    if (response.ok) {
+                        const config = await response.json();
+                        new Chart(canvas.getContext('2d'), config);
+                    } else {
+                        canvas.style.display = 'none';
+                        if(status) status.style.display = 'block';
+                    }
+                } catch (e) {
+                    console.error(`Could not load chart for ${canvasId}:`, e);
+                    canvas.style.display = 'none';
+                    if(status) status.style.display = 'block';
+                }
+            }
+
+            // --- Interactive "Done" button for reminders ---
+            const remindersList = document.getElementById('reminders-list');
+            if (remindersList) {
+                remindersList.addEventListener('click', async function(e) {
+                    if (e.target && e.target.classList.contains('done-btn')) {
+                        const listItem = e.target.closest('li');
+                        const reminderId = listItem.getAttribute('data-reminder-id');
+                        if (!reminderId) return;
+                        try {
+                            const response = await fetch('/delete_reminder', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ reminder_id: reminderId }),
+                            });
+                            if (response.ok) {
+                                listItem.style.transition = 'opacity 0.5s';
+                                listItem.style.opacity = '0';
+                                setTimeout(() => {
+                                    listItem.remove();
+                                    if (remindersList.children.length === 0) {
+                                        remindersList.innerHTML = `<li>{{ lang.no_reminders_text }}</li>`;
+                                    }
+                                }, 500);
+                            } else {
+                                alert('Could not mark reminder as done.');
+                            }
+                        } catch (error) {
+                            console.error('Error deleting reminder:', error);
+                        }
+                    }
+                });
+            }
+
+            // --- Dashboard Customization Logic ---
+            const customizationEnabled = {{ enable_dashboard_customization | tojson }};
+            if (customizationEnabled) {
+                const prefsModal = document.getElementById('prefs-modal');
+                const customizeBtn = document.getElementById('customize-dashboard-btn');
+                const closePrefsBtn = document.getElementById('close-prefs-modal');
+                const savePrefsBtn = document.getElementById('save-prefs-btn');
+                const prefsCheckboxes = document.querySelectorAll('.prefs-list input[type="checkbox"]');
+                const WIDGET_PREFS_KEY = 'tyraDashboardWidgetPrefs';
+                const WIDGET_IDS = ['cycle-widget', 'reminders-widget', 'cycle-chart-widget', 'interaction-chart-widget', 'logs-widget', 'export-widget'];
+                if ({{ enable_medication_tracking | tojson }}) {
+                    WIDGET_IDS.push('meds-widget');
+                }
+                if ({{ enable_goal_tracking | tojson }}) {
+                    WIDGET_IDS.push('goals-widget');
+                }
+
+                const getPreferences = () => {
+                    try {
+                        const prefs = localStorage.getItem(WIDGET_PREFS_KEY);
+                        if (prefs) return JSON.parse(prefs);
+                    } catch (e) { console.error("Could not parse dashboard preferences", e); }
+                    let defaultPrefs = {};
+                    WIDGET_IDS.forEach(id => defaultPrefs[id] = true);
+                    return defaultPrefs;
+                };
+
+                const applyPreferences = () => {
+                    const prefs = getPreferences();
+                    WIDGET_IDS.forEach(id => {
+                        const widget = document.getElementById(id);
+                        if (widget) widget.classList.toggle('hidden', !prefs[id]);
+                    });
+                    renderVisibleCharts();
+                };
+
+                const savePreferences = () => {
+                    let newPrefs = {};
+                    prefsCheckboxes.forEach(checkbox => {
+                        newPrefs[checkbox.getAttribute('data-widget-id')] = checkbox.checked;
+                    });
+                    localStorage.setItem(WIDGET_PREFS_KEY, JSON.stringify(newPrefs));
+                    applyPreferences();
+                    prefsModal.style.display = "none";
+                };
+                
+                const updateModalCheckboxes = () => {
+                    const prefs = getPreferences();
+                    prefsCheckboxes.forEach(checkbox => {
+                        checkbox.checked = prefs[checkbox.getAttribute('data-widget-id')] !== false;
+                    });
+                };
+                
+                const renderVisibleCharts = () => {
+                    const prefs = getPreferences();
+                    if(prefs['cycle-chart-widget']) renderChart('cycleLengthChart', 'cycleChartStatus', '/chart_data?type=cycle_length');
+                    if(prefs['interaction-chart-widget']) renderChart('interactionTimeChart', 'interactionChartStatus', '/chart_data?type=interaction_time');
+                };
+
+                customizeBtn.onclick = () => { updateModalCheckboxes(); prefsModal.style.display = "block"; };
+                closePrefsBtn.onclick = () => { prefsModal.style.display = "none"; };
+                savePrefsBtn.onclick = savePreferences;
+                
+                applyPreferences();
+            } else {
+                renderChart('cycleLengthChart', 'cycleChartStatus', '/chart_data?type=cycle_length');
+                renderChart('interactionTimeChart', 'interactionChartStatus', '/chart_data?type=interaction_time');
+            }
+
+            // --- Shareable Reports Logic ---
+            const shareEnabled = {{ enable_shareable_reports | tojson }};
+            if (shareEnabled) {
+                const shareModal = document.getElementById('share-modal');
+                const shareBtn = document.getElementById('share-report-btn');
+                const closeShareBtn = document.getElementById('close-share-modal');
+                const shareLinkInput = document.getElementById('share-link');
+                const copyLinkBtn = document.getElementById('copy-link-btn');
+                const originalShareBtnText = shareBtn.textContent;
+                const originalCopyBtnText = copyLinkBtn.textContent;
+
+                shareBtn.onclick = async () => {
+                    shareBtn.textContent = "Generating...";
+                    shareBtn.disabled = true;
+                    try {
+                        const response = await fetch('/share_report', { method: 'POST' });
+                        const data = await response.json();
+                        if (response.ok) {
+                            shareLinkInput.value = data.share_url;
+                            shareModal.style.display = 'block';
+                        } else {
+                            alert('Error: ' + (data.error || 'Could not generate link.'));
+                        }
+                    } catch (e) {
+                        alert('A network error occurred. Please try again.');
+                    } finally {
+                        shareBtn.textContent = originalShareBtnText;
+                        shareBtn.disabled = false;
+                    }
+                };
+
+                closeShareBtn.onclick = () => { shareModal.style.display = "none"; };
+                copyLinkBtn.onclick = () => {
+                    shareLinkInput.select();
+                    navigator.clipboard.writeText(shareLinkInput.value);
+                    copyLinkBtn.textContent = "Copied!";
+                    setTimeout(() => { copyLinkBtn.textContent = originalCopyBtnText; }, 2000);
+                };
+            }
+
+            // General modal closing logic
+            window.onclick = (event) => {
+                if (event.target.classList.contains('modal')) {
+                    event.target.style.display = "none";
+                }
+            };
+        });
+    </script>
+</body>
+</html>

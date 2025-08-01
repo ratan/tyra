@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>A Third-Party Website | Embedding Tyra</title>
+    
+    <!--
+      STEP 1: A third-party website includes the widget's CSS file.
+      The 'href' path MUST be the full URL to where the Flask API is serving the static file.
+    -->
+    <link rel="stylesheet" href="http://127.0.0.1:5000/static/css/tyra_widget.css">
+
+    <style>
+        /* Styles for this mock "third-party" website */
+        body {
+            font-family: 'Georgia', serif;
+            background-color: #fdfdfd;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 20px;
+            gap: 30px;
+        }
+        .main-article {
+            max-width: 650px;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 10px;
+        }
+        p {
+            line-height: 1.7;
+            font-size: 1.1em;
+            margin-bottom: 20px;
+        }
+        .sidebar {
+            width: 400px;
+            flex-shrink: 0;
+            padding-top: 60px; /* Align with article */
+        }
+    </style>
+</head>
+<body>
+
+    <main class="main-article">
+        <h1>My Personal Blog on Wellness</h1>
+        <p>Welcome to my corner of the internet. Here, we discuss all things related to leading a healthy and balanced life. It's a journey of a thousand steps, and every small piece of information helps.</p>
+        <p>Navigating women's health can sometimes be complex, which is why I've partnered with a new service to provide a helpful companion right here on the site. Feel free to ask it anything you're curious about!</p>
+        <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+    </main>
+    
+    <aside class="sidebar">
+        <!-- 
+          STEP 2: The website defines an empty div where the widget will be placed.
+          This is the "target element".
+        -->
+        <div id="tyra-chatbot-mount-point"></div>
+    </aside>
+
+    <!--
+      STEP 3: The website includes the widget's main JavaScript file.
+      Like the CSS, the 'src' path must be the full URL to the file served by the API.
+    -->
+    <script src="http://127.0.0.1:5000/static/js/tyra_widget.js"></script>
+
+    <!--
+      STEP 4: The website calls the initialization function provided by the script
+      to activate and render the widget in the target element.
+    -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // This is the only code the third-party website needs to write.
+            TyraWidget.init({
+                targetElementId: 'tyra-chatbot-mount-point',
+                apiUrl: 'http://127.0.0.1:5000' // The base URL of the Tyra API
+            });
+        });
+    </script>
+
+</body>
+</html>

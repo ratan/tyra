@@ -1,0 +1,588 @@
+{
+    "site_name": "Tribher",
+    "scrape_timestamp_utc": "2025-06-24T16:50:31.338855+00:00",
+    "source_url": "https://tribher.com/",
+    "general_info": {
+        "main_tagline": "TAILORED FITNESS and well-being for every stage of a woman's life",
+        "community_message": "Whether you're preparing for motherhood, navigating postpartum recovery or simply reclaiming time for yourself, Tribher is your tribe—your space to build strength, find balance and thrive.",
+        "services": [
+            "Yoga",
+            "Pilates",
+            "Pelvic Floor Training",
+            "Strength Training",
+            "Mental Wellness",
+            "Nutrition Guidance"
+        ],
+        "focus_areas": [
+            "Pre-conception fitness",
+            "Pregnancy wellness",
+            "Postpartum recovery",
+            "Women 40+ fitness",
+            "Hormonal balance",
+            "Pelvic floor health"
+        ],
+        "key_benefits": [
+            "360° Wellness System for Every Woman",
+            "Evidence-based fitness programs",
+            "Hormone-balancing approach",
+            "Pelvic floor rehabilitation focus",
+            "Low-impact, high-effectiveness training",
+            "Community support and expert guidance"
+        ]
+    },
+    "programs": [
+        {
+            "name": "Pre-conception Programs",
+            "url": "https://tribher.com/preconception-programs/",
+            "details": {
+                "goals": [
+                    "Prepare your body optimally for conception",
+                    "Build functional strength and endurance",
+                    "Establish healthy movement patterns",
+                    "Create hormonal balance through exercise",
+                    "Develop core stability and pelvic floor strength"
+                ],
+                "benefits": [
+                    "Functional Strength Training",
+                    "Yoga and Mobility Exercises",
+                    "Moderate-intensity Cardio",
+                    "Guided Meditation and Breathing"
+                ],
+                "why_choose": {
+                    "title": "Why Choose Tribher’s Preconception Programs?",
+                    "points": [
+                        "Evidence-based fitness approach tailored for conception preparation",
+                        "Holistic program combining physical and mental wellness",
+                        "Expert guidance from certified female fitness specialists",
+                        "Focus on hormonal balance and reproductive health",
+                        "Flexible scheduling to fit your lifestyle"
+                    ]
+                },
+                "class_format": {
+                    "title": "What The Classes Look Like",
+                    "points": [
+                        "45-60 minute comprehensive sessions",
+                        "Warm-up with mobility and activation exercises",
+                        "Functional strength training targeting major muscle groups",
+                        "Yoga flow for flexibility and stress reduction",
+                        "Moderate cardio intervals for cardiovascular health",
+                        "Cool-down with meditation and breathing exercises"
+                    ]
+                }
+            },
+            "sub_programs": [
+                {
+                    "name": "Pre-conception Yoga",
+                    "pricing_plans": [
+                        {
+                            "plan_title": "1 Month",
+                            "price": "₹ 2999",
+                            "features": [
+                                "12 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        },
+                        {
+                            "plan_title": "3 Months",
+                            "price": "₹ 8987",
+                            "features": [
+                                "36 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        },
+                        {
+                            "plan_title": "6 Months",
+                            "price": "₹ 17994",
+                            "features": [
+                                "72 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "Pre-conception Strength",
+                    "pricing_plans": [
+                        {
+                            "plan_title": "1 Month",
+                            "price": "₹ 2999",
+                            "features": [
+                                "12 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        },
+                        {
+                            "plan_title": "3 Months",
+                            "price": "₹ 8987",
+                            "features": [
+                                "36 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        },
+                        {
+                            "plan_title": "6 Months",
+                            "price": "₹ 17994",
+                            "features": [
+                                "72 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "Pre-conception Signature",
+                    "pricing_plans": [
+                        {
+                            "plan_title": "1 Month",
+                            "price": "₹ 3999",
+                            "features": [
+                                "24 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        },
+                        {
+                            "plan_title": "3 Months",
+                            "price": "₹ 11997",
+                            "features": [
+                                "72 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        },
+                        {
+                            "plan_title": "6 Months",
+                            "price": "₹ 23994",
+                            "features": [
+                                "114 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Prenatal / Pregnancy Programs",
+            "url": "https://tribher.com/prenatal-pregnancy-programs/",
+            "details": {
+                "goals": [
+                    "Maintain optimal fitness throughout pregnancy",
+                    "Prepare body for labor and delivery",
+                    "Support healthy weight management",
+                    "Reduce pregnancy-related discomforts",
+                    "Build mental resilience"
+                ],
+                "benefits": [
+                    "Physical Fitness",
+                    "Nutrition Guidance",
+                    "Prenatal Education",
+                    "Mental Well-being Support"
+                ],
+                "why_choose": {
+                    "title": "Why Choose Tribher’s Pregnancy Programs?",
+                    "points": [
+                        "Safe, trimester-specific exercise modifications",
+                        "Qualified prenatal fitness experts and nutritionists",
+                        "Comprehensive prenatal education and support",
+                        "Focus on mental health and stress management",
+                        "Community of expecting mothers"
+                    ]
+                },
+                "class_format": {
+                    "title": "Pregnancy Class Structure",
+                    "points": [
+                        "Trimester-appropriate exercise modifications",
+                        "Low-impact strength and cardio training",
+                        "Prenatal yoga and stretching sessions",
+                        "Breathing techniques for labor preparation",
+                        "Nutrition workshops and meal planning"
+                    ]
+                }
+            },
+            "sub_programs": [
+                {
+                    "name": "Pregnancy Yoga Program",
+                    "pricing_plans": [
+                        {
+                            "plan_title": "1 Month",
+                            "price": "₹ 2499",
+                            "features": [
+                                "12 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        },
+                        {
+                            "plan_title": "3 Months",
+                            "price": "₹ 7497",
+                            "features": [
+                                "36 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        },
+                        {
+                            "plan_title": "6 Months",
+                            "price": "₹ 14994",
+                            "features": [
+                                "72 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "Pregnancy Strength Training",
+                    "pricing_plans": [
+                        {
+                            "plan_title": "1 Month",
+                            "price": "₹ 2499",
+                            "features": [
+                                "12 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        },
+                        {
+                            "plan_title": "3 Months",
+                            "price": "₹ 7497",
+                            "features": [
+                                "36 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        },
+                        {
+                            "plan_title": "6 Months",
+                            "price": "₹ 14994",
+                            "features": [
+                                "72 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "Signature Pregnancy Wellness",
+                    "pricing_plans": [
+                        {
+                            "plan_title": "1 Month",
+                            "price": "₹ 3499",
+                            "features": [
+                                "12 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        },
+                        {
+                            "plan_title": "3 Months",
+                            "price": "₹ 10497",
+                            "features": [
+                                "36 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        },
+                        {
+                            "plan_title": "6 Months",
+                            "price": "₹ 20994",
+                            "features": [
+                                "72 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Postnatal / Post Pregnancy Programs",
+            "url": "https://tribher.com/postnatal-post-pregnancy-programs/",
+            "details": {
+                "goals": [
+                    "Safe and effective postpartum recovery",
+                    "Restore core strength and stability",
+                    "Address postural imbalances",
+                    "Rebuild energy and stamina",
+                    "Support mental health during postpartum period"
+                ],
+                "benefits": [
+                    "Mummy Tummy Reduction",
+                    "Posture Correction",
+                    "Improves Stamina & Core Strength",
+                    "Pelvic Floor Exercises"
+                ],
+                "why_choose": {
+                    "title": "Why Choose Tribher’s Post Pregnancy Programs?",
+                    "points": [
+                        "Specialized diastasis recti rehabilitation",
+                        "Gradual progressive strength building approach",
+                        "Pelvic floor recovery and strengthening focus",
+                        "Posture correction for nursing and baby care",
+                        "Flexible scheduling for new mom lifestyle"
+                    ]
+                },
+                "class_format": {
+                    "title": "Post Pregnancy Class Format",
+                    "points": [
+                        "Progressive 6-week recovery phases",
+                        "Core rehabilitation exercises",
+                        "Pelvic floor strengthening routines",
+                        "Posture correction and mobility work",
+                        "Gradual return to higher intensity training"
+                    ]
+                }
+            },
+            "sub_programs": [
+                {
+                    "name": "Mummy Tummy Program",
+                    "pricing_plans": [
+                        {
+                            "plan_title": "1 Month",
+                            "price": "₹ 3299",
+                            "features": [
+                                "12 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        },
+                        {
+                            "plan_title": "3 Months",
+                            "price": "₹ 9897",
+                            "features": [
+                                "36 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        },
+                        {
+                            "plan_title": "6 Months",
+                            "price": "₹ 19794",
+                            "features": [
+                                "72 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "Post Pregnancy Yoga Program",
+                    "pricing_plans": [
+                        {
+                            "plan_title": "1 Month",
+                            "price": "₹ 1999",
+                            "features": [
+                                "12 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        },
+                        {
+                            "plan_title": "3 Months",
+                            "price": "₹ 5397",
+                            "features": [
+                                "36 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        },
+                        {
+                            "plan_title": "6 Months",
+                            "price": "₹ 11994",
+                            "features": [
+                                "72 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "Signature Post Pregnancy Program",
+                    "pricing_plans": [
+                        {
+                            "plan_title": "1 Month",
+                            "price": "₹ 2999",
+                            "features": [
+                                "12 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        },
+                        {
+                            "plan_title": "3 Months",
+                            "price": "₹ 8987",
+                            "features": [
+                                "36 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        },
+                        {
+                            "plan_title": "6 Months",
+                            "price": "₹ 17994",
+                            "features": [
+                                "72 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "StrongHer 40+ Programs",
+            "url": "https://tribher.com/strongher-forty-plus-programs/",
+            "details": {
+                "goals": [
+                    "Navigate perimenopause and menopause transitions",
+                    "Maintain bone density and muscle mass",
+                    "Support hormonal balance",
+                    "Manage stress and improve sleep",
+                    "Build confidence and body positivity"
+                ],
+                "benefits": [
+                    "Bone/Muscle Strengthening",
+                    "Balance Hormones",
+                    "Stress Management",
+                    "Perimenopause Guidance",
+                    "Face Yoga",
+                    "Restorative Yoga",
+                    "Nutrition / Weight Management",
+                    "Pelvic Strengthening"
+                ],
+                "why_choose": {
+                    "title": "Why Choose Tribher’s StrongHer40+ Programs?",
+                    "points": [
+                        "Age-specific fitness approach for women 40+",
+                        "Hormone-balancing exercises and lifestyle guidance",
+                        "Bone density and muscle preservation focus",
+                        "Stress management and sleep optimization",
+                        "Community of like-minded women for support"
+                    ]
+                },
+                "class_format": {
+                    "title": "StrongHer 40+ Class Structure",
+                    "points": [
+                        "Strength training for bone and muscle health",
+                        "Hormone-balancing yoga sequences",
+                        "Face yoga for natural anti-aging",
+                        "Restorative practices for stress relief",
+                        "Nutrition workshops for metabolic health"
+                    ]
+                }
+            },
+            "sub_programs": [
+                {
+                    "name": "Perimenopause Yoga",
+                    "pricing_plans": [
+                        {
+                            "plan_title": "1 Month",
+                            "price": "₹ 2999",
+                            "features": [
+                                "12 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        },
+                        {
+                            "plan_title": "3 Months",
+                            "price": "₹ 8997",
+                            "features": [
+                                "36 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        },
+                        {
+                            "plan_title": "6 Months",
+                            "price": "₹ 17994",
+                            "features": [
+                                "72 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "Perimenopause Pelvic",
+                    "pricing_plans": [
+                        {
+                            "plan_title": "1 Month",
+                            "price": "₹ 2999",
+                            "features": [
+                                "12 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        },
+                        {
+                            "plan_title": "3 Months",
+                            "price": "₹ 8997",
+                            "features": [
+                                "36 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        },
+                        {
+                            "plan_title": "6 Months",
+                            "price": "₹ 17994",
+                            "features": [
+                                "72 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "Perimenopause Signature",
+                    "pricing_plans": [
+                        {
+                            "plan_title": "1 Month",
+                            "price": "₹ 3999",
+                            "features": [
+                                "12 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        },
+                        {
+                            "plan_title": "3 Months",
+                            "price": "₹ 11997",
+                            "features": [
+                                "36 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        },
+                        {
+                            "plan_title": "6 Months",
+                            "price": "₹ 23994",
+                            "features": [
+                                "72 sessions",
+                                "Personalized Attention",
+                                "Recordings Available"
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

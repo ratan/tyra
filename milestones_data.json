@@ -1,0 +1,17 @@
+{
+  "pregnancy_by_week": {
+    "10": "You've reached 10 weeks, and your little one is now officially a fetus! This is a major milestone as all their essential organs have formed. Many people find their early pregnancy symptoms start to ease up around now.",
+    "12": "You've reached the end of the first trimester! Many people find their energy levels start to return this week.",
+    "16": "Your baby's sensory development is kicking into high gear. They can now make sucking motions with their mouth.",
+    "26": "At 26 weeks, your baby's eyes are starting to open and they are becoming more sensitive to sound. This is a great time to talk or sing to your baby! It's also a good time to discuss the upcoming glucose screening test with your doctor.",
+    "27": "Welcome to the home stretch—the third trimester begins next week! Your baby is practicing breathing by inhaling and exhaling amniotic fluid, which is helping their lungs develop.",
+    "32": "Your baby is practicing breathing by inhaling amniotic fluid. You're in the home stretch!",
+    "default": "While I don't have a specific update for this week, development is happening every day! It's always best to discuss your baby's specific progress with your healthcare provider."
+  },
+  "cycle_phases": {
+    "menstruation": "Your cycle has begun. It's a great time to focus on rest, gentle movement, and nourishing foods.",
+    "follicular": "As your energy returns after your period, you might find it's a great time for more active workouts.",
+    "ovulation": "You might be feeling a peak in your energy and mood around now. This is the fertile window of your cycle.",
+    "luteal": "As your body prepares for your next period, you might notice PMS symptoms. Gentle exercise and mindfulness can be very helpful now."
+  }
+}

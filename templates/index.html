@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ lang.app_title }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;700&family=Noto+Sans+Bengali:wght@400;500;700&family=Noto+Sans+Devanagari:wght@400;500;700&family=Noto+Sans+Gujarati:wght@400;500;700&family=Noto+Sans+Gurmukhi:wght@400;500;700&family=Noto+Sans+Kannada:wght@400;500;700&family=Noto+Sans+Malayalam:wght@400;500;700&family=Noto+Sans+Oriya:wght@400;500;700&family=Noto+Sans+Tamil:wght@400;500;700&family=Noto+Sans+Telugu:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        :root {
+            --primary-gradient: linear-gradient(135deg, #8B4A9C 0%, #A855A8 100%);
+            --primary-color-solid: #8B4A9C;
+            --user-message-bg: var(--primary-gradient);
+            --ai-message-bg: #f3eef7;
+            --background-color: #fcfaff;
+            --text-color: #333;
+            --container-shadow: 0 10px 40px rgba(139, 74, 156, 0.15);
+            --predicted-day-bg: #d8b8e3;
+            --logged-day-bg: #8B4A9C;
+            --fertile-day-bg: #a6d8ae; 
+            --current-day-border: 2px solid #5a2d66;
+            --icon-color: #8B4A9C;
+            --icon-color-recording: #e74c3c;
+        }
+        body {
+            font-family: 'Poppins', 'Noto Sans Devanagari', 'Noto Sans Bengali', 'Noto Sans Tamil', 'Noto Sans Telugu', 'Noto Sans Kannada', 'Noto Sans Malayalam', 'Noto Sans Gujarati', 'Noto Sans Gurmukhi', 'Noto Sans Oriya', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            background-color: var(--background-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .rtl { direction: rtl; }
+        .rtl .sub-group { border-left: none; border-right: 3px solid var(--primary-color-solid); padding-left: 0; padding-right: 15px; margin-left: 0; margin-right: 0; }
+        .rtl .checkbox-group input[type="checkbox"] { margin-right: 0; margin-left: 10px; }
+        .rtl .user-message { align-self: flex-start; border-bottom-left-radius: 8px; border-bottom-right-radius: 22px; }
+        .rtl .ai-message { align-self: flex-end; border-bottom-right-radius: 8px; border-bottom-left-radius: 22px; }
+        .rtl .calendar-legend { justify-content: flex-start; }
+        .rtl .legend-item { margin-right: 0; margin-left: 15px; }
+        .container { width: 100%; max-width: 600px; background: white; border-radius: 24px; box-shadow: var(--container-shadow); overflow: hidden; display: flex; flex-direction: column; height: 90vh; max-height: 800px; }
+        .header { background-image: var(--primary-gradient); color: white; padding: 15px 20px; text-align: center; box-shadow: 0 4px 10px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { margin: 0; font-size: 1.5em; font-weight: 500; }
+        .header-controls { display: flex; align-items: center; gap: 15px; }
+        .header a { color: white; text-decoration: none; font-size: 0.9em; font-weight: 500; background: rgba(255,255,255,0.2); padding: 6px 12px; border-radius: 15px; transition: background-color 0.2s; }
+        .header a:hover { background: rgba(255,255,255,0.3); }
+        .form-section, #chat-section { padding: 20px; flex-grow: 1; overflow-y: auto; min-height: 0; display: none; flex-direction: column; align-items: center; }
+        .form-section.active, #chat-section.active { display: flex; }
+        #chat-section { padding: 10px 20px 20px 20px; }
+        #identifier-section { justify-content: center; }
+        .welcome-text { text-align: center; margin-bottom: 25px; font-size: 1.1em; color: var(--text-color); width: 100%; }
+        #identifier-form, .profile-form-body, #otp-form { width: 100%; max-width: 420px; }
+        .profile-form-body { margin-top: 20px; }
+        #chat-container { display: flex; flex-direction: column; height: 100%; width: 100%; }
+        .btn-primary {
+            width: 100%; background-image: var(--primary-gradient); color: white; font-weight: bold; border: none; cursor: pointer;
+            margin-top: 10px; padding: 12px; border-radius: 8px; transition: transform 0.2s ease, box-shadow 0.2s ease; font-size: 1em;
+        }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(139, 74, 156, 0.2); }
+        .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
+        .btn-secondary {
+            width: 100%; background: none; color: var(--primary-color-solid); font-weight: bold; border: 2px solid var(--primary-color-solid); cursor: pointer;
+            margin-top: 15px; padding: 12px; border-radius: 8px; transition: background-color 0.2s ease; font-size: 1em;
+        }
+        .btn-secondary:hover { background-color: #f3eef7; }
+        #chat-log { flex-grow: 1; overflow-y: auto; padding: 15px; margin-bottom: 15px; display: flex; flex-direction: column; gap: 15px; }
+        .message { padding: 12px 20px; border-radius: 22px; max-width: 85%; line-height: 1.6; word-wrap: break-word; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .user-message { background-image: var(--user-message-bg); color: white; align-self: flex-end; border-bottom-right-radius: 8px; }
+        .ai-message { background-color: var(--ai-message-bg); color: var(--text-color); align-self: flex-start; border-bottom-left-radius: 8px; }
+        .ai-message.chart-container { width: 100%; max-width: 100%; padding: 15px; box-sizing: border-box; height: 250px; }
+        .ai-message.chart-container-horizontal { height: 180px; }
+        .calendar-container { width: 100%; max-width: 100%; padding: 10px; box-sizing: border-box; }
+        .calendar-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        .calendar-table th { padding: 8px 0; font-size: 0.8em; color: #777; font-weight: 500; }
+        .calendar-table td { text-align: center; padding: 2px; height: 35px; border-radius: 50%; font-size: 0.9em; }
+        .calendar-day { display: flex; justify-content: center; align-items: center; width: 100%; height: 100%; border-radius: 50%; }
+        .predicted-day { background-color: var(--predicted-day-bg); }
+        .fertile-day { background-color: var(--fertile-day-bg); }
+        .logged-day { background-color: var(--logged-day-bg); color: white; }
+        .current-day { box-shadow: 0 0 0 var(--current-day-border) inset; }
+        .calendar-legend { display: flex; flex-wrap: wrap; justify-content: center; margin-top: 15px; font-size: 0.8em; color: #555; }
+        .legend-item { display: flex; align-items: center; margin-right: 15px; margin-bottom: 5px; }
+        .legend-color { width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; }
+        .ai-message p, .ai-message ul, .ai-message ol, .ai-message h1, .ai-message h2, .ai-message h3 { margin: 0.5em 0; }
+        .ai-message ul, .ai-message ol { padding-left: 20px; }
+        .ai-message li { margin-bottom: 8px; }
+        #chat-form { display: flex; gap: 10px; align-items: center; }
+        #quick-log-buttons { display: flex; gap: 8px; margin-bottom: 10px; justify-content: center; flex-wrap: wrap; }
+        .quick-log-btn { background-color: #f3eef7; border: 1px solid #d8b8e3; color: #5a2d66; padding: 6px 12px; border-radius: 15px; font-size: 0.8em; cursor: pointer; transition: background-color 0.2s; }
+        .quick-log-btn:hover { background-color: #e9ddeb; }
+        #user-input { flex-grow: 1; border: 1px solid #ddd; border-radius: 25px; padding: 12px 20px; font-size: 1em; transition: border-color 0.2s ease, box-shadow 0.2s ease; }
+        #user-input:focus { outline: none; border-color: #A855A8; box-shadow: 0 0 0 3px rgba(168, 85, 168, 0.2); }
+        #chat-form button { flex-shrink: 0; }
+        #chat-form .btn-primary { width: 50px; height: 50px; border-radius: 50%; margin-top: 0; padding: 0; display: flex; align-items: center; justify-content: center;}
+        #send-icon { width: 24px; height: 24px; }
+        .icon-btn { font-size: 24px; cursor: pointer; padding: 5px; color: var(--icon-color); border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; transition: background-color 0.2s, color 0.2s; background: none; border: none; }
+        .icon-btn:hover { background-color: #f3eef7; }
+        .icon-btn.recording { color: var(--icon-color-recording); animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(231, 76, 60, 0); } 100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); } }
+        #file-name-display { font-size: 12px; color: #555; margin: 0 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px; background: #eee; padding: 5px 8px; border-radius: 12px; }
+        form input, form select { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ccc; box-sizing: border-box; margin-bottom: 10px; }
+        form fieldset { border: 1px solid #ddd; padding: 15px; border-radius: 8px; margin-bottom: 15px; }
+        form legend { font-weight: bold; color: var(--text-color); }
+        form label { display: block; margin-bottom: 8px; font-weight: 500; text-align: left; }
+        .phone-group { display: flex; gap: 10px; }
+        .phone-group select { width: 120px; }
+        .checkbox-group { display: flex; align-items: flex-start; margin-bottom: 12px; }
+        .checkbox-group input[type="checkbox"] { width: auto; flex-shrink: 0; margin-top: 5px; margin-right: 10px; }
+        .checkbox-group .label-text, .checkbox-group > label { flex-grow: 1; font-weight: normal; margin-bottom: 0; }
+        .sub-group { border-left: 3px solid var(--primary-color-solid); padding-left: 15px; margin-left: 0; margin-top: 10px; }
+        .hidden { display: none; }
+        .or-separator { text-align: center; margin: 15px 0; font-weight: bold; color: #999; }
+        .add-child-btn { background-color: #9d6ab8; margin-top: 0; width: auto; padding: 8px 12px; font-size: 0.9em;}
+        #added-dobs-display, #added-dobs-display_modal { margin-top: 10px; font-style: italic; color: #555; text-align: left; }
+        .form-error { color: #c0392b; font-size: 0.9em; text-align: center; margin-top: -5px; margin-bottom: 10px; display: none; }
+
+        /* Modal Styles */
+        .modal {
+            display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%;
+            overflow: auto; background-color: rgba(0,0,0,0.5);
+            justify-content: center; align-items: center;
+        }
+        .modal.active { display: flex; }
+        .modal-content {
+            background-color: #fefefe; padding: 20px; border: 1px solid #888;
+            width: 90%; max-width: 500px; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            max-height: 90vh; overflow-y: auto;
+        }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 15px; }
+        .modal-header h2 { margin: 0; font-size: 1.4em; }
+        .close-btn { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+        .close-btn:hover, .close-btn:focus { color: black; text-decoration: none; }
+        .modal-error { color: #c0392b; font-size: 0.9em; text-align: center; margin-top: 10px; display: none; }
+    </style>
+</head>
+<body class="{{ 'rtl' if is_rtl else '' }}">
+    <script>
+        const IS_SESSION_ACTIVE = {{ is_session_active | tojson }};
+        const USER_NAME = "{{ user_name | default('') | e }}";
+        const LANG_STRINGS = {{ lang | tojson }};
+        const IS_GUEST_MODE_ENABLED = {{ enable_guest_mode | tojson }};
+        const CONFIG = {{ config | tojson }};
+    </script>
+    
+    <div class="container">
+        <div class="header">
+            <h1>{{ lang.app_title }}</h1>
+            <div class="header-controls">
+                {% if user_name %}
+                    {% if enable_dashboard %}
+                    <a href="{{ url_for('dashboard') }}" id="dashboard-link">{{ lang.dashboard_link }}</a>
+                    {% endif %}
+                    <a href="#" id="logout-link">{{ lang.logout_link }}</a>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div id="identifier-section" class="form-section active">
+            <p class="welcome-text">{{ lang.welcome_text }}</p>
+
+            <div id="auth-forms-wrapper" style="width: 100%; max-width: 420px;">
+                <!-- This form's content is now dynamically rendered based on the OTP flag -->
+                <form id="identifier-form">
+                    <label for="email_login">{{ lang.identifier_email_label }}</label>
+                    <input type="email" id="email_login" placeholder="you@example.com">
+                    <div class="form-error" id="email-error"></div>
+                    
+                    {% if not config.ENABLE_EMAIL_OTP_VERIFICATION %}
+                    <div class="or-separator">{{ lang.identifier_or }}</div>
+                    <label for="phone_login">{{ lang.identifier_phone_label }}</label>
+                    <div class="phone-group">
+                        <select id="country_code"><option value="+91" selected>+91 (India)</option><option value="+1">+1 (USA/CAN)</option><option value="+44">+44 (UK)</option></select>
+                        <input type="tel" id="phone_login" placeholder="9876543210">
+                    </div>
+                    {% endif %}
+
+                    <button type="submit" class="btn-primary">
+                        {% if config.ENABLE_EMAIL_OTP_VERIFICATION %}
+                            {{ lang.button_send_otp }}
+                        {% else %}
+                            {{ lang.button_continue }}
+                        {% endif %}
+                    </button>
+                </form>
+    
+                <!-- Hidden OTP Form (always in DOM for OTP mode) -->
+                <form id="otp-form" class="hidden">
+                    <p id="otp-message-text" class="welcome-text"></p>
+                    <label for="otp_input">{{ lang.otp_label }}</label>
+                    <input type="text" id="otp_input" name="otp" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="{{ lang.otp_placeholder }}" required>
+                    <div class="form-error" id="otp-error"></div>
+                    <button type="submit" class="btn-primary">{{ lang.button_verify_otp }}</button>
+                </form>
+    
+                {% if enable_guest_mode %}
+                <button type="button" id="guest-mode-btn" class="btn-secondary">{{ lang.guest_mode_link }}</button>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div id="new-user-section" class="form-section">
+            <p class="welcome-text">{{ lang.new_user_welcome }}</p>
+            <form id="profile-form" class="profile-form-body"></form>
+        </div>
+        
+        <div id="chat-section" class="form-section">
+            <div id="chat-container">
+                <div id="chat-log"></div>
+                
+                {% if user_name %}
+                <div id="quick-log-buttons">
+                    <!-- Buttons will be dynamically generated here by JavaScript -->
+                </div>
+                {% endif %}
+                
+                <form id="chat-form">
+                    {% if enable_document_upload or enable_visual_triage %}
+                    <label for="file-input" class="icon-btn" title="Upload a file">📎</label>
+                    <input type="file" id="file-input" style="display: none;" accept=".pdf,image/*">
+                    <span id="file-name-display" class="hidden"></span>
+                    {% endif %}
+                    
+                    <input type="text" id="user-input" placeholder="{{ lang.ask_question_placeholder }}" required autocomplete="off">
+
+                    {% if enable_voice_input %}
+                    <button type="button" id="voice-input-btn" class="icon-btn" title="Record voice note">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 14C13.6569 14 15 12.6569 15 11V5C15 3.34315 13.6569 2 12 2C10.3431 2 9 3.34315 9 5V11C9 12.6569 10.3431 14 12 14ZM19 11C19 14.866 15.866 18 12 18C8.13401 18 5 14.866 5 11H7C7 13.7614 9.23858 16 12 16C14.7614 16 17 13.7614 17 11H19Z"/>
+                        </svg>
+                    </button>
+                    {% endif %}
+
+                    <button type="submit" class="btn-primary" aria-label="Send">
+                        <svg id="send-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M3.49902 12.0001H8.49902M6.52834 5.43714L18.499 12.0001L6.52834 18.5631C5.69432 19.1009 4.61243 18.2543 4.83984 17.2941L5.94384 12.7541C6.07168 12.2274 6.07168 11.7727 5.94384 11.2461L4.83984 6.70605C4.61243 5.74585 5.69432 4.89928 6.52834 5.43714Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sign-in/Sign-up Modal -->
+    <div id="signup-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>{{ lang.modal_signin_title }}</h2>
+                <span class="close-btn" id="close-signup-modal">×</span>
+            </div>
+            <!-- Step 1: Identifier -->
+            <form id="modal-identifier-form">
+                <label for="modal_email_login">{{ lang.identifier_email_label }}</label>
+                <input type="email" id="modal_email_login" placeholder="you@example.com">
+                <div class="or-separator">{{ lang.identifier_or }}</div>
+                <label for="modal_phone_login">{{ lang.identifier_phone_label }}</label>
+                <div class="phone-group">
+                    <select id="modal_country_code"><option value="+91" selected>+91 (India)</option><option value="+1">+1 (USA/CAN)</option><option value="+44">+44 (UK)</option></select>
+                    <input type="tel" id="modal_phone_login" placeholder="9876543210">
+                </div>
+                <button type="submit" class="btn-primary">{{ lang.button_continue }}</button>
+                <div class="modal-error" id="modal-error-message"></div>
+            </form>
+            <!-- Step 2: Profile Details -->
+            <form id="modal-profile-form" class="profile-form-body hidden"></form>
+        </div>
+    </div>
+
+<script>
+// --- TEMPLATE FOR PROFILE FORM ---
+const profileFormTemplate = `
+    <label for="name{ID_SUFFIX}">{{ lang.label_name }}</label><input type="text" id="name{ID_SUFFIX}" name="name" placeholder="e.g., Jane Doe" required>
+    <label for="age{ID_SUFFIX}">{{ lang.label_age }}</label><input type="number" id="age{ID_SUFFIX}" name="age" placeholder="e.g., 16" required min="13" max="100">
+    
+    {% if enable_multi_language %}
+    <label for="language{ID_SUFFIX}">{{ lang.label_language }}</label>
+    <select name="language" id="language{ID_SUFFIX}" required>
+        <option value="en" selected>English</option><option value="bn">বাংলা (Bengali)</option><option value="gu">ગુજરાતી (Gujarati)</option><option value="hi">हिन्दी (Hindi)</option><option value="kn">ಕನ್ನಡ (Kannada)</option><option value="ml">മലയാളം (Malayalam)</option><option value="mr">मराठी (Marathi)</option><option value="or">ଓଡ଼ିଆ (Odia)</option><option value="pa">ਪੰਜਾਬੀ (Punjabi)</option><option value="ta">தமிழ் (Tamil)</option><option value="te">తెలుగు (Telugu)</option><option value="ur">اردو (Urdu)</option><option value="ar">العربية (Arabic)</option>
+    </select>
+    {% endif %}
+
+    <div id="optional-email-wrapper{ID_SUFFIX}" class="hidden"><label for="email_optional{ID_SUFFIX}">Email (Optional)</label><input type="email" id="email_optional{ID_SUFFIX}" name="email_optional" placeholder="you@example.com"></div>
+    
+    <fieldset id="teen-profile-section{ID_SUFFIX}" class="hidden"><legend>About You (Optional)</legend><label for="menstrual_cycle_status{ID_SUFFIX}">How would you describe your period?</label><select id="menstrual_cycle_status{ID_SUFFIX}" name="menstrual_cycle_status"><option value="">Select an option...</option><option value="not_started">Haven't started my period yet</option><option value="just_started">Just started (within the last year)</option><option value="regular">My periods are regular</option><option value="irregular">My periods are irregular</option><option value="painful">I have painful periods</option></select><label>What are you most curious about right now?</label><div class="checkbox-group"><input type="checkbox" id="cc-body{ID_SUFFIX}" name="teen_concern" value="body_puberty"><label for="cc-body{ID_SUFFIX}">Understanding my body/puberty</label></div><div class="checkbox-group"><input type="checkbox" id="cc-mental{ID_SUFFIX}" name="teen_concern" value="mental_health"><label for="cc-mental{ID_SUFFIX}">Managing stress/mental health</label></div><div class="checkbox-group"><input type="checkbox" id="cc-relations{ID_SUFFIX}" name="teen_concern" value="relationships"><label for="cc-relations{ID_SUFFIX}">Navigating relationships</label></div></fieldset>
+    <fieldset id="adult-profile-section{ID_SUFFIX}" class="hidden"><legend>Key Life Events</legend><div class="checkbox-group"><input type="checkbox" id="cb-ttc{ID_SUFFIX}" name="main_event" value="is_trying_to_conceive"><div class="label-text"><label for="cb-ttc{ID_SUFFIX}">Trying to conceive</label><div class="sub-group hidden"><label for="months_trying{ID_SUFFIX}">For how many months?</label><input type="number" id="months_trying{ID_SUFFIX}" name="months_trying" placeholder="e.g., 6" min="1"></div></div></div><div class="checkbox-group"><input type="checkbox" id="cb-pregnant{ID_SUFFIX}" name="main_event" value="is_pregnant"><div class="label-text"><label for="cb-pregnant{ID_SUFFIX}">Currently pregnant</label><div class="sub-group hidden"><label for="lmp_date{ID_SUFFIX}">Last Menstrual Period (LMP)</label><input type="date" id="lmp_date{ID_SUFFIX}" name="lmp_date"></div></div></div><div class="checkbox-group"><input type="checkbox" id="cb-parent{ID_SUFFIX}" name="main_event" value="is_parent"><div class="label-text"><label for="cb-parent{ID_SUFFIX}">Parenting / Have Children</label><div class="sub-group hidden"><label for="child_dob_input{ID_SUFFIX}">Child's Date of Birth</label><input type="date" id="child_dob_input{ID_SUFFIX}" name="child_dob_input"><button type="button" id="add-child-btn{ID_SUFFIX}" class="add-child-btn">Add Child</button><div id="added-dobs-display{ID_SUFFIX}"></div></div></div></div></fieldset>
+    <fieldset id="menopause-profile-section{ID_SUFFIX}" class="hidden"><legend>Menopause Status</legend><div class="checkbox-group"><input type="checkbox" id="cb-peri{ID_SUFFIX}" name="main_event" value="is_perimenopausal"><label for="cb-peri{ID_SUFFIX}">Perimenopause symptoms</label></div><div class="checkbox-group"><input type="checkbox" id="cb-meno{ID_SUFFIX}" name="main_event" value="is_menopausal"><label for="cb-meno{ID_SUFFIX}">In menopause or postmenopausal</label></div></fieldset>
+    
+    <button type="submit" class="btn-primary">{{ lang.button_start_chatting }}</button>
+`;
+
+document.addEventListener('DOMContentLoaded', function() {
+    // --- ELEMENT SELECTORS ---
+    const sections = { 
+        identifier: document.getElementById('identifier-section'), 
+        newUser: document.getElementById('new-user-section'), 
+        chat: document.getElementById('chat-section') 
+    };
+    const forms = { 
+        identifier: document.getElementById('identifier-form'), 
+        profile: document.getElementById('profile-form'),
+        chat: document.getElementById('chat-form'),
+        otp: document.getElementById('otp-form')
+    };
+    const inputs = { 
+        emailLogin: document.getElementById('email_login'), 
+        countryCode: document.getElementById('country_code'), 
+        phoneLogin: document.getElementById('phone_login'), 
+        chatLog: document.getElementById('chat-log'), 
+        userInput: document.getElementById('user-input'),
+        fileInput: document.getElementById('file-input'),
+        fileNameDisplay: document.getElementById('file-name-display'),
+        voiceInputBtn: document.getElementById('voice-input-btn'),
+        guestModeBtn: document.getElementById('guest-mode-btn'),
+        quickLogContainer: document.getElementById('quick-log-buttons')
+    };
+    const modals = {
+        signup: document.getElementById('signup-modal'),
+        closeSignup: document.getElementById('close-signup-modal'),
+        identifierForm: document.getElementById('modal-identifier-form'),
+        profileForm: document.getElementById('modal-profile-form'),
+        errorMessage: document.getElementById('modal-error-message')
+    };
+    const errorDisplays = {
+        email: document.getElementById('email-error'),
+        otp: document.getElementById('otp-error'),
+    };
+    const logoutLink = document.getElementById('logout-link');
+
+    // --- STATE VARIABLES ---
+    let selectedFile = null;
+    let mediaRecorder;
+    let audioChunks = [];
+    let childDobsArrays = { '': [], '_modal': [] };
+    let tempModalIdentifier = null;
+    let tempLoginEmail = ''; // For OTP flow
+
+    // --- FORM POPULATION AND INITIALIZATION ---
+    function populateAndInitializeForm(formContainer, idSuffix = '') {
+        if (!formContainer) return;
+        
+        let template = profileFormTemplate.replace(/{ID_SUFFIX}/g, idSuffix);
+        formContainer.innerHTML = template;
+        
+        const ageInput = document.getElementById('age' + idSuffix);
+        const teenProfileSection = document.getElementById('teen-profile-section' + idSuffix);
+        const adultProfileSection = document.getElementById('adult-profile-section' + idSuffix);
+        const menopauseProfileSection = document.getElementById('menopause-profile-section' + idSuffix);
+        const addChildBtn = document.getElementById('add-child-btn' + idSuffix);
+        const childDobInput = document.getElementById('child_dob_input' + idSuffix);
+        const addedDobsDisplay = document.getElementById('added-dobs-display' + idSuffix);
+        const optionalEmailWrapper = document.getElementById('optional-email-wrapper' + idSuffix);
+
+        ageInput.addEventListener('input', () => {
+            const age = parseInt(ageInput.value, 10) || 0;
+            teenProfileSection.classList.toggle('hidden', age > 19 || age < 13);
+            adultProfileSection.classList.toggle('hidden', age < 20 || age > 50);
+            menopauseProfileSection.classList.toggle('hidden', age < 40);
+        });
+
+        if (optionalEmailWrapper && CONFIG.ENABLE_EMAIL_OTP_VERIFICATION) {
+            // If using OTP, the email is already verified and not optional.
+            optionalEmailWrapper.classList.add('hidden');
+        }
+
+        if(addChildBtn) {
+            addChildBtn.addEventListener('click', function() {
+                if (childDobInput.value) { 
+                    childDobsArrays[idSuffix].push(childDobInput.value); 
+                    addedDobsDisplay.textContent = `Added DOBs: ${childDobsArrays[idSuffix].join(', ')}`; 
+                    childDobInput.value = ''; 
+                    childDobInput.focus(); 
+                }
+            });
+        }
+    
+        formContainer.querySelectorAll('input[name="main_event"]').forEach(cb => {
+            cb.addEventListener('change', (e) => {
+                const subGroup = e.target.closest('.checkbox-group').querySelector('.sub-group');
+                if (subGroup) subGroup.classList.toggle('hidden', !e.target.checked);
+            });
+        });
+
+        const formElement = formContainer.closest('form');
+        formElement.addEventListener('submit', (e) => handleProfileFormSubmit(e, idSuffix));
+    }
+    
+    function setFormError(form, message) {
+        const errorEl = errorDisplays[form];
+        if (errorEl) {
+            errorEl.textContent = message;
+            errorEl.style.display = message ? 'block' : 'none';
+        }
+    }
+
+    // --- EVENT HANDLERS ---
+    async function handleIdentifierSubmit(e) {
+        e.preventDefault();
+        
+        const email = inputs.emailLogin ? inputs.emailLogin.value.trim() : '';
+        const submitButton = forms.identifier.querySelector('button[type="submit"]');
+
+        if (CONFIG.ENABLE_EMAIL_OTP_VERIFICATION) {
+            // --- OTP FLOW INITIATION ---
+            if (!email) {
+                setFormError('email', 'Email is required for OTP verification.');
+                return;
+            }
+            setFormError('email', '');
+            submitButton.disabled = true;
+            submitButton.textContent = 'Sending...';
+
+            const response = await fetch('/request_otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: email })
+            });
+            const data = await response.json();
+            
+            submitButton.disabled = false;
+            submitButton.textContent = LANG_STRINGS.button_send_otp;
+
+            if (response.ok) {
+                tempLoginEmail = email;
+                forms.identifier.classList.add('hidden');
+                document.getElementById('otp-message-text').textContent = LANG_STRINGS.otp_sent_message.replace('{email}', email);
+                forms.otp.classList.remove('hidden');
+                document.getElementById('otp_input').focus();
+            } else {
+                setFormError('email', data.message || 'An error occurred.');
+            }
+        } else {
+            // --- ORIGINAL FLOW (NO OTP) ---
+            const phone = inputs.phoneLogin ? inputs.phoneLogin.value.trim() : '';
+            let identifier = email || (phone ? inputs.countryCode.value + phone : '');
+            if (!identifier) { 
+                alert('Please provide either an email or a phone number.'); 
+                return; 
+            }
+            
+            const response = await fetch('/check_or_create_profile', { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify({ identifier }) 
+            });
+            const data = await response.json();
+            if (response.ok) {
+                if (data.status === 'exists') { 
+                    window.location.reload();
+                } else if (data.status === 'new_user_needed') { 
+                    const optionalEmailWrapper = document.getElementById('optional-email-wrapper');
+                    if (optionalEmailWrapper) optionalEmailWrapper.classList.toggle('hidden', !!email);
+                    showSection('newUser'); 
+                }
+            } else {
+                alert(data.message || 'An error occurred.');
+            }
+        }
+    }
+
+    async function handleOtpSubmit(e) {
+        e.preventDefault();
+        const otpInput = document.getElementById('otp_input');
+        const otp = otpInput.value.trim();
+        if (!otp || otp.length !== 6) {
+            setFormError('otp', 'Please enter a valid 6-digit OTP.');
+            return;
+        }
+        setFormError('otp', '');
+        
+        const submitButton = forms.otp.querySelector('button[type="submit"]');
+        submitButton.disabled = true;
+
+        const response = await fetch('/verify_otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: tempLoginEmail, otp: otp })
+        });
+        const data = await response.json();
+
+        submitButton.disabled = false;
+
+        if (response.ok) {
+            if (data.status === 'exists') {
+                window.location.reload();
+            } else if (data.status === 'new_user_needed') {
+                showSection('newUser');
+            }
+        } else {
+            setFormError('otp', data.message || 'Verification failed.');
+        }
+    }
+
+    async function handleProfileFormSubmit(e, idSuffix = '') {
+        e.preventDefault();
+        const details = {}; 
+        const age = parseInt(document.getElementById('age' + idSuffix).value, 10);
+        
+        document.querySelectorAll(`#adult-profile-section${idSuffix} input[name="main_event"]:checked, #menopause-profile-section${idSuffix} input[name="main_event"]:checked`).forEach(cb => { details[cb.value] = true; });
+        if (details.is_trying_to_conceive) details.months_trying = document.getElementById('months_trying' + idSuffix).value;
+        if (details.is_pregnant) details.lmp_date = document.getElementById('lmp_date' + idSuffix).value;
+        if (details.is_parent) { 
+            details.child_dobs = childDobsArrays[idSuffix]; 
+            details.num_children = childDobsArrays[idSuffix].length; 
+        }
+        
+        const langSelect = document.getElementById('language' + idSuffix);
+        const payload = { 
+            name: document.getElementById('name' + idSuffix).value, 
+            age: age, 
+            details: details,
+            language: langSelect ? langSelect.value : 'en'
+        };
+
+        const endpoint = CONFIG.ENABLE_EMAIL_OTP_VERIFICATION ? '/create_profile_with_otp' : '/check_or_create_profile';
+        
+        if (!CONFIG.ENABLE_EMAIL_OTP_VERIFICATION) {
+            const optionalEmailInput = document.getElementById('email_optional' + idSuffix);
+            if (optionalEmailInput) {
+                payload.email = optionalEmailInput.value.trim();
+            }
+        }
+
+        const response = await fetch(endpoint, { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify(payload) 
+        });
+        const data = await response.json();
+        if (response.ok && data.status === 'created') { 
+            window.location.reload();
+        } else { 
+            alert(data.message || 'Could not create profile.'); 
+        }
+    }
+
+    async function handleGuestModeStart(e) {
+        e.preventDefault();
+        const response = await fetch('/start_guest', { method: 'POST' });
+        if (response.ok) {
+            window.location.reload();
+        } else {
+            alert('Could not start guest mode.');
+        }
+    }
+
+    async function handleChatSubmit(e) {
+        e.preventDefault();
+        const messageText = inputs.userInput.value.trim();
+        if (!messageText && !selectedFile) return;
+
+        if (messageText) { appendMessage(messageText, 'user'); } 
+        else if (selectedFile) { appendMessage(`(File: ${selectedFile.name})`, 'user'); }
+        inputs.userInput.value = '';
+
+        let endpoint = '/chat';
+        let body;
+        const headers = {};
+
+        if (selectedFile) {
+            endpoint = '/upload';
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            formData.append('message', messageText || "Can you tell me about this file?");
+            body = formData;
+        } else {
+            endpoint = '/chat';
+            body = JSON.stringify({ message: messageText });
+            headers['Content-Type'] = 'application/json';
+        }
+        
+        clearFileInput();
+
+        const response = await fetch(endpoint, { method: 'POST', headers: headers, body: body });
+        const data = await response.json();
+        if (!response.ok) { 
+            appendMessage(`Sorry, something went wrong: ${data.error || 'A server error occurred.'}`, 'ai');
+            return;
+        }
+        
+        appendMessage(data.reply, 'ai');
+        
+        if (data.action === 'prompt_signup') {
+            modals.identifierForm.classList.remove('hidden');
+            modals.profileForm.classList.add('hidden');
+            modals.errorMessage.style.display = 'none';
+            modals.identifierForm.reset();
+            modals.signup.classList.add('active');
+        }
+        if (data.chart_type) {
+            renderVisualization(data.chart_type, data.target_date);
+        }
+    }
+
+    // --- HELPER & UTILITY FUNCTIONS ---
+    function showSection(sectionName) {
+        Object.values(sections).forEach(s => s.classList.remove('active'));
+        sections[sectionName].classList.add('active');
+        if (sectionName === 'chat') {
+            inputs.userInput.focus();
+            if (inputs.quickLogContainer) {
+                populateQuickLogButtons();
+            }
+        }
+    }
+    
+    function populateQuickLogButtons() {
+        const container = inputs.quickLogContainer;
+        if (!container || container.children.length > 0) return;
+
+        const buttons = LANG_STRINGS.quick_log_buttons || [];
+        buttons.forEach(item => {
+            const button = document.createElement('button');
+            button.className = 'quick-log-btn';
+            button.innerHTML = item.label;
+            button.dataset.logCategory = item.category;
+            button.dataset.logValue = item.value;
+            container.appendChild(button);
+        });
+    }
+
+    function displayWelcomeMessage() {
+        let message;
+        if (USER_NAME) { // Authenticated user
+            const name = USER_NAME.split(' ')[0];
+            message = LANG_STRINGS.welcome_message_return.replace('{name}', name);
+        } else { // Guest user
+            message = LANG_STRINGS.welcome_message_guest;
+        }
+        inputs.chatLog.innerHTML = `<div class="message ai-message"><p>${message}</p></div>`;
+    }
+
+    function appendMessage(content, sender) {
+        const div = document.createElement('div');
+        div.classList.add('message', sender === 'user' ? 'user-message' : 'ai-message');
+        if (sender === 'user') {
+            const p = document.createElement('p');
+            p.textContent = content;
+            div.appendChild(p);
+        } else {
+            div.innerHTML = content;
+        }
+        inputs.chatLog.appendChild(div);
+        inputs.chatLog.scrollTop = inputs.chatLog.scrollHeight;
+    }
+    
+    async function renderVisualization(visType, targetDate = null) {
+        let url = `/chart_data?type=${visType}`;
+        if (targetDate) url += `&target_date=${targetDate}`;
+        const response = await fetch(url);
+        if (!response.ok) {
+            const error = await response.json();
+            appendMessage(error.error || "Could not fetch visualization data.", 'ai');
+            return;
+        }
+        const config = await response.json();
+        const visWrapper = document.createElement('div');
+        visWrapper.classList.add('message', 'ai-message');
+        if (config.type === 'calendar') {
+            visWrapper.classList.add('calendar-container');
+            visWrapper.innerHTML = generateCalendar(config.data);
+        } else if (['bar', 'line'].includes(config.type)) {
+            visWrapper.classList.add('chart-container');
+            if(config.options.indexAxis === 'y') visWrapper.classList.add('chart-container-horizontal');
+            const canvas = document.createElement('canvas');
+            visWrapper.appendChild(canvas);
+            new Chart(canvas.getContext('2d'), config);
+        }
+        inputs.chatLog.appendChild(visWrapper);
+        inputs.chatLog.scrollTop = inputs.chatLog.scrollHeight;
+    }
+    
+    function generateCalendar(data) {
+        const { year, month, month_name, predicted_days, logged_days, fertile_days, current_day } = data;
+        let date = new Date(year, month - 1, 1);
+        let firstDay = date.getDay();
+        let daysInMonth = new Date(year, month, 0).getDate();
+        
+        let tableHtml = `<h3>${month_name} ${year}</h3><table class="calendar-table"><thead><tr>`;
+        ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach(day => { tableHtml += `<th>${day}</th>`; });
+        tableHtml += `</tr></thead><tbody><tr>`;
+        for (let i = 0; i < firstDay; i++) { tableHtml += `<td></td>`; }
+        for (let day = 1; day <= daysInMonth; day++) {
+            if ((day + firstDay - 1) % 7 === 0 && day > 1) { tableHtml += `</tr><tr>`; }
+            let classes = ['calendar-day'];
+            if (logged_days.includes(day)) { classes.push('logged-day'); } 
+            else if (fertile_days && fertile_days.includes(day)) { classes.push('fertile-day'); } 
+            else if (predicted_days.includes(day)) { classes.push('predicted-day'); }
+            if (day === current_day) { classes.push('current-day'); }
+            tableHtml += `<td><span class="${classes.join(' ')}">${day}</span></td>`;
+        }
+        while ((daysInMonth + firstDay) % 7 !== 0) { tableHtml += `<td></td>`; daysInMonth++; }
+        tableHtml += `</tr></tbody></table>`;
+
+        let legendHtml = '<div class="calendar-legend">';
+        if (logged_days.length > 0) {
+            legendHtml += '<div class="legend-item"><span class="legend-color" style="background-color: var(--logged-day-bg);"></span>Logged Period</div>';
+        }
+        if (predicted_days.length > 0) {
+            legendHtml += '<div class="legend-item"><span class="legend-color" style="background-color: var(--predicted-day-bg);"></span>Predicted Period</div>';
+        }
+        if (fertile_days.length > 0) {
+            legendHtml += '<div class="legend-item"><span class="legend-color" style="background-color: var(--fertile-day-bg);"></span>Fertile Window</div>';
+        }
+        legendHtml += '</div>';
+
+        return tableHtml + legendHtml;
+    }
+    
+    function clearFileInput() {
+        if (inputs.fileInput) {
+            selectedFile = null;
+            inputs.fileInput.value = '';
+            inputs.fileNameDisplay.textContent = '';
+            inputs.fileNameDisplay.classList.add('hidden');
+        }
+    }
+
+    async function startRecording() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+            audioChunks = [];
+            mediaRecorder.ondataavailable = event => { audioChunks.push(event.data); };
+            mediaRecorder.onstop = async () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                if (audioBlob.size > 500) await sendAudioToServer(audioBlob);
+                stream.getTracks().forEach(track => track.stop());
+            };
+            mediaRecorder.start();
+            inputs.voiceInputBtn.classList.add('recording');
+            inputs.userInput.placeholder = "Recording...";
+        } catch (err) { console.error("Error accessing microphone:", err); }
+    }
+
+    function stopRecording() {
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+            mediaRecorder.stop();
+            inputs.voiceInputBtn.classList.remove('recording');
+            inputs.userInput.placeholder = LANG_STRINGS.ask_question_placeholder;
+        }
+    }
+
+    async function sendAudioToServer(audioBlob) {
+        const formData = new FormData();
+        formData.append('audio_file', audioBlob);
+        try {
+            inputs.userInput.placeholder = "Transcribing...";
+            const response = await fetch('/transcribe', { method: 'POST', body: formData });
+            const data = await response.json();
+            if (response.ok) { inputs.userInput.value = data.transcribed_text; }
+        } catch (error) { console.error("Transcription error:", error); }
+        finally { inputs.userInput.placeholder = LANG_STRINGS.ask_question_placeholder; }
+    }
+
+    // --- INITIAL PAGE LOAD LOGIC ---
+    populateAndInitializeForm(forms.profile, '');
+    
+    if (modals.signup) {
+        modals.closeSignup.onclick = () => modals.signup.classList.remove('active');
+        window.onclick = (event) => { if (event.target == modals.signup) { modals.signup.classList.remove('active'); }};
+        modals.identifierForm.addEventListener('submit', (e) => e.preventDefault());
+    }
+    
+    forms.identifier.addEventListener('submit', handleIdentifierSubmit);
+    if (forms.otp) {
+        forms.otp.addEventListener('submit', handleOtpSubmit);
+    }
+    
+    if(IS_GUEST_MODE_ENABLED && inputs.guestModeBtn) {
+        inputs.guestModeBtn.addEventListener('click', handleGuestModeStart);
+    }
+    forms.chat.addEventListener('submit', handleChatSubmit);
+    
+    if (logoutLink) {
+        logoutLink.addEventListener('click', async (e) => {
+            e.preventDefault();
+            const response = await fetch('/logout', { method: 'POST' });
+            if (response.ok) {
+                window.location.reload();
+            } else {
+                alert('Logout failed. Please try again.');
+            }
+        });
+    }
+
+    if (inputs.quickLogContainer) {
+        inputs.quickLogContainer.addEventListener('click', async function(e) {
+            const button = e.target.closest('.quick-log-btn');
+            if (!button) return;
+
+            const category = button.dataset.logCategory;
+            const value = button.dataset.logValue;
+
+            if (!category || !value) return;
+
+            appendMessage(button.textContent.trim(), 'user');
+
+            try {
+                const response = await fetch('/quick_log', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ category: category, value: value })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    appendMessage(data.reply, 'ai');
+                } else {
+                    appendMessage(data.error || 'Sorry, there was an error.', 'ai');
+                }
+            } catch (error) {
+                console.error('Quick log error:', error);
+                appendMessage('Sorry, there was a network error logging that.', 'ai');
+            }
+        });
+    }
+
+    if (inputs.fileInput) { inputs.fileInput.addEventListener('change', () => { selectedFile = inputs.fileInput.files[0]; if (selectedFile) { inputs.fileNameDisplay.textContent = selectedFile.name; inputs.fileNameDisplay.classList.remove('hidden'); } }); }
+    if (inputs.voiceInputBtn) { inputs.voiceInputBtn.addEventListener('click', () => { if (!mediaRecorder || mediaRecorder.state === 'inactive') { startRecording(); } else { stopRecording(); } }); }
+    
+    if (IS_SESSION_ACTIVE) {
+        displayWelcomeMessage();
+        showSection('chat');
+    } else {
+        showSection('identifier');
+    }
+});
+</script>
+</body>
+</html>

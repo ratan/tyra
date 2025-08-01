@@ -1,0 +1,12 @@
+Flask
+python-dotenv
+google-generativeai
+markdown-it-py
+python-dateutil
+werkzeug
+fpdf2
+PyJWT
+Flask-Cors
+Flask-Session
+requests
+sendgrid

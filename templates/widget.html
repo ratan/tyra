@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tyra</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;700&family=Noto+Sans+Bengali:wght@400;500;700&family=Noto+Sans+Devanagari:wght@400;500;700&family=Noto+Sans+Gujarati:wght@400;500;700&family=Noto+Sans+Gurmukhi:wght@400;500;700&family=Noto+Sans+Kannada:wght@400;500;700&family=Noto+Sans+Malayalam:wght@400;500;700&family=Noto+Sans+Oriya:wght@400;500;700&family=Noto+Sans+Tamil:wght@400;500;700&family=Noto+Sans+Telugu:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        :root {
+            --primary-gradient: linear-gradient(135deg, #8B4A9C 0%, #A855A8 100%);
+            --primary-color-solid: #8B4A9C;
+            --user-message-bg: var(--primary-gradient);
+            --ai-message-bg: #f3eef7;
+            --background-color: #fcfaff;
+            --text-color: #333;
+            --container-shadow: 0 10px 40px rgba(139, 74, 156, 0.15);
+            --predicted-day-bg: #d8b8e3;
+            --logged-day-bg: #8B4A9C;
+            --fertile-day-bg: #a6d8ae; 
+            --current-day-border: 2px solid #5a2d66;
+            --icon-color: #8B4A9C;
+            --icon-color-recording: #e74c3c;
+        }
+        body {
+            font-family: 'Poppins', 'Noto Sans Devanagari', 'Noto Sans Bengali', 'Noto Sans Tamil', 'Noto Sans Telugu', 'Noto Sans Kannada', 'Noto Sans Malayalam', 'Noto Sans Gujarati', 'Noto Sans Gurmukhi', 'Noto Sans Oriya', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            background-color: var(--background-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .rtl { direction: rtl; }
+        .rtl .sub-group { border-left: none; border-right: 3px solid var(--primary-color-solid); padding-left: 0; padding-right: 15px; margin-left: 0; margin-right: 0; }
+        .rtl .checkbox-group input[type="checkbox"] { margin-right: 0; margin-left: 10px; }
+        .rtl .user-message { align-self: flex-start; border-bottom-left-radius: 8px; border-bottom-right-radius: 22px; }
+        .rtl .ai-message { align-self: flex-end; border-bottom-right-radius: 8px; border-bottom-left-radius: 22px; }
+        .container { width: 100%; max-width: 600px; background: white; border-radius: 24px; box-shadow: var(--container-shadow); overflow: hidden; display: flex; flex-direction: column; height: 90vh; max-height: 800px; }
+        .header { background-image: var(--primary-gradient); color: white; padding: 15px 20px; text-align: center; box-shadow: 0 4px 10px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { margin: 0; font-size: 1.5em; font-weight: 500; }
+        .header-controls { display: flex; align-items: center; gap: 15px; }
+        .header a { color: white; text-decoration: none; font-size: 0.9em; font-weight: 500; background: rgba(255,255,255,0.2); padding: 6px 12px; border-radius: 15px; transition: background-color 0.2s; }
+        .header a:hover { background: rgba(255,255,255,0.3); }
+        .form-section, #chat-section { padding: 20px; flex-grow: 1; overflow-y: auto; min-height: 0; display: none; flex-direction: column; align-items: center; }
+        .form-section.active, #chat-section.active { display: flex; }
+        #chat-section { padding: 10px 20px 20px 20px; }
+        #identifier-section { justify-content: center; }
+        .welcome-text { text-align: center; margin-bottom: 25px; font-size: 1.1em; color: var(--text-color); width: 100%; }
+        #identifier-form, .profile-form-body { width: 100%; max-width: 420px; }
+        .profile-form-body { margin-top: 20px; }
+        #chat-container { display: flex; flex-direction: column; height: 100%; width: 100%; }
+        .btn-primary {
+            width: 100%; background-image: var(--primary-gradient); color: white; font-weight: bold; border: none; cursor: pointer;
+            margin-top: 10px; padding: 12px; border-radius: 8px; transition: transform 0.2s ease, box-shadow 0.2s ease; font-size: 1em;
+        }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(139, 74, 156, 0.2); }
+        .btn-secondary {
+            width: 100%; background: none; color: var(--primary-color-solid); font-weight: bold; border: 2px solid var(--primary-color-solid); cursor: pointer;
+            margin-top: 15px; padding: 12px; border-radius: 8px; transition: background-color 0.2s ease; font-size: 1em;
+        }
+        .btn-secondary:hover { background-color: #f3eef7; }
+        #chat-log { flex-grow: 1; overflow-y: auto; padding: 15px; margin-bottom: 15px; display: flex; flex-direction: column; gap: 15px; }
+        .message { padding: 12px 20px; border-radius: 22px; max-width: 85%; line-height: 1.6; word-wrap: break-word; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .user-message { background-image: var(--user-message-bg); color: white; align-self: flex-end; border-bottom-right-radius: 8px; }
+        .ai-message { background-color: var(--ai-message-bg); color: var(--text-color); align-self: flex-start; border-bottom-left-radius: 8px; }
+        .ai-message.chart-container { width: 100%; max-width: 100%; padding: 15px; box-sizing: border-box; height: 250px; }
+        .ai-message.chart-container-horizontal { height: 180px; }
+        .calendar-container { width: 100%; max-width: 100%; padding: 10px; box-sizing: border-box; }
+        .calendar-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        .calendar-table th { padding: 8px 0; font-size: 0.8em; color: #777; font-weight: 500; }
+        .calendar-table td { text-align: center; padding: 2px; height: 35px; border-radius: 50%; font-size: 0.9em; }
+        .calendar-day { display: flex; justify-content: center; align-items: center; width: 100%; height: 100%; border-radius: 50%; }
+        .predicted-day { background-color: var(--predicted-day-bg); }
+        .fertile-day { background-color: var(--fertile-day-bg); }
+        .logged-day { background-color: var(--logged-day-bg); color: white; }
+        .current-day { box-shadow: 0 0 0 var(--current-day-border) inset; }
+        .ai-message p, .ai-message ul, .ai-message ol, .ai-message h1, .ai-message h2, .ai-message h3 { margin: 0.5em 0; }
+        .ai-message ul, .ai-message ol { padding-left: 20px; }
+        .ai-message li { margin-bottom: 8px; }
+        #chat-form { display: flex; gap: 10px; align-items: center; }
+        #quick-log-buttons { display: flex; gap: 8px; margin-bottom: 10px; justify-content: center; flex-wrap: wrap; }
+        .quick-log-btn { background-color: #f3eef7; border: 1px solid #d8b8e3; color: #5a2d66; padding: 6px 12px; border-radius: 15px; font-size: 0.8em; cursor: pointer; transition: background-color 0.2s; }
+        .quick-log-btn:hover { background-color: #e9ddeb; }
+        #user-input { flex-grow: 1; border: 1px solid #ddd; border-radius: 25px; padding: 12px 20px; font-size: 1em; transition: border-color 0.2s ease, box-shadow 0.2s ease; }
+        #user-input:focus { outline: none; border-color: #A855A8; box-shadow: 0 0 0 3px rgba(168, 85, 168, 0.2); }
+        #chat-form button { flex-shrink: 0; }
+        #chat-form .btn-primary { width: 50px; height: 50px; border-radius: 50%; margin-top: 0; padding: 0; display: flex; align-items: center; justify-content: center;}
+        #send-icon { width: 24px; height: 24px; }
+        .icon-btn { font-size: 24px; cursor: pointer; padding: 5px; color: var(--icon-color); border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; transition: background-color 0.2s, color 0.2s; background: none; border: none; }
+        .icon-btn:hover { background-color: #f3eef7; }
+        .icon-btn.recording { color: var(--icon-color-recording); animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(231, 76, 60, 0); } 100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); } }
+        #file-name-display { font-size: 12px; color: #555; margin: 0 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px; background: #eee; padding: 5px 8px; border-radius: 12px; }
+        form input, form select { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ccc; box-sizing: border-box; margin-bottom: 10px; }
+        form fieldset { border: 1px solid #ddd; padding: 15px; border-radius: 8px; margin-bottom: 15px; }
+        form legend { font-weight: bold; color: var(--text-color); }
+        form label { display: block; margin-bottom: 8px; font-weight: 500; text-align: left; }
+        .phone-group { display: flex; gap: 10px; }
+        .phone-group select { width: 120px; }
+        .checkbox-group { display: flex; align-items: flex-start; margin-bottom: 12px; }
+        .checkbox-group input[type="checkbox"] { width: auto; flex-shrink: 0; margin-top: 5px; margin-right: 10px; }
+        .checkbox-group .label-text, .checkbox-group > label { flex-grow: 1; font-weight: normal; margin-bottom: 0; }
+        .sub-group { border-left: 3px solid var(--primary-color-solid); padding-left: 15px; margin-left: 0; margin-top: 10px; }
+        .hidden { display: none; }
+        .or-separator { text-align: center; margin: 15px 0; font-weight: bold; color: #999; }
+        .add-child-btn { background-color: #9d6ab8; margin-top: 0; width: auto; padding: 8px 12px; font-size: 0.9em;}
+        #added-dobs-display, #added-dobs-display_modal { margin-top: 10px; font-style: italic; color: #555; text-align: left; }
+        
+        /* Modal Styles */
+        .modal {
+            display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%;
+            overflow: auto; background-color: rgba(0,0,0,0.5);
+            justify-content: center; align-items: center;
+        }
+        .modal.active { display: flex; }
+        .modal-content {
+            background-color: #fefefe; padding: 20px; border: 1px solid #888;
+            width: 90%; max-width: 500px; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            max-height: 90vh; overflow-y: auto;
+        }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 15px; }
+        .modal-header h2 { margin: 0; font-size: 1.4em; }
+        .close-btn { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+        .close-btn:hover, .close-btn:focus { color: black; text-decoration: none; }
+        .modal-error { color: #c0392b; font-size: 0.9em; text-align: center; margin-top: 10px; display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 id="app-title">Tyra</h1>
+            <div class="header-controls"></div>
+        </div>
+        
+        <div id="identifier-section" class="form-section active">
+            <p id="welcome-text" class="welcome-text"></p>
+            <form id="identifier-form">
+                <label for="email_login" id="identifier-email-label"></label>
+                <input type="email" id="email_login" placeholder="you@example.com">
+                <div class="or-separator" id="identifier-or"></div>
+                <label for="phone_login" id="identifier-phone-label"></label>
+                <div class="phone-group">
+                    <select id="country_code"><option value="+91" selected>+91 (India)</option><option value="+1">+1 (USA/CAN)</option><option value="+44">+44 (UK)</option></select>
+                    <input type="tel" id="phone_login" placeholder="9876543210">
+                </div>
+                <button type="submit" class="btn-primary" id="button-continue"></button>
+                <button type="button" id="guest-mode-btn" class="btn-secondary"></button>
+            </form>
+        </div>
+        
+        <div id="new-user-section" class="form-section">
+            <p id="new-user-welcome" class="welcome-text"></p>
+            <form id="profile-form" class="profile-form-body"></form>
+        </div>
+        
+        <div id="chat-section" class="form-section">
+            <div id="chat-container">
+                <div id="chat-log"></div>
+                <div id="quick-log-buttons"></div>
+                <form id="chat-form">
+                    <label for="file-input" class="icon-btn" title="Upload a file" id="file-upload-wrapper" style="display: none;">📎</label>
+                    <input type="file" id="file-input" style="display: none;" accept=".pdf,image/*">
+                    <span id="file-name-display" class="hidden"></span>
+                    <input type="text" id="user-input" required autocomplete="off">
+                    <button type="button" id="voice-input-btn" class="icon-btn" title="Record voice note" style="display: none;">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14C13.6569 14 15 12.6569 15 11V5C15 3.34315 13.6569 2 12 2C10.3431 2 9 3.34315 9 5V11C9 12.6569 10.3431 14 12 14ZM19 11C19 14.866 15.866 18 12 18C8.13401 18 5 14.866 5 11H7C7 13.7614 9.23858 16 12 16C14.7614 16 17 13.7614 17 11H19Z"/></svg>
+                    </button>
+                    <button type="submit" class="btn-primary" aria-label="Send">
+                        <svg id="send-icon" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.49902 12.0001H8.49902M6.52834 5.43714L18.499 12.0001L6.52834 18.5631C5.69432 19.1009 4.61243 18.2543 4.83984 17.2941L5.94384 12.7541C6.07168 12.2274 6.07168 11.7727 5.94384 11.2461L4.83984 6.70605C4.61243 5.74585 5.69432 4.89928 6.52834 5.43714Z"/></svg>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="signup-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header"><h2 id="modal-title"></h2><span class="close-btn" id="close-signup-modal">×</span></div>
+            <form id="modal-identifier-form">
+                <label for="modal_email_login" id="modal-email-label"></label><input type="email" id="modal_email_login" placeholder="you@example.com">
+                <div class="or-separator" id="modal-or-label"></div>
+                <label for="modal_phone_login" id="modal-phone-label"></label>
+                <div class="phone-group">
+                    <select id="modal_country_code"><option value="+91" selected>+91 (India)</option><option value="+1">+1 (USA/CAN)</option><option value="+44">+44 (UK)</option></select>
+                    <input type="tel" id="modal_phone_login" placeholder="9876543210">
+                </div>
+                <button type="submit" class="btn-primary" id="modal-continue-btn"></button>
+                <div class="modal-error" id="modal-error-message"></div>
+            </form>
+            <form id="modal-profile-form" class="profile-form-body hidden"></form>
+        </div>
+    </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // --- GLOBAL STATE ---
+    let LANG_STRINGS = {};
+    let FEATURE_FLAGS = {};
+    let selectedFile = null;
+    let mediaRecorder;
+    let audioChunks = [];
+    let childDobsArrays = { '': [], '_modal': [] };
+    let tempModalIdentifier = null;
+
+    // --- API & UI ELEMENT SELECTORS ---
+    const API_BASE_URL = ""; // Use relative paths
+    const sections = { identifier: document.getElementById('identifier-section'), newUser: document.getElementById('new-user-section'), chat: document.getElementById('chat-section') };
+    const forms = { identifier: document.getElementById('identifier-form'), profile: document.getElementById('profile-form'), chat: document.getElementById('chat-form') };
+    const inputs = { emailLogin: document.getElementById('email_login'), countryCode: document.getElementById('country_code'), phoneLogin: document.getElementById('phone_login'), chatLog: document.getElementById('chat-log'), userInput: document.getElementById('user-input'), fileInput: document.getElementById('file-input'), fileNameDisplay: document.getElementById('file-name-display'), voiceInputBtn: document.getElementById('voice-input-btn'), guestModeBtn: document.getElementById('guest-mode-btn'), quickLogContainer: document.getElementById('quick-log-buttons') };
+    const modals = { signup: document.getElementById('signup-modal'), closeSignup: document.getElementById('close-signup-modal'), identifierForm: document.getElementById('modal-identifier-form'), profileForm: document.getElementById('modal-profile-form'), errorMessage: document.getElementById('modal-error-message') };
+    const headerControls = document.querySelector('.header-controls');
+    
+    // --- HELPER FUNCTIONS ---
+    function showSection(sectionName) {
+        Object.values(sections).forEach(s => s.classList.remove('active'));
+        sections[sectionName].classList.add('active');
+        if (sectionName === 'chat') inputs.userInput.focus();
+    }
+
+    function appendMessage(content, sender) {
+        const div = document.createElement('div');
+        div.classList.add('message', sender === 'user' ? 'user-message' : 'ai-message');
+        div.innerHTML = (sender === 'user') ? `<p>${content}</p>` : content;
+        inputs.chatLog.appendChild(div);
+        inputs.chatLog.scrollTop = inputs.chatLog.scrollHeight;
+    }
+    
+    function clearFileInput() {
+        if (inputs.fileInput) { selectedFile = null; inputs.fileInput.value = ''; inputs.fileNameDisplay.textContent = ''; inputs.fileNameDisplay.classList.add('hidden'); }
+    }
+
+    // --- DYNAMIC UI RENDERING ---
+    function renderUI() {
+        document.body.classList.toggle('rtl', LANG_STRINGS.is_rtl);
+        document.title = LANG_STRINGS.lang_data.app_title;
+        document.getElementById('app-title').textContent = LANG_STRINGS.lang_data.app_title;
+        document.getElementById('welcome-text').textContent = LANG_STRINGS.lang_data.welcome_text;
+        document.getElementById('identifier-email-label').textContent = LANG_STRINGS.lang_data.identifier_email_label;
+        document.getElementById('identifier-or').textContent = LANG_STRINGS.lang_data.identifier_or;
+        document.getElementById('identifier-phone-label').textContent = LANG_STRINGS.lang_data.identifier_phone_label;
+        document.getElementById('button-continue').textContent = LANG_STRINGS.lang_data.button_continue;
+        inputs.guestModeBtn.textContent = LANG_STRINGS.lang_data.guest_mode_link;
+        inputs.guestModeBtn.style.display = FEATURE_FLAGS.ENABLE_GUEST_MODE ? 'block' : 'none';
+        document.getElementById('new-user-welcome').textContent = LANG_STRINGS.lang_data.new_user_welcome;
+        inputs.userInput.placeholder = LANG_STRINGS.lang_data.ask_question_placeholder;
+        document.getElementById('modal-title').textContent = LANG_STRINGS.lang_data.modal_signin_title;
+        document.getElementById('modal-email-label').textContent = LANG_STRINGS.lang_data.identifier_email_label;
+        document.getElementById('modal-or-label').textContent = LANG_STRINGS.lang_data.identifier_or;
+        document.getElementById('modal-phone-label').textContent = LANG_STRINGS.lang_data.identifier_phone_label;
+        document.getElementById('modal-continue-btn').textContent = LANG_STRINGS.lang_data.button_continue;
+        document.getElementById('file-upload-wrapper').style.display = (FEATURE_FLAGS.ENABLE_DOCUMENT_UPLOAD || FEATURE_FLAGS.ENABLE_VISUAL_TRIAGE) ? 'flex' : 'none';
+        inputs.voiceInputBtn.style.display = FEATURE_FLAGS.ENABLE_VOICE_INPUT ? 'flex' : 'none';
+    }
+
+    function renderHeader(sessionData) {
+        headerControls.innerHTML = '';
+        if (sessionData.authenticated) {
+            if (FEATURE_FLAGS.ENABLE_DASHBOARD) {
+                const dashboardLink = document.createElement('a');
+                dashboardLink.href = 'dashboard_widget.html';
+                dashboardLink.id = 'dashboard-link';
+                dashboardLink.textContent = LANG_STRINGS.lang_data.dashboard_link;
+                headerControls.appendChild(dashboardLink);
+            }
+            const logoutLink = document.createElement('a');
+            logoutLink.href = '#';
+            logoutLink.id = 'logout-link';
+            logoutLink.textContent = LANG_STRINGS.lang_data.logout_link;
+            logoutLink.onclick = handleLogout;
+            headerControls.appendChild(logoutLink);
+        }
+    }
+    
+    function populateQuickLogButtons() {
+        const container = inputs.quickLogContainer;
+        if (!container) return;
+        container.innerHTML = '';
+        const buttons = LANG_STRINGS.lang_data.quick_log_buttons || [];
+        buttons.forEach(item => {
+            const button = document.createElement('button');
+            button.className = 'quick-log-btn';
+            button.innerHTML = item.label;
+            button.dataset.logCategory = item.category;
+            button.dataset.logValue = item.value;
+            container.appendChild(button);
+        });
+    }
+
+    function displayWelcomeMessage(sessionData) {
+        let message;
+        if (sessionData.authenticated) {
+            const name = sessionData.user_name.split(' ')[0];
+            message = LANG_STRINGS.lang_data.welcome_message_return.replace('{name}', name);
+        } else {
+            message = LANG_STRINGS.lang_data.welcome_message_guest;
+        }
+        inputs.chatLog.innerHTML = `<div class="message ai-message"><p>${message}</p></div>`;
+    }
+    
+    // --- PROFILE FORM LOGIC ---
+    function getProfileFormTemplate() {
+        return `
+            <label for="name{ID_SUFFIX}">${LANG_STRINGS.lang_data.label_name}</label><input type="text" id="name{ID_SUFFIX}" name="name" required>
+            <label for="age{ID_SUFFIX}">${LANG_STRINGS.lang_data.label_age}</label><input type="number" id="age{ID_SUFFIX}" name="age" required min="13" max="100">
+            ${FEATURE_FLAGS.ENABLE_MULTI_LANGUAGE ? `
+            <label for="language{ID_SUFFIX}">${LANG_STRINGS.lang_data.label_language}</label>
+            <select name="language" id="language{ID_SUFFIX}" required>
+                <option value="en" selected>English</option><option value="bn">বাংলা</option><option value="gu">ગુજરાતી</option><option value="hi">हिन्दी</option><option value="kn">ಕನ್ನಡ</option><option value="ml">മലയാളം</option><option value="mr">മराठी</option><option value="or">ଓଡ଼ିଆ</option><option value="pa">ਪੰਜਾਬੀ</option><option value="ta">தமிழ்</option><option value="te">తెలుగు</option><option value="ur">اردو</option>
+            </select>` : ''}
+            <div id="optional-email-wrapper{ID_SUFFIX}"><label for="email_optional{ID_SUFFIX}">Email (Optional)</label><input type="email" id="email_optional{ID_SUFFIX}" name="email_optional"></div>
+            <fieldset id="adult-profile-section{ID_SUFFIX}" class="hidden"><legend>Key Life Events</legend>
+                <div class="checkbox-group"><input type="checkbox" id="cb-ttc{ID_SUFFIX}" name="main_event" value="is_trying_to_conceive"><div class="label-text"><label for="cb-ttc{ID_SUFFIX}">Trying to conceive</label><div class="sub-group hidden"><label for="months_trying{ID_SUFFIX}">For how many months?</label><input type="number" id="months_trying{ID_SUFFIX}" name="months_trying" min="1"></div></div></div>
+                <div class="checkbox-group"><input type="checkbox" id="cb-pregnant{ID_SUFFIX}" name="main_event" value="is_pregnant"><div class="label-text"><label for="cb-pregnant{ID_SUFFIX}">Currently pregnant</label><div class="sub-group hidden"><label for="lmp_date{ID_SUFFIX}">Last Menstrual Period (LMP)</label><input type="date" id="lmp_date{ID_SUFFIX}" name="lmp_date"></div></div></div>
+                <div class="checkbox-group"><input type="checkbox" id="cb-parent{ID_SUFFIX}" name="main_event" value="is_parent"><div class="label-text"><label for="cb-parent{ID_SUFFIX}">Parenting / Have Children</label><div class="sub-group hidden"><label for="child_dob_input{ID_SUFFIX}">Child's Date of Birth</label><input type="date" id="child_dob_input{ID_SUFFIX}" name="child_dob_input"><button type="button" id="add-child-btn{ID_SUFFIX}" class="add-child-btn">Add Child</button><div id="added-dobs-display{ID_SUFFIX}"></div></div></div></div>
+            </fieldset>
+            <button type="submit" class="btn-primary">${LANG_STRINGS.lang_data.button_start_chatting}</button>
+        `;
+    }
+    
+    function populateAndInitializeForm(formContainer, idSuffix = '') {
+        if (!formContainer) return;
+        formContainer.innerHTML = getProfileFormTemplate().replace(/{ID_SUFFIX}/g, idSuffix);
+        const ageInput = document.getElementById('age' + idSuffix);
+        const adultProfileSection = document.getElementById('adult-profile-section' + idSuffix);
+        const addChildBtn = document.getElementById('add-child-btn' + idSuffix);
+        const childDobInput = document.getElementById('child_dob_input' + idSuffix);
+        const addedDobsDisplay = document.getElementById('added-dobs-display' + idSuffix);
+
+        ageInput?.addEventListener('input', () => {
+            const age = parseInt(ageInput.value, 10) || 0;
+            adultProfileSection.classList.toggle('hidden', age < 20 || age > 50);
+        });
+        
+        addChildBtn?.addEventListener('click', function() {
+            if (childDobInput.value) { 
+                childDobsArrays[idSuffix].push(childDobInput.value); 
+                addedDobsDisplay.textContent = `Added: ${childDobsArrays[idSuffix].join(', ')}`;
+                childDobInput.value = ''; 
+            }
+        });
+    
+        formContainer.querySelectorAll('input[name="main_event"]').forEach(cb => {
+            cb.addEventListener('change', (e) => {
+                const subGroup = e.target.closest('.checkbox-group').querySelector('.sub-group');
+                if (subGroup) subGroup.classList.toggle('hidden', !e.target.checked);
+            });
+        });
+
+        const formElement = formContainer.closest('form');
+        formElement.addEventListener('submit', (e) => handleProfileFormSubmit(e, idSuffix));
+    }
+
+    // --- EVENT HANDLERS ---
+    async function handleApiRequest(endpoint, options = {}) {
+        options.credentials = 'include';
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: 'An unknown API error occurred.' }));
+            throw new Error(errorData.message || errorData.error);
+        }
+        return response.json();
+    }
+
+    async function handleIdentifierSubmit(e) {
+        e.preventDefault();
+        const email = inputs.emailLogin.value.trim(); 
+        const phone = inputs.phoneLogin.value.trim(); 
+        let identifier = email || (phone ? inputs.countryCode.value + phone : '');
+        if (!identifier) return;
+        
+        try {
+            const data = await handleApiRequest('/check_or_create_profile', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ identifier })
+            });
+
+            if (data.status === 'exists') {
+                initializeAppState();
+            } else if (data.status === 'new_user_needed') {
+                document.getElementById('optional-email-wrapper').classList.toggle('hidden', !!email); 
+                showSection('newUser');
+            }
+        } catch (error) {
+            alert(`Error: ${error.message}`);
+        }
+    }
+
+    async function handleProfileFormSubmit(e, idSuffix = '') {
+        e.preventDefault();
+        const details = {}; 
+        document.querySelectorAll(`#adult-profile-section${idSuffix} input[name="main_event"]:checked`).forEach(cb => { details[cb.value] = true; });
+        if (details.is_trying_to_conceive) details.months_trying = document.getElementById('months_trying' + idSuffix).value;
+        if (details.is_pregnant) details.lmp_date = document.getElementById('lmp_date' + idSuffix).value;
+        if (details.is_parent) { details.child_dobs = childDobsArrays[idSuffix]; details.num_children = childDobsArrays[idSuffix].length; }
+        
+        const langSelect = document.getElementById('language' + idSuffix);
+        const payload = { 
+            name: document.getElementById('name' + idSuffix).value, 
+            age: document.getElementById('age' + idSuffix).value, 
+            email: document.getElementById('email_optional' + idSuffix).value.trim(), 
+            details: details,
+            language: langSelect ? langSelect.value : 'en'
+        };
+
+        if (idSuffix === '_modal') payload.identifier = tempModalIdentifier;
+        
+        try {
+            const data = await handleApiRequest('/check_or_create_profile', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            });
+            if (data.status === 'created') {
+                if(idSuffix === '_modal') modals.signup.classList.remove('active');
+                initializeAppState();
+            }
+        } catch(error) {
+             alert(`Error: ${error.message}`); 
+        }
+    }
+    
+    async function handleGuestModeStart() {
+        try {
+            await handleApiRequest('/start_guest', { method: 'POST' });
+            initializeAppState();
+        } catch (error) {
+            alert('Could not start guest mode.');
+        }
+    }
+    
+    async function handleChatSubmit(e) {
+        e.preventDefault();
+        const messageText = inputs.userInput.value.trim();
+        if (!messageText && !selectedFile) return;
+
+        appendMessage(messageText || `(File: ${selectedFile.name})`, 'user');
+        inputs.userInput.value = '';
+
+        try {
+            let data;
+            if (selectedFile) {
+                const formData = new FormData();
+                formData.append('file', selectedFile);
+                formData.append('message', messageText || "Tell me about this file.");
+                const response = await fetch(`${API_BASE_URL}/upload`, { method: 'POST', body: formData, credentials: 'include' });
+                data = await response.json();
+                if (!response.ok) throw new Error(data.error);
+            } else {
+                data = await handleApiRequest('/chat', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ message: messageText }) });
+            }
+            clearFileInput();
+            appendMessage(data.reply, 'ai');
+            
+            if (data.action === 'prompt_signup') {
+                modals.identifierForm.classList.remove('hidden');
+                modals.profileForm.classList.add('hidden');
+                modals.errorMessage.style.display = 'none';
+                modals.identifierForm.reset();
+                modals.signup.classList.add('active');
+            }
+        } catch (error) {
+            appendMessage(`Sorry, an error occurred: ${error.message}`, 'ai');
+        }
+    }
+
+    async function handleLogout(e) {
+        e.preventDefault();
+        try {
+            await handleApiRequest('/logout', { method: 'POST' });
+            initializeAppState();
+        } catch (error) {
+            alert('Logout failed.');
+        }
+    }
+
+    // --- INITIALIZATION ---
+    async function initializeAppState() {
+        try {
+            const [config, sessionStatus] = await Promise.all([
+                handleApiRequest('/api/v1/config'),
+                handleApiRequest('/api/v1/session/status')
+            ]);
+            LANG_STRINGS = { lang_data: config.lang_data, is_rtl: config.is_rtl };
+            FEATURE_FLAGS = config.feature_flags;
+            
+            renderUI();
+            populateAndInitializeForm(forms.profile, '');
+            renderHeader(sessionStatus);
+
+            if (sessionStatus.authenticated || sessionStatus.is_guest) {
+                displayWelcomeMessage(sessionStatus);
+                if(sessionStatus.authenticated) populateQuickLogButtons();
+                showSection('chat');
+            } else {
+                showSection('identifier');
+            }
+
+        } catch (error) {
+            document.body.innerHTML = `<h1>Error</h1><p>Could not connect to the Tyra service. Please try again later.</p><p>Details: ${error.message}</p>`;
+        }
+    }
+    
+    forms.identifier.addEventListener('submit', handleIdentifierSubmit);
+    if (inputs.guestModeBtn) inputs.guestModeBtn.addEventListener('click', handleGuestModeStart);
+    forms.chat.addEventListener('submit', handleChatSubmit);
+
+    initializeAppState();
+});
+</script>
+</body>
+</html>
