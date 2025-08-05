@@ -1,3 +1,4 @@
+// static/js/tyra_widget.js
 (function() {
     'use strict';
 
@@ -7,214 +8,343 @@
         targetElement: null,
         jwtToken: null,
         verificationToken: null,
+        isGuest: false, 
         userEmail: '',
-        currentView: 'loading', // loading, email_entry, otp_entry, profile_creation, chat
-        userName: ''
+        currentView: 'loading', // loading, email_entry, otp_entry, profile_creation, chat, dashboard
+        userName: '',
+        lang: {},
+        dashboardData: null,
+        mediaRecorder: null,
+        audioChunks: [],
+        childDobs: [] // For profile creation form
     };
 
-    // --- HTML TEMPLATES ---
+    // --- TEMPLATES ---
     const templates = {
-        widgetShell: `
+        launcher: () => `<div class="tyra-launcher">
+                            <div class="tyra-launcher-icon">
+                                <svg viewBox="0 0 24 24">
+                                    <path fill="white" d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"></path>
+                                    <text x="50%" y="55%" text-anchor="middle" dominant-baseline="central">T</text>
+                                </svg>
+                            </div>
+                         </div>`,
+        widgetShell: (title) => `
             <div class="tyra-widget-container">
                 <div class="tyra-widget-header">
-                    <span>Tyra Health Companion</span>
-                    <div class="tyra-header-controls"></div>
+                    <button id="tyra-header-logout-btn" class="tyra-header-button" style="display: none;"></button>
+                    <h3 id="tyra-header-title">${title}</h3>
+                    <button id="tyra-header-nav-btn" class="tyra-header-button" style="display: none;"></button>
+                    <button id="tyra-close-btn" class="tyra-close-btn">×</button>
                 </div>
                 <div class="tyra-view-container"></div>
             </div>`,
-        headerControls: `
-            <button class="tyra-settings-btn" title="Settings">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-            </button>
-            <div class="tyra-settings-menu">
-                <button id="tyra-dashboard-btn">Dashboard</button>
-                <button id="tyra-logout-btn">Logout</button>
-            </div>
-            `,
-        emailEntryView: `
+        emailEntryView: () => `
             <div class="tyra-form-view">
-                <h2>Welcome!</h2>
+                <h2>${state.lang.welcome_text || 'Welcome!'}</h2>
                 <p>Please enter your email to begin or continue your conversation.</p>
                 <form id="tyra-email-form">
-                    <label for="tyra-email-input">Email Address</label>
+                    <label for="tyra-email-input">${state.lang.identifier_email_label || 'Email Address'}</label>
                     <input type="email" id="tyra-email-input" placeholder="you@example.com" required>
                     <div class="tyra-form-error"></div>
-                    <button type="submit">Continue</button>
+                    <button type="submit">${state.lang.button_continue || 'Continue'}</button>
                 </form>
+                <div class="tyra-or-separator">or</div>
+                <button type="button" id="tyra-guest-btn" class="tyra-guest-button">${state.lang.guest_mode_link || 'Continue as a Guest'}</button>
             </div>`,
-        otpEntryView: `
+        otpEntryView: () => `
             <div class="tyra-form-view">
                 <h2>Check your email</h2>
-                <p>We've sent a 6-digit code to <strong>${() => state.userEmail}</strong>. The code expires shortly.</p>
+                <p>${(state.lang.otp_sent_message || 'We sent a code to {email}.').replace('{email}', `<strong>${state.userEmail}</strong>`)}</p>
                 <form id="tyra-otp-form">
-                    <label for="tyra-otp-input">Verification Code</label>
+                    <label for="tyra-otp-input">${state.lang.otp_label || 'Verification Code'}</label>
                     <input type="text" id="tyra-otp-input" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required>
                     <div class="tyra-form-error"></div>
-                    <button type="submit">Verify</button>
+                    <button type="submit">${state.lang.button_verify_otp || 'Verify'}</button>
                 </form>
             </div>`,
-        profileCreationView: `
-            <div class="tyra-form-view">
-                <h2>Create your profile</h2>
-                <p>Just a few more details to get you started.</p>
+        profileCreationView: () => `
+            <div class="tyra-form-view tyra-profile-view">
+                <h2>${state.lang.new_user_welcome || 'Create your profile'}</h2>
                 <form id="tyra-profile-form">
-                    <label for="tyra-name-input">Name</label>
+                    <label for="tyra-name-input">${state.lang.label_name || 'Name'}</label>
                     <input type="text" id="tyra-name-input" required>
-                    <label for="tyra-age-input">Age</label>
+                    
+                    <label for="tyra-age-input">${state.lang.label_age || 'Age'}</label>
                     <input type="number" id="tyra-age-input" min="13" max="100" required>
+
+                    <label for="tyra-language-select">${state.lang.label_language || 'Language'}</label>
+                    <select id="tyra-language-select">
+                        <option value="en" selected>English</option><option value="bn">বাংলা (Bengali)</option><option value="gu">ગુજરાતી (Gujarati)</option><option value="hi">हिन्दी (Hindi)</option><option value="kn">ಕನ್ನಡ (Kannada)</option><option value="ml">മലയാളം (Malayalam)</option><option value="mr">मराठी (Marathi)</option><option value="or">ଓଡ଼ିଆ (Odia)</option><option value="pa">ਪੰਜਾਬੀ (Punjabi)</option><option value="ta">தமிழ் (Tamil)</option><option value="te">తెలుగు (Telugu)</option><option value="ur">اردو (Urdu)</option><option value="ar">العربية (Arabic)</option>
+                    </select>
+
+                    <fieldset id="tyra-adult-profile-section" class="hidden"><legend>Key Life Events</legend>
+                        <div class="tyra-checkbox-group"><input type="checkbox" id="cb-ttc" value="is_trying_to_conceive"><label for="cb-ttc">Trying to conceive</label></div>
+                        <div class="tyra-sub-group hidden"><label>For how many months?</label><input type="number" id="months_trying"></div>
+                        
+                        <div class="tyra-checkbox-group"><input type="checkbox" id="cb-pregnant" value="is_pregnant"><label for="cb-pregnant">Currently pregnant</label></div>
+                        <div class="tyra-sub-group hidden"><label>Last Menstrual Period (LMP)</label><input type="date" id="lmp_date"></div>
+
+                        <div class="tyra-checkbox-group"><input type="checkbox" id="cb-parent" value="is_parent"><label for="cb-parent">Parenting / Have Children</label></div>
+                        <div class="tyra-sub-group hidden"><label>Child's Date of Birth</label><input type="date" id="child_dob_input"><button type="button" id="add-child-btn">Add</button><div id="added-dobs-display"></div></div>
+                    </fieldset>
+    
+                    <fieldset id="tyra-menopause-profile-section" class="hidden"><legend>Menopause Status</legend>
+                        <div class="tyra-checkbox-group"><input type="checkbox" id="cb-peri" value="is_perimenopausal"><label for="cb-peri">Perimenopause symptoms</label></div>
+                        <div class="tyra-checkbox-group"><input type="checkbox" id="cb-meno" value="is_menopausal"><label for="cb-meno">In menopause or postmenopausal</label></div>
+                    </fieldset>
+                    
                     <div class="tyra-form-error"></div>
-                    <button type="submit">Start Chatting</button>
+                    <button type="submit">${state.lang.button_start_chatting || 'Start Chatting'}</button>
                 </form>
             </div>`,
-        chatView: `
+        chatView: () => `
             <div class="tyra-chat-log"></div>
-            <form class="tyra-chat-form">
-                <input type="text" placeholder="Ask a question..." autocomplete="off" required>
-                <button type="submit">Send</button>
-            </form>`
+            <div class="tyra-chat-form-container">
+                 <div class="tyra-quick-log-buttons"></div>
+                 <form class="tyra-chat-form">
+                    <label for="tyra-file-input" class="tyra-icon-button" title="Upload file">📎</label>
+                    <input type="file" id="tyra-file-input" style="display:none;" accept=".pdf,image/*">
+                    <input type="text" class="tyra-chat-input" placeholder="${state.lang.ask_question_placeholder || 'Ask a question...'}" autocomplete="off" required>
+                    <button type="button" class="tyra-icon-button tyra-voice-btn" title="Record voice">🎤</button>
+                    <button type="submit" class="tyra-send-button" aria-label="Send">➤</button>
+                </form>
+            </div>`,
+        dashboardView: () => `<div class="tyra-dashboard-view"></div>`,
+        calendar: (data) => {
+            const { year, month, month_name, predicted_days, logged_days, fertile_days, current_day } = data;
+            let date = new Date(year, month - 1, 1);
+            let firstDay = date.getDay();
+            let daysInMonth = new Date(year, month, 0).getDate();
+            
+            let tableHtml = `<h3>${month_name} ${year}</h3><table class="tyra-calendar-table"><thead><tr>`;
+            ['S', 'M', 'T', 'W', 'T', 'F', 'S'].forEach(day => { tableHtml += `<th>${day}</th>`; });
+            tableHtml += `</tr></thead><tbody><tr>`;
+            for (let i = 0; i < firstDay; i++) { tableHtml += `<td></td>`; }
+            for (let day = 1; day <= daysInMonth; day++) {
+                if ((day + firstDay - 1) % 7 === 0 && day > 1) { tableHtml += `</tr><tr>`; }
+                let classes = ['tyra-calendar-day'];
+                if (logged_days.includes(day)) { classes.push('logged-day'); } 
+                else if (fertile_days && fertile_days.includes(day)) { classes.push('fertile-day'); } 
+                else if (predicted_days.includes(day)) { classes.push('predicted-day'); }
+                if (day === current_day) { classes.push('current-day'); }
+                tableHtml += `<td><span class="${classes.join(' ')}">${day}</span></td>`;
+            }
+            while ((daysInMonth + firstDay) % 7 !== 0) { tableHtml += `<td></td>`; daysInMonth++; }
+            tableHtml += `</tr></tbody></table>`;
+    
+            let legendHtml = '<div class="tyra-calendar-legend">';
+            legendHtml += '<div class="legend-item"><span class="legend-color" style="background-color: var(--logged-day-bg);"></span>Logged</div>';
+            legendHtml += '<div class="legend-item"><span class="legend-color" style="background-color: var(--predicted-day-bg);"></span>Predicted</div>';
+            legendHtml += '<div class="legend-item"><span class="legend-color" style="background-color: var(--fertile-day-bg);"></span>Fertile</div>';
+            legendHtml += '</div>';
+    
+            return tableHtml + legendHtml;
+        }
     };
 
     // --- RENDER & DOM FUNCTIONS ---
     function render() {
-        const container = state.targetElement.querySelector('.tyra-view-container');
-        if (!container) return;
+        const viewContainer = state.targetElement.querySelector('.tyra-view-container');
+        if (!viewContainer) return; // The shell might not be rendered yet
+        
+        const headerTitle = state.targetElement.querySelector('#tyra-header-title');
+        const navButton = state.targetElement.querySelector('#tyra-header-nav-btn');
+        const logoutButton = state.targetElement.querySelector('#tyra-header-logout-btn');
+
+        if (!headerTitle || !navButton || !logoutButton) return;
 
         let viewHTML = '';
-        switch (state.currentView) {
-            case 'email_entry':
-                viewHTML = templates.emailEntryView;
-                break;
-            case 'otp_entry':
-                viewHTML = templates.otpEntryView.replace('${() => state.userEmail}', state.userEmail);
-                break;
-            case 'profile_creation':
-                viewHTML = templates.profileCreationView;
-                break;
-            case 'chat':
-                viewHTML = templates.chatView;
-                break;
-            default:
-                viewHTML = '<div class="tyra-form-view"><p>Loading...</p></div>';
-        }
-        container.innerHTML = viewHTML;
-        
-        const headerControls = state.targetElement.querySelector('.tyra-header-controls');
-        headerControls.innerHTML = (state.currentView === 'chat' && state.jwtToken) ? templates.headerControls : '';
+        navButton.style.display = 'none';
+        logoutButton.style.display = 'none';
 
+        switch (state.currentView) {
+            case 'email_entry': viewHTML = templates.emailEntryView(); break;
+            case 'otp_entry': viewHTML = templates.otpEntryView(); break;
+            case 'profile_creation': viewHTML = templates.profileCreationView(); break;
+            case 'chat':
+                viewHTML = templates.chatView();
+                headerTitle.textContent = state.lang.app_title || 'Tyra';
+                if (state.jwtToken) {
+                    logoutButton.textContent = state.lang.logout_link || 'Logout';
+                    logoutButton.style.display = 'block';
+                    if (!state.isGuest) {
+                        navButton.textContent = state.lang.dashboard_link || 'Dashboard';
+                        navButton.style.display = 'block';
+                    }
+                }
+                break;
+            case 'dashboard':
+                viewHTML = templates.dashboardView();
+                headerTitle.textContent = `${state.userName}'s Dashboard`;
+                navButton.textContent = state.lang.back_to_chat_link || 'Back to Chat';
+                logoutButton.textContent = state.lang.logout_link || 'Logout';
+                navButton.style.display = 'block';
+                logoutButton.style.display = 'block';
+                break;
+            default: viewHTML = '<p style="text-align:center;padding:20px;">Loading...</p>';
+        }
+        viewContainer.innerHTML = viewHTML;
         bindEventListeners();
+        postRenderSetup();
+    }
+    
+    function postRenderSetup() {
         if (state.currentView === 'chat') {
-            const welcomeMessage = state.userName 
-                ? `Welcome back, ${state.userName}! How can I assist you today?`
-                : 'Welcome! I am Tyra. Feel free to ask me anything.';
-            addMessage(welcomeMessage, 'ai');
+            const chatLog = state.targetElement.querySelector('.tyra-chat-log');
+            if (chatLog && chatLog.children.length === 0) {
+                const welcomeMessage = state.userName 
+                    ? (state.lang.welcome_message_return || 'Welcome back, {name}!').replace('{name}', state.userName)
+                    : (state.lang.welcome_message_guest || 'Welcome!');
+                addMessage(welcomeMessage, 'ai');
+            }
+            populateQuickLogButtons();
+        } else if (state.currentView === 'dashboard') {
+            renderDashboard();
+        } else if (state.currentView === 'profile_creation') {
+            initializeProfileFormLogic();
         }
     }
-
-    function addMessage(text, sender) {
+    
+    function addMessage(htmlContent, sender, type = 'text') {
         const chatLog = state.targetElement.querySelector('.tyra-chat-log');
         if (!chatLog) return;
         const messageDiv = document.createElement('div');
         messageDiv.classList.add('tyra-message', `tyra-${sender}-message`);
-        messageDiv.textContent = text;
+
+        // FIX v95.8: Handle 'bar' and 'line' types specifically for charts.
+        if (['bar', 'line'].includes(type)) {
+            messageDiv.classList.add('tyra-chart-container');
+            const canvas = document.createElement('canvas');
+            messageDiv.appendChild(canvas);
+            new Chart(canvas.getContext('2d'), htmlContent);
+        } else if (type === 'calendar') {
+             messageDiv.classList.add('tyra-calendar-container');
+             messageDiv.innerHTML = templates.calendar(htmlContent.data);
+        }
+        else {
+             messageDiv.innerHTML = htmlContent;
+        }
+        
         chatLog.appendChild(messageDiv);
+        // FIX: Auto-scroll to the bottom
         chatLog.scrollTop = chatLog.scrollHeight;
     }
 
     function setFormError(formId, message) {
         const errorDiv = state.targetElement.querySelector(`#${formId} .tyra-form-error`);
-        if (errorDiv) {
-            errorDiv.textContent = message;
-        }
-    }
-    
-    // --- API CALLS ---
-    async function getApiConfig() {
-        const response = await fetch(`${state.apiUrl}/api/v1/config`);
-        if (!response.ok) throw new Error('Could not fetch API config');
-        return response.json();
-    }
-    
-    async function authenticateAsGuest() {
-        const response = await fetch(`${state.apiUrl}/api/v1/auth/guest`, { method: 'POST' });
-        if (!response.ok) throw new Error('Guest authentication failed');
-        return response.json();
-    }
-    
-    async function getDashboardToken() {
-        const response = await fetch(`${state.apiUrl}/api/v1/auth/dashboard_token`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${state.jwtToken}` }
-        });
-        if (!response.ok) throw new Error('Could not get dashboard token');
-        return response.json();
+        if (errorDiv) errorDiv.textContent = message;
     }
 
-    async function requestOtp(email) {
-        const response = await fetch(`${state.apiUrl}/api/v1/auth/request_otp`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email })
-        });
-        return response.json();
-    }
-    
-    async function verifyOtp(email, otp) {
-        const response = await fetch(`${state.apiUrl}/api/v1/auth/verify_otp`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, otp })
-        });
-        return { ok: response.ok, data: await response.json() };
-    }
+    // --- API & DATA HANDLING ---
+    const api = {
+        // FIX v95.7: Re-engineer `get` to robustly handle URL parameters
+        async get(endpoint, params = {}, isBlob = false) {
+            const headers = { 'Authorization': `Bearer ${state.jwtToken}` };
+            const url = new URL(`${state.apiUrl}/api/v1/${endpoint}`);
+            url.search = new URLSearchParams(params).toString();
 
-    async function createProfile(name, age) {
-        const response = await fetch(`${state.apiUrl}/api/v1/auth/create_profile`, {
-            method: 'POST',
-            headers: {
+            const response = await fetch(url, { headers });
+            if (!response.ok) throw new Error(`API GET ${endpoint} failed`);
+            return isBlob ? response.blob() : response.json();
+        },
+        async post(endpoint, body, isFormData = false) {
+            const headers = { 'Authorization': `Bearer ${state.jwtToken}` };
+            if (!isFormData) headers['Content-Type'] = 'application/json';
+            
+            const response = await fetch(`${state.apiUrl}/api/v1/${endpoint}`, {
+                method: 'POST',
+                headers,
+                body: isFormData ? body : JSON.stringify(body)
+            });
+            return { ok: response.ok, data: await response.json() };
+        },
+        async initialConfig() {
+            const response = await fetch(`${state.apiUrl}/api/v1/config/initial`);
+            if (!response.ok) throw new Error('Could not fetch initial config');
+            return response.json();
+        },
+        async guestAuth() {
+            const response = await fetch(`${state.apiUrl}/api/v1/auth/guest`, { method: 'POST' });
+            if (!response.ok) throw new Error('Guest auth failed');
+            return response.json();
+        },
+        async verifyOtp(email, otp) {
+            const { ok, data } = await fetch(`${state.apiUrl}/api/v1/auth/verify_otp`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, otp })
+            }).then(async res => ({ ok: res.ok, data: await res.json() }));
+            return { ok, data };
+        },
+        async createProfile(payload) {
+            const headers = {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${state.verificationToken}`
-            },
-            body: JSON.stringify({ name, age })
-        });
-        return { ok: response.ok, data: await response.json() };
-    }
+            };
+            const response = await fetch(`${state.apiUrl}/api/v1/auth/create_profile`, {
+                method: 'POST', headers, body: JSON.stringify(payload)
+            });
+            return { ok: response.ok, data: await response.json() };
+        }
+    };
 
-    async function sendChatMessage(message) {
-        const response = await fetch(`${state.apiUrl}/api/v1/chat`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${state.jwtToken}`
-            },
-            body: JSON.stringify({ message })
-        });
-        return { ok: response.ok, data: await response.json() };
-    }
+    // --- EVENT HANDLERS & LOGIC ---
+    function bindEventListeners() {
+        // These listeners are rebound each time render() is called for the current view
+        const navButton = state.targetElement.querySelector('#tyra-header-nav-btn');
+        if (navButton) navButton.addEventListener('click', onNavButtonClick);
 
-    // --- EVENT HANDLERS ---
+        const logoutButton = state.targetElement.querySelector('#tyra-header-logout-btn');
+        if (logoutButton) logoutButton.addEventListener('click', onLogout);
+        
+        const emailForm = state.targetElement.querySelector('#tyra-email-form');
+        if (emailForm) emailForm.addEventListener('submit', onEmailSubmit);
+        
+        const guestBtn = state.targetElement.querySelector('#tyra-guest-btn');
+        if (guestBtn) guestBtn.addEventListener('click', onGuestButtonClick);
+
+        const otpForm = state.targetElement.querySelector('#tyra-otp-form');
+        if (otpForm) otpForm.addEventListener('submit', onOtpSubmit);
+        
+        const profileForm = state.targetElement.querySelector('#tyra-profile-form');
+        if (profileForm) profileForm.addEventListener('submit', onProfileSubmit);
+
+        const chatForm = state.targetElement.querySelector('.tyra-chat-form');
+        if (chatForm) chatForm.addEventListener('submit', onChatSubmit);
+
+        const fileInput = state.targetElement.querySelector('#tyra-file-input');
+        if (fileInput) fileInput.addEventListener('change', onFileSelect);
+
+        const voiceBtn = state.targetElement.querySelector('.tyra-voice-btn');
+        if (voiceBtn) voiceBtn.addEventListener('click', onVoiceButtonClick);
+
+        const quickLogContainer = state.targetElement.querySelector('.tyra-quick-log-buttons');
+        if (quickLogContainer) quickLogContainer.addEventListener('click', onQuickLogClick);
+        
+        const dashboardContainer = state.targetElement.querySelector('.tyra-dashboard-view');
+        if(dashboardContainer) {
+            dashboardContainer.addEventListener('click', onDashboardActionClick);
+        }
+    }
+    
+    function onNavButtonClick() {
+        if (state.currentView === 'chat') {
+            state.currentView = 'dashboard';
+        } else if (state.currentView === 'dashboard') {
+            state.currentView = 'chat';
+        }
+        render();
+    }
+    
     function onLogout() {
         state.jwtToken = null;
-        state.verificationToken = null;
         state.userName = '';
+        state.isGuest = false;
+        state.dashboardData = null;
         state.userEmail = '';
-        state.currentView = 'email_entry'; // Or guest, based on config
-        window.TyraWidget.init({ // Re-initialize to respect config
-            targetElementId: state.targetElement.id,
-            apiUrl: state.apiUrl
-        });
-    }
-
-    async function onDashboardClick() {
-        try {
-            const data = await getDashboardToken();
-            if (data.token) {
-                const dashboardUrl = `${state.apiUrl}/dashboard?token=${data.token}`;
-                window.open(dashboardUrl, '_blank');
-            }
-        } catch (error) {
-            console.error("Dashboard link error:", error);
-            addMessage("Sorry, couldn't open the dashboard right now.", 'ai');
-        }
+        state.currentView = 'email_entry'; // Go back to the start
+        render();
     }
 
     async function onEmailSubmit(e) {
@@ -225,14 +355,32 @@
         setFormError('tyra-email-form', '');
         
         state.userEmail = form.querySelector('input').value.trim();
-        const result = await requestOtp(state.userEmail);
+        const { ok, data } = await fetch(`${state.apiUrl}/api/v1/auth/request_otp`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: state.userEmail })
+        }).then(async res => ({ ok: res.ok, data: await res.json() }));
 
-        if (result.status === 'success') {
+        if (ok) {
             state.currentView = 'otp_entry';
             render();
         } else {
-            setFormError('tyra-email-form', result.message || 'An error occurred.');
+            setFormError('tyra-email-form', data.message || 'An error occurred.');
             button.disabled = false;
+        }
+    }
+    
+    async function onGuestButtonClick(e) {
+        e.target.disabled = true;
+        try {
+            const guestData = await api.guestAuth();
+            state.jwtToken = guestData.token;
+            state.isGuest = guestData.is_guest;
+            state.currentView = 'chat';
+            await initializeAuthenticatedSession();
+        } catch (error) {
+            e.target.disabled = false;
+            setFormError('tyra-email-form', 'Guest mode failed. Please try again.');
         }
     }
     
@@ -244,9 +392,10 @@
         setFormError('tyra-otp-form', '');
 
         const otp = form.querySelector('input').value.trim();
-        const { ok, data } = await verifyOtp(state.userEmail, otp);
+        const { ok, data } = await api.verifyOtp(state.userEmail, otp);
 
         if (ok) {
+            state.isGuest = data.is_guest;
             if (data.status === 'exists') {
                 state.jwtToken = data.token;
                 state.userName = data.name.split(' ')[0];
@@ -255,7 +404,7 @@
                 state.verificationToken = data.verification_token;
                 state.currentView = 'profile_creation';
             }
-            render();
+            await initializeAuthenticatedSession();
         } else {
             setFormError('tyra-otp-form', data.message || 'Verification failed.');
             button.disabled = false;
@@ -269,16 +418,27 @@
         button.disabled = true;
         setFormError('tyra-profile-form', '');
         
-        const name = form.querySelector('#tyra-name-input').value.trim();
-        const age = form.querySelector('#tyra-age-input').value.trim();
+        const details = {};
+        form.querySelectorAll('input[type="checkbox"]:checked').forEach(cb => { details[cb.value] = true; });
+        if (details.is_trying_to_conceive) details.months_trying = form.querySelector('#months_trying').value;
+        if (details.is_pregnant) details.lmp_date = form.querySelector('#lmp_date').value;
+        if (details.is_parent) { details.child_dobs = state.childDobs; details.num_children = state.childDobs.length; }
+
+        const payload = { 
+            name: form.querySelector('#tyra-name-input').value,
+            age: form.querySelector('#tyra-age-input').value,
+            language: form.querySelector('#tyra-language-select').value,
+            details: details
+        };
         
-        const { ok, data } = await createProfile(name, age);
+        const { ok, data } = await api.createProfile(payload);
         
         if (ok && data.status === 'created') {
             state.jwtToken = data.token;
+            state.isGuest = data.is_guest;
             state.userName = data.name.split(' ')[0];
             state.currentView = 'chat';
-            render();
+            await initializeAuthenticatedSession();
         } else {
             setFormError('tyra-profile-form', data.message || 'Could not create profile.');
             button.disabled = false;
@@ -288,94 +448,329 @@
     async function onChatSubmit(e) {
         e.preventDefault();
         const form = e.target;
-        const input = form.querySelector('input');
-        const button = form.querySelector('button');
-        
+        const input = form.querySelector('.tyra-chat-input');
         const messageText = input.value.trim();
         if (!messageText) return;
         
         addMessage(messageText, 'user');
         input.value = '';
-        input.disabled = true;
-        button.disabled = true;
-
-        const { ok, data } = await sendChatMessage(messageText);
-
+        
+        const { ok, data } = await api.post('chat', { message: messageText });
         if (ok) {
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = data.reply;
-            addMessage(tempDiv.textContent || tempDiv.innerText, 'ai');
+            addMessage(data.reply, 'ai');
+            if(data.chart_type) renderChartInChat(data.chart_type, data.target_date);
         } else {
             addMessage(data.error || 'Sorry, an error occurred.', 'ai');
         }
-
-        input.disabled = false;
-        button.disabled = false;
-        input.focus();
     }
 
-    function bindEventListeners() {
-        const emailForm = state.targetElement.querySelector('#tyra-email-form');
-        if (emailForm) emailForm.addEventListener('submit', onEmailSubmit);
-
-        const otpForm = state.targetElement.querySelector('#tyra-otp-form');
-        if (otpForm) otpForm.addEventListener('submit', onOtpSubmit);
-        
-        const profileForm = state.targetElement.querySelector('#tyra-profile-form');
-        if (profileForm) profileForm.addEventListener('submit', onProfileSubmit);
-
-        const chatForm = state.targetElement.querySelector('.tyra-chat-form');
-        if (chatForm) chatForm.addEventListener('submit', onChatSubmit);
-        
-        const settingsBtn = state.targetElement.querySelector('.tyra-settings-btn');
-        if (settingsBtn) {
-            settingsBtn.addEventListener('click', () => {
-                const menu = state.targetElement.querySelector('.tyra-settings-menu');
-                menu.classList.toggle('visible');
-            });
+    async function onFileSelect(e) {
+        if (state.isGuest) {
+            addMessage("This feature requires an account. Please log out and sign up to upload files.", "ai");
+            return;
         }
+        const file = e.target.files[0];
+        if (!file) return;
+
+        addMessage(`Uploading ${file.name}...`, 'user');
+        const formData = new FormData();
+        formData.append('file', file);
         
-        const logoutBtn = state.targetElement.querySelector('#tyra-logout-btn');
-        if (logoutBtn) logoutBtn.addEventListener('click', onLogout);
-        
-        const dashboardBtn = state.targetElement.querySelector('#tyra-dashboard-btn');
-        if (dashboardBtn) dashboardBtn.addEventListener('click', onDashboardClick);
+        const { ok, data } = await api.post('upload', formData, true);
+        if (ok) {
+            addMessage(data.reply, 'ai');
+        } else {
+            addMessage(data.error || 'File processing failed.', 'ai');
+        }
+    }
+
+    function onVoiceButtonClick(e) {
+        if (state.isGuest) {
+             addMessage("This feature requires an account. Please log out and sign up to use voice input.", "ai");
+            return;
+        }
+        const btn = e.target.closest('button');
+        if (state.mediaRecorder && state.mediaRecorder.state === 'recording') {
+            state.mediaRecorder.stop();
+            btn.classList.remove('recording');
+        } else {
+            navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                state.mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+                state.audioChunks = [];
+                state.mediaRecorder.ondataavailable = event => state.audioChunks.push(event.data);
+                state.mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(state.audioChunks, { type: 'audio/webm' });
+                    if (audioBlob.size > 500) {
+                        const formData = new FormData();
+                        formData.append('audio_file', audioBlob);
+                        const { ok, data } = await api.post('transcribe', formData, true);
+                        if (ok) state.targetElement.querySelector('.tyra-chat-input').value = data.transcribed_text;
+                    }
+                    stream.getTracks().forEach(track => track.stop());
+                };
+                state.mediaRecorder.start();
+                btn.classList.add('recording');
+            }).catch(err => console.error("Mic access error:", err));
+        }
+    }
+
+    async function onQuickLogClick(e) {
+        const button = e.target.closest('.tyra-quick-log-btn');
+        if (!button) return;
+        const { logCategory, logValue, logLabel } = button.dataset;
+        addMessage(logLabel, 'user');
+        const { ok, data } = await api.post('quick_log', { category: logCategory, value: logValue });
+        if (ok) addMessage(data.reply, 'ai');
+    }
+
+    async function initializeAuthenticatedSession() {
+        try {
+            const config = await api.get('config');
+            state.lang = config.lang || {};
+            render();
+        } catch (e) {
+            console.error("Failed to load config for authenticated user:", e);
+            render(); 
+        }
     }
     
+    function initializeProfileFormLogic() {
+        const form = state.targetElement.querySelector('#tyra-profile-form');
+        if (!form) return;
+        const ageInput = form.querySelector('#tyra-age-input');
+        const adultSection = form.querySelector('#tyra-adult-profile-section');
+        const menopauseSection = form.querySelector('#tyra-menopause-profile-section');
+        ageInput.addEventListener('input', () => {
+            const age = parseInt(ageInput.value, 10) || 0;
+            adultSection.classList.toggle('hidden', age < 20 || age > 50);
+            menopauseSection.classList.toggle('hidden', age < 40);
+        });
+        form.querySelectorAll('.tyra-checkbox-group input').forEach(cb => {
+            cb.addEventListener('change', e => {
+                const subGroup = e.target.closest('.tyra-checkbox-group').nextElementSibling;
+                if (subGroup && subGroup.classList.contains('tyra-sub-group')) {
+                    subGroup.classList.toggle('hidden', !e.target.checked);
+                }
+            });
+        });
+        const addChildBtn = form.querySelector('#add-child-btn');
+        addChildBtn.addEventListener('click', () => {
+            const dobInput = form.querySelector('#child_dob_input');
+            if (dobInput.value) {
+                state.childDobs.push(dobInput.value);
+                form.querySelector('#added-dobs-display').textContent = `Added: ${state.childDobs.join(', ')}`;
+                dobInput.value = '';
+            }
+        });
+    }
+
+    function populateQuickLogButtons() {
+        if (state.isGuest) return;
+        const container = state.targetElement.querySelector('.tyra-quick-log-buttons');
+        if (!container || !state.lang.quick_log_buttons) return;
+        container.innerHTML = (state.lang.quick_log_buttons || []).map(item =>
+            `<button class="tyra-quick-log-btn" data-log-category="${item.category}" data-log-value="${item.value}" data-log-label="${item.label}">${item.label}</button>`
+        ).join('');
+    }
+
+    async function renderChartInChat(chartType, targetDate) {
+        if (state.isGuest) return;
+        // FIX v95.7: Standardize API call to use params object
+        const params = { type: chartType };
+        if (targetDate) params.target_date = targetDate;
+        try {
+            const config = await api.get('chart_data', params);
+            if(config.type) {
+                // CRITICAL FIX v95.6: Pass the type ('chart' or 'calendar') to addMessage
+                addMessage(config, 'ai', config.type);
+            }
+        } catch (e) {
+            addMessage('Could not load visualization.', 'ai');
+        }
+    }
+    
+    // --- DASHBOARD-SPECIFIC RENDERING ---
+    async function renderDashboard() {
+        const container = state.targetElement.querySelector('.tyra-dashboard-view');
+        container.innerHTML = '<p>Loading dashboard...</p>';
+        try {
+            const data = state.dashboardData || await api.get('dashboard_data');
+            state.dashboardData = data;
+            
+            const widgets = {
+                cycle: () => {
+                    if (!data.cycle_stats || Object.keys(data.cycle_stats).length === 0) return '';
+                    let w = `<div class="tyra-widget tyra-cycle-stats"><h4>${state.lang.widget_title_cycle || 'Cycle'}</h4>`;
+                    if(data.cycle_stats.current_day) w += `<p>${(state.lang.cycle_current_day_p1 || "You are on")} <span class="stat-value">${(state.lang.cycle_day_N || "Day {day}").replace("{day}", data.cycle_stats.current_day)}</span></p>`;
+                    if(data.cycle_stats.predicted_next) w += `<p>${state.lang.cycle_predicted_next || 'Next Period'}: <strong>${data.cycle_stats.predicted_next}</strong></p>`;
+                    if(data.cycle_stats.avg_cycle_length) w += `<p>${state.lang.cycle_avg_length || 'Avg. Length'}: <strong>${data.cycle_stats.avg_cycle_length} days</strong></p>`;
+                    return w + '</div>';
+                },
+                reminders: () => {
+                    let w = `<div class="tyra-widget"><h4>${state.lang.widget_title_reminders || 'Reminders'}</h4><ul>`;
+                    (data.reminders.length > 0 ? data.reminders : [{text: state.lang.no_reminders_text || 'No reminders.'}]).forEach(r => {
+                        w += `<li class="tyra-reminder-item"><span><strong>${r.text}</strong><br><small>${r.id ? new Date(r.date).toDateString() : ''}</small></span>${r.id ? `<button data-id="${r.id}">✓</button>` : ''}</li>`;
+                    });
+                    return w + '</ul></div>';
+                },
+                meds: () => {
+                    let w = `<div class="tyra-widget"><h4>${state.lang.widget_title_meds || 'Medications'}</h4><ul>`;
+                    (data.medications.length > 0 ? data.medications : [{name: state.lang.no_meds_logged || 'No medications logged.'}]).forEach(m => {
+                        w += `<li><strong>${m.name}</strong>${m.dosage ? `<span class="meds-details">${m.dosage}, ${m.frequency}</span>` : ''}</li>`;
+                    });
+                    return w + '</ul></div>';
+                },
+                goals: () => {
+                    let w = `<div class="tyra-widget"><h4>${state.lang.widget_title_goals || 'Goals'}</h4><ul>`;
+                    (data.goals.length > 0 ? data.goals : [{text: state.lang.no_goals_set || 'No goals set.'}]).forEach(g => { w += `<li>${g.text}</li>`; });
+                    return w + '</ul></div>';
+                },
+                logs: () => {
+                    let w = `<div class="tyra-widget"><h4>${state.lang.widget_title_health_logs || 'Recent Logs'}</h4><ul>`;
+                    (data.health_logs.length > 0 ? data.health_logs : [{text: state.lang.no_logs_text || 'No logs recorded.'}]).forEach(l => { w += `<li>${l.text}</li>`; });
+                    return w + '</ul></div>';
+                },
+                charts: () => `
+                    <div class="tyra-widget tyra-chart-widget"><h4>${state.lang.widget_title_cycle_history || 'Cycle History'}</h4><canvas id="tyra-cycle-chart"></canvas></div>
+                    <div class="tyra-widget tyra-chart-widget"><h4>${state.lang.widget_title_interaction || 'Interaction History'}</h4><canvas id="tyra-interaction-chart"></canvas></div>
+                `,
+                export: () => `
+                    <div class="tyra-widget tyra-export-widget">
+                        <h4>${state.lang.widget_title_export || 'Export & Share'}</h4>
+                        <p>${state.lang.export_description || 'Download or share your health report.'}</p>
+                        <div class="tyra-export-buttons">
+                            <button data-action="export-pdf">${state.lang.export_pdf_button || 'Download PDF'}</button>
+                            <button data-action="export-csv">${state.lang.export_csv_button || 'Download CSV'}</button>
+                            <button data-action="share">${state.lang.share_report_button || 'Get Share Link'}</button>
+                        </div>
+                        <div class="tyra-share-link-container hidden">
+                            <input type="text" readonly>
+                            <button data-action="copy">${state.lang.copy_button || 'Copy'}</button>
+                        </div>
+                    </div>`
+            };
+            
+            container.innerHTML = Object.values(widgets).map(w => w()).join('');
+            
+            container.querySelectorAll('.tyra-reminder-item button').forEach(btn => btn.addEventListener('click', onReminderDoneClick));
+            renderDashboardCharts();
+
+        } catch (e) {
+            console.error("Dashboard render error:", e);
+            container.innerHTML = '<p>Could not load dashboard data.</p>';
+        }
+    }
+    
+    async function renderDashboardCharts() {
+        // FIX v95.7: Standardize API call to use params object
+        try {
+            const cycleChartConfig = await api.get('chart_data', { type: 'cycle_length' });
+            new Chart(document.getElementById('tyra-cycle-chart').getContext('2d'), cycleChartConfig);
+        } catch(e) { console.error("Could not render cycle chart:", e); }
+        try {
+            const interactionChartConfig = await api.get('chart_data', { type: 'interaction_time' });
+            new Chart(document.getElementById('tyra-interaction-chart').getContext('2d'), interactionChartConfig);
+        } catch(e) { console.error("Could not render interaction chart:", e); }
+    }
+
+    async function onDashboardActionClick(e) {
+        const button = e.target.closest('button');
+        if (!button) return;
+        const action = button.dataset.action;
+        if (!action) return;
+
+        if (action === 'export-pdf' || action === 'export-csv') {
+            const format = action.split('-')[1];
+            button.textContent = 'Generating...';
+            button.disabled = true;
+            try {
+                // FIX v95.7: Use the robust api.get helper for file downloads
+                const blob = await api.get(`export/${format}`, {}, true);
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = `tyra_health_report.${format}`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                a.remove();
+            } catch (err) {
+                console.error(`Export failed for ${format}`, err);
+            } finally {
+                button.textContent = `Download ${format.toUpperCase()}`;
+                button.disabled = false;
+            }
+        } else if (action === 'share') {
+            button.textContent = 'Generating...';
+            button.disabled = true;
+            const { ok, data } = await api.post('share_report');
+            if(ok) {
+                const container = state.targetElement.querySelector('.tyra-share-link-container');
+                container.classList.remove('hidden');
+                container.querySelector('input').value = data.share_url;
+            }
+            button.textContent = state.lang.share_report_button || 'Get Share Link';
+            button.disabled = false;
+        } else if (action === 'copy') {
+            const input = state.targetElement.querySelector('.tyra-share-link-container input');
+            navigator.clipboard.writeText(input.value);
+            button.textContent = 'Copied!';
+            setTimeout(() => { button.textContent = state.lang.copy_button || 'Copy'; }, 2000);
+        }
+    }
+
+    async function onReminderDoneClick(e) {
+        const btn = e.target;
+        const reminderId = btn.dataset.id;
+        btn.disabled = true;
+        const {ok} = await api.post('reminders/delete', { reminder_id: reminderId });
+        if(ok) {
+            btn.closest('li').style.display = 'none';
+        } else {
+            btn.disabled = false;
+        }
+    }
+
     // --- INITIALIZATION ---
     window.TyraWidget = {
         init: async function(options) {
-            if (!options.targetElementId || !options.apiUrl) {
-                return console.error("Tyra Widget: 'targetElementId' and 'apiUrl' are required.");
-            }
-            state.targetElement = document.getElementById(options.targetElementId);
-            state.apiUrl = options.apiUrl.replace(/\/$/, '');
-
-            if (!state.targetElement) {
-                return console.error(`Tyra Widget: Target element "#${options.targetElementId}" not found.`);
-            }
-
-            state.targetElement.innerHTML = templates.widgetShell;
+            if (!options.targetElementId || !options.apiUrl) return console.error("Tyra Widget: 'targetElementId' and 'apiUrl' are required.");
             
+            Object.assign(state, { apiUrl: options.apiUrl.replace(/\/$/, ''), targetElement: document.getElementById(options.targetElementId), jwtToken: null, verificationToken: null, isGuest: false, userEmail: '', currentView: 'loading', userName: '', lang: {}, dashboardData: null, childDobs: [] });
+
+            if (!state.targetElement) return console.error(`Tyra Widget: Target element "#${options.targetElementId}" not found.`);
+            
+            // --- NEW Launcher Logic ---
+            state.targetElement.innerHTML = templates.launcher() + templates.widgetShell('Tyra');
+            const launcher = state.targetElement.querySelector('.tyra-launcher');
+            const widgetContainer = state.targetElement.querySelector('.tyra-widget-container');
+            const closeBtn = state.targetElement.querySelector('#tyra-close-btn');
+
+            launcher.addEventListener('click', () => {
+                widgetContainer.classList.add('open');
+                launcher.classList.add('hidden');
+            });
+            closeBtn.addEventListener('click', () => {
+                widgetContainer.classList.remove('open');
+                launcher.classList.remove('hidden');
+            });
+            // --- End Launcher Logic ---
+
             try {
-                const config = await getApiConfig();
+                const config = await api.initialConfig();
+                state.lang = config.lang;
+                state.targetElement.querySelector('#tyra-header-title').textContent = state.lang.app_title || 'Tyra';
+                
                 if (config.auth_mode === 'otp') {
                     state.currentView = 'email_entry';
-                } else { // Default to guest mode
-                    const guestData = await authenticateAsGuest();
-                    state.jwtToken = guestData.token;
-                    state.currentView = 'chat';
+                } else {
+                    await onGuestButtonClick({target: document.createElement('button')});
                 }
             } catch (error) {
-                console.error("Tyra Widget Init Error:", error);
-                // Graceful fallback to guest mode if config fails
-                try {
-                    const guestData = await authenticateAsGuest();
-                    state.jwtToken = guestData.token;
-                    state.currentView = 'chat';
-                } catch (guestError) {
-                    state.currentView = 'error'; // A view to show a fatal error
-                }
+                console.error("Tyra Init Error:", error);
+                state.lang = { app_title: 'Tyra', welcome_message_guest: 'Chat is temporarily unavailable.' };
+                state.currentView = 'error';
             }
             render();
         }

@@ -87,7 +87,7 @@
         <header>
             <h1>{{ lang.dashboard_title.replace('{name}', data.name) }}</h1>
             <div class="header-controls">
-                {% if enable_dashboard_customization %}
+                {% if enable_dashboard_customization and not is_widget_context %}
                 <button id="customize-dashboard-btn" class="customize-btn">{{ lang.dashboard_customize_link }}</button>
                 {% endif %}
                 <a href="{{ url_for('index') }}">{{ lang.back_to_chat_link }}</a>
@@ -175,13 +175,15 @@
                 <h2>{{ lang.widget_title_health_logs }}</h2>
                 <ul>
                     {% for log in data.health_logs %}
-                        <li>{{ log }}</li>
+                        <li>{{ log.text }}</li>
                     {% else %}
                         <li>{{ lang.no_logs_text }}</li>
                     {% endfor %}
                 </ul>
             </div>
             
+            {# CRITICAL FIX: Only render this widget in monolith mode #}
+            {% if not is_widget_context %}
             <div class="widget" id="export-widget">
                 <h2>{{ lang.widget_title_export }}</h2>
                 <p>{{ lang.export_description }}</p>
@@ -199,6 +201,7 @@
                     {% endif %}
                 </div>
             </div>
+            {% endif %}
         </div>
     </div>
 
@@ -229,7 +232,7 @@
     </div>
     {% endif %}
 
-    {% if enable_shareable_reports %}
+    {% if enable_shareable_reports and not is_widget_context %}
     <div id="share-modal" class="modal">
          <div class="modal-content">
             <div class="modal-header">
@@ -247,13 +250,23 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // CRITICAL FIX: Get the auth token if it was passed to the template
+            const AUTH_TOKEN = {{ auth_token | tojson }};
+
             // --- Chart Rendering Logic ---
             async function renderChart(canvasId, statusId, endpoint) {
                 const canvas = document.getElementById(canvasId);
                 const status = document.getElementById(statusId);
                 if (!canvas) return;
+                
+                const fetchOptions = {};
+                // CRITICAL FIX: Add auth header if this page was loaded via token
+                if (AUTH_TOKEN) {
+                    fetchOptions.headers = { 'Authorization': `Bearer ${AUTH_TOKEN}` };
+                }
+
                 try {
-                    const response = await fetch(endpoint);
+                    const response = await fetch(endpoint, fetchOptions);
                     if (response.ok) {
                         const config = await response.json();
                         new Chart(canvas.getContext('2d'), config);
@@ -267,6 +280,10 @@
                     if(status) status.style.display = 'block';
                 }
             }
+            
+            // --- Determine which endpoints to call for charts ---
+            const isWidgetContext = {{ is_widget_context | tojson }};
+            const chartDataUrlPrefix = isWidgetContext ? '/api/v1' : '';
 
             // --- Interactive "Done" button for reminders ---
             const remindersList = document.getElementById('reminders-list');
@@ -276,12 +293,19 @@
                         const listItem = e.target.closest('li');
                         const reminderId = listItem.getAttribute('data-reminder-id');
                         if (!reminderId) return;
+
+                        const endpoint = isWidgetContext ? '/api/v1/reminders/delete' : '/delete_reminder';
+                        const fetchOptions = {
+                             method: 'POST',
+                             headers: { 'Content-Type': 'application/json' },
+                             body: JSON.stringify({ reminder_id: reminderId }),
+                        };
+                        if(AUTH_TOKEN) {
+                            fetchOptions.headers['Authorization'] = `Bearer ${AUTH_TOKEN}`;
+                        }
+
                         try {
-                            const response = await fetch('/delete_reminder', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ reminder_id: reminderId }),
-                            });
+                            const response = await fetch(endpoint, fetchOptions);
                             if (response.ok) {
                                 listItem.style.transition = 'opacity 0.5s';
                                 listItem.style.opacity = '0';
@@ -356,25 +380,31 @@
                 
                 const renderVisibleCharts = () => {
                     const prefs = getPreferences();
-                    if(prefs['cycle-chart-widget']) renderChart('cycleLengthChart', 'cycleChartStatus', '/chart_data?type=cycle_length');
-                    if(prefs['interaction-chart-widget']) renderChart('interactionTimeChart', 'interactionChartStatus', '/chart_data?type=interaction_time');
+                    if(prefs['cycle-chart-widget']) renderChart('cycleLengthChart', 'cycleChartStatus', `${chartDataUrlPrefix}/chart_data?type=cycle_length`);
+                    if(prefs['interaction-chart-widget']) renderChart('interactionTimeChart', 'interactionChartStatus', `${chartDataUrlPrefix}/chart_data?type=interaction_time`);
                 };
 
-                customizeBtn.onclick = () => { updateModalCheckboxes(); prefsModal.style.display = "block"; };
-                closePrefsBtn.onclick = () => { prefsModal.style.display = "none"; };
-                savePrefsBtn.onclick = savePreferences;
+                if (customizeBtn) {
+                    customizeBtn.onclick = () => { updateModalCheckboxes(); prefsModal.style.display = "block"; };
+                }
+                if (closePrefsBtn) {
+                     closePrefsBtn.onclick = () => { prefsModal.style.display = "none"; };
+                }
+                if(savePrefsBtn) {
+                    savePrefsBtn.onclick = savePreferences;
+                }
                 
                 applyPreferences();
             } else {
-                renderChart('cycleLengthChart', 'cycleChartStatus', '/chart_data?type=cycle_length');
-                renderChart('interactionTimeChart', 'interactionChartStatus', '/chart_data?type=interaction_time');
+                renderChart('cycleLengthChart', 'cycleChartStatus', `${chartDataUrlPrefix}/chart_data?type=cycle_length`);
+                renderChart('interactionTimeChart', 'interactionChartStatus', `${chartDataUrlPrefix}/chart_data?type=interaction_time`);
             }
 
             // --- Shareable Reports Logic ---
             const shareEnabled = {{ enable_shareable_reports | tojson }};
-            if (shareEnabled) {
+            const shareBtn = document.getElementById('share-report-btn');
+            if (shareEnabled && shareBtn) {
                 const shareModal = document.getElementById('share-modal');
-                const shareBtn = document.getElementById('share-report-btn');
                 const closeShareBtn = document.getElementById('close-share-modal');
                 const shareLinkInput = document.getElementById('share-link');
                 const copyLinkBtn = document.getElementById('copy-link-btn');
@@ -412,8 +442,9 @@
 
             // General modal closing logic
             window.onclick = (event) => {
-                if (event.target.classList.contains('modal')) {
-                    event.target.style.display = "none";
+                const modal = document.querySelector('.modal.active');
+                if (modal && event.target == modal) {
+                    modal.style.display = "none";
                 }
             };
         });

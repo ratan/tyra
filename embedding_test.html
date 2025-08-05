@@ -2,81 +2,71 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>A Third-Party Website | Embedding Tyra</title>
-    
-    <!--
-      STEP 1: A third-party website includes the widget's CSS file.
-      The 'href' path MUST be the full URL to where the Flask API is serving the static file.
-    -->
-    <link rel="stylesheet" href="http://127.0.0.1:5000/static/css/tyra_widget.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tyra Widget Test</title>
 
+    <!--
+      IMPORTANT: This test file is designed to be served by a simple local web server,
+      NOT opened directly as a file (file://...).
+
+      HOW TO RUN:
+      1. In one terminal, run your Flask app: `python3 app.py` (for local testing) OR confirm it's deployed.
+      2. In a SECOND terminal, from this project directory, run: `python3 -m http.server 8000`
+      3. Open your browser and go to: http://localhost:8000/embedding_test.html
+    -->
+
+    <!-- The Chart.js library can still be loaded from a CDN as it is not part of our app -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
     <style>
-        /* Styles for this mock "third-party" website */
-        body {
-            font-family: 'Georgia', serif;
-            background-color: #fdfdfd;
-            color: #333;
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
-            padding: 20px;
-            gap: 30px;
-        }
-        .main-article {
-            max-width: 650px;
-        }
-        h1 {
-            color: #2c3e50;
-            border-bottom: 2px solid #ecf0f1;
-            padding-bottom: 10px;
-        }
-        p {
-            line-height: 1.7;
-            font-size: 1.1em;
-            margin-bottom: 20px;
-        }
-        .sidebar {
-            width: 400px;
-            flex-shrink: 0;
-            padding-top: 60px; /* Align with article */
-        }
+        body { font-family: sans-serif; background-color: #f0f2f5; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 100vh; margin: 20px; text-align: center; }
+        h1 { color: #333; }
+        p { color: #666; max-width: 600px; }
     </style>
 </head>
 <body>
 
-    <main class="main-article">
-        <h1>My Personal Blog on Wellness</h1>
-        <p>Welcome to my corner of the internet. Here, we discuss all things related to leading a healthy and balanced life. It's a journey of a thousand steps, and every small piece of information helps.</p>
-        <p>Navigating women's health can sometimes be complex, which is why I've partnered with a new service to provide a helpful companion right here on the site. Feel free to ask it anything you're curious about!</p>
-        <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
-    </main>
-    
-    <aside class="sidebar">
-        <!-- 
-          STEP 2: The website defines an empty div where the widget will be placed.
-          This is the "target element".
-        -->
-        <div id="tyra-chatbot-mount-point"></div>
-    </aside>
+    <h1>Tyra Widget Embedding Test Page</h1>
+    <p>This page demonstrates how to load and display the Tyra widget from a remote server. The widget launcher icon should appear in the bottom-right corner.</p>
 
-    <!--
-      STEP 3: The website includes the widget's main JavaScript file.
-      Like the CSS, the 'src' path must be the full URL to the file served by the API.
-    -->
-    <script src="http://127.0.0.1:5000/static/js/tyra_widget.js"></script>
+    <!-- This is the target container where the widget's HTML will be injected. -->
+    <div id="tyra-chat-widget"></div>
 
-    <!--
-      STEP 4: The website calls the initialization function provided by the script
-      to activate and render the widget in the target element.
-    -->
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // This is the only code the third-party website needs to write.
-            TyraWidget.init({
-                targetElementId: 'tyra-chatbot-mount-point',
-                apiUrl: 'http://127.0.0.1:5000' // The base URL of the Tyra API
-            });
-        });
+        // --- Configuration Variable for Base URL ---
+        // Change this single variable to switch between local development and production.
+        
+        // For local development, use:
+        // const TYRA_API_BASE_URL = 'http://127.0.0.1:5000'; 
+        
+        // For production on Render.com, use:
+        const TYRA_API_BASE_URL = 'https://tyra-ai.onrender.com';
+
+        (function() {
+            // --- DYNAMIC LOADER SCRIPT ---
+            // This function creates and injects the necessary CSS and JS files into the page head.
+
+            // 1. Create the <link> tag for the widget's CSS
+            const cssLink = document.createElement('link');
+            cssLink.rel = 'stylesheet';
+            cssLink.href = `${TYRA_API_BASE_URL}/static/css/tyra_widget.css`;
+            document.head.appendChild(cssLink);
+
+            // 2. Create the <script> tag for the widget's JavaScript
+            const widgetScript = document.createElement('script');
+            widgetScript.src = `${TYRA_API_BASE_URL}/static/js/tyra_widget.js`;
+            
+            // 3. IMPORTANT: Initialize the widget only AFTER its script has fully loaded
+            widgetScript.onload = function() {
+                TyraWidget.init({
+                    targetElementId: 'tyra-chat-widget',
+                    apiUrl: TYRA_API_BASE_URL
+                });
+            };
+            
+            // 4. Append the script to the body to start the loading process
+            document.body.appendChild(widgetScript);
+        })();
     </script>
 
 </body>

@@ -1,11 +1,11 @@
 {
   "lang_name": "English",
   "app_title": "Tyra",
-  "dashboard_link": "My Dashboard",
+  "dashboard_link": "Dashboard",
   "logout_link": "Logout",
   "dashboard_customize_link": "Customize",
   "back_to_chat_link": "← Back to Chat",
-  "welcome_text": "Welcome! Please identify yourself to begin.",
+  "welcome_text": "Welcome!",
   "identifier_email_label": "Email Address",
   "identifier_or": "OR",
   "identifier_phone_label": "Phone Number",

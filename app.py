@@ -32,6 +32,10 @@ MAX_CACHE_SIZE = 200
 THROTTLE_LIMIT = 20
 THROTTLE_PERIOD_SECONDS = 60
 OTP_LIFETIME_SECONDS = 300 # 5 minutes
+BEHAVIORAL_SYNOPSIS_INTERVAL_DAYS = 3
+BEHAVIORAL_SYNOPSIS_MIN_INTERACTIONS = 15
+PROGRAM_SUGGESTION_COOLDOWN_DAYS = 3
+
 # --- Feature Flags ---
 ENABLE_MULTI_LANGUAGE = True
 ENABLE_TRIBHER_SUGGESTIONS = True
@@ -61,6 +65,7 @@ ENABLE_REQUEST_THROTTLING = True
 ENABLE_WIDGET_MODE = True
 ENABLE_EMAIL_OTP_VERIFICATION = True
 ENABLE_EMAIL_OTP_API_VERIFICATION = True
+ENABLE_BEHAVIORAL_SYNOPSIS = True
 # ---
 TRIBHER_DATA_FILE = "tribher_data_final.json"
 MAX_CYCLE_HISTORY = 120
@@ -69,7 +74,7 @@ SHARED_REPORTS_DB_FILE = "shared_reports_db.json"
 
 app = Flask(__name__)
 
-# BUG FIX v94.4: Robustly load config from .env into Flask's config object.
+# BUG FIX v94.5: Robustly load config from .env into Flask's config object.
 # This is more reliable than depending on os.getenv() which can fail with reloaders.
 app.config.update(dotenv_values(".env")) 
 app.config['SECRET_KEY'] = app.config.get("FLASK_SECRET_KEY")
@@ -164,19 +169,26 @@ def token_required(f):
 # --- Request Throttling ---
 @app.before_request
 def throttle_requests():
-    if not ENABLE_REQUEST_THROTTLING: return
+    # CRITICAL FIX v95.5: Do not throttle CORS preflight OPTIONS requests.
+    if not ENABLE_REQUEST_THROTTLING or request.method.upper() == 'OPTIONS':
+        return
+
     ip = request.remote_addr
     now = time.time()
     timestamps = ip_request_timestamps.get(ip, [])
+    # Filter timestamps to only include those within the throttling period
     recent_timestamps = [t for t in timestamps if now - t < THROTTLE_PERIOD_SECONDS]
+    
     if len(recent_timestamps) >= THROTTLE_LIMIT:
         return jsonify({"error": "Too many requests. Please wait a moment."}), 429
+        
     recent_timestamps.append(now)
     ip_request_timestamps[ip] = recent_timestamps
 
+
 # --- NEW: OTP Email Helper ---
 def send_otp_email(to_email, otp):
-    # BUG FIX v94.4: Use app.config which is now the reliable source
+    # BUG FIX v94.5: Use app.config which is now the reliable source
     sendgrid_api_key = app.config.get("SENDGRID_API_KEY")
     sender_email = app.config.get("SENDER_EMAIL")
     
@@ -231,7 +243,7 @@ def load_language_data(lang_code='en'):
 def configure_ai():
     global gemini_model
     try:
-        # BUG FIX v94.4: Use app.config which is now the reliable source
+        # BUG FIX v94.5: Use app.config which is now the reliable source
         gemini_api_key = app.config.get("GEMINI_API_KEY")
         if not gemini_api_key:
             raise ValueError("GEMINI_API_KEY not found in configuration.")
@@ -276,6 +288,7 @@ def normalize_date_string(date_str: str) -> str:
 
 def get_conversation_summary(user_message):
     today_date = datetime.now().strftime('%Y-%m-%d')
+    # FIX v95.8: Added new example to handle "period length" synonym for "cycle length"
     summary_prompt = f"""
 You are an expert tool for converting natural language into a structured JSON object.
 Your output MUST be a single, raw, valid JSON object.
@@ -294,6 +307,9 @@ User: 'my period started on july 1st'
 {{"period_action": {{"type": "log_period_start", "date": "{datetime.now().year}-07-01"}}}}
 
 User: 'visualize my cycle length'
+{{"query_chart": {{"type": "cycle_length"}}}}
+
+User: 'graph my period length over the last few months'
 {{"query_chart": {{"type": "cycle_length"}}}}
 
 User: 'show my period calendar for june month'
@@ -672,50 +688,70 @@ def update_and_predict_cycles(profile, enable_ovulation_tracker=False):
     period_data["cycles"] = valid_cycles[:MAX_CYCLE_HISTORY]
     return profile
 
+# --- BUG FIX v97.1: Overhauled suggestion and follow-up logic ---
 
-def handle_follow_up_request(user_message, session):
-    last_offer = session.get('just_offered_program')
-    if not last_offer: return None
-    affirmative_keywords = ['yes', 'tell me', 'sure', 'ok', 'okay', 'please do']
+def handle_follow_up_request(profile, user_message):
+    """
+    Checks if the user is affirmatively responding to a pending program offer.
+    Uses the persistent profile for state, not the session.
+    """
+    proactive_assistance = profile.get("proactive_assistance", {})
+    pending_offer = proactive_assistance.get("pending_program_offer")
+    
+    if not pending_offer:
+        return None, profile # No offer is pending
+
+    affirmative_keywords = ['yes', 'tell me more', 'sure', 'ok', 'okay', 'please do', 'more about it', 'more about tribher', 'about the program']
+    
+    # Check if any part of the affirmative keywords list matches the user message
     if any(keyword in user_message.lower() for keyword in affirmative_keywords):
-        return next((p for p in TRIBHER_DATA["programs"] if p["name"] == last_offer), None) if TRIBHER_DATA else None
-    return None
+        # Clear the pending offer to prevent re-triggering
+        proactive_assistance["pending_program_offer"] = None
+        # Return the program object to be described
+        return next((p for p in TRIBHER_DATA["programs"] if p["name"] == pending_offer), None), profile
+    
+    # If the user says something else, clear the pending offer so we don't get stuck
+    proactive_assistance["pending_program_offer"] = None
+    return None, profile
 
-def get_program_suggestion(profile, insights, user_message):
-    if not TRIBHER_DATA or not ENABLE_TRIBHER_SUGGESTIONS: return None
+def get_program_suggestion(profile, user_message):
+    """
+    Finds a program suggestion ONLY if relevant keywords are in the user's message
+    AND the cooldown period has passed (with exceptions for direct questions).
+    """
+    if not TRIBHER_DATA or not ENABLE_TRIBHER_SUGGESTIONS:
+        return None
+
+    proactive_assistance = profile.get("proactive_assistance", {})
+    
+    # 1. Keyword-driven matching (more opportunistic)
     KEYWORD_TO_PROGRAM_NAME = {
+        "exercise": "Postnatal / Post Pregnancy Programs", "lose weight": "Postnatal / Post Pregnancy Programs",
         "preconception": "Pre-conception Programs", "conceive": "Pre-conception Programs", "fertility": "Pre-conception Programs",
         "prenatal": "Prenatal / Pregnancy Programs", "pregnant": "Prenatal / Pregnancy Programs", "pregnancy": "Prenatal / Pregnancy Programs", "expecting": "Prenatal / Pregnancy Programs",
         "postnatal": "Postnatal / Post Pregnancy Programs", "postpartum": "Postnatal / Post Pregnancy Programs", "mummy tummy": "Postnatal / Post Pregnancy Programs", "diastasis recti": "Postnatal / Post Pregnancy Programs",
         "menopause": "StrongHer 40+ Programs", "perimenopause": "StrongHer 40+ Programs", "over 40": "StrongHer 40+ Programs"
     }
-    search_texts = [user_message]
-    if insights: search_texts.extend(insights.get("expressed_needs_or_challenges", [])); search_texts.extend(insights.get("life_goals", []))
-    insight_program_names = {program_name for text in search_texts for keyword, program_name in KEYWORD_TO_PROGRAM_NAME.items() if keyword in text.lower()}
     
-    profile_program_names = set()
-    details = profile.get("secondary_details", {})
-    if details.get("is_trying_to_conceive"): profile_program_names.add("Pre-conception Programs")
-    if details.get("is_pregnant"): profile_program_names.add("Prenatal / Pregnancy Programs")
-    if details.get("is_parent"): profile_program_names.add("Postnatal / Post Pregnancy Programs")
-    if details.get("is_menopausal") or details.get("is_perimenopausal") or profile.get("age", 0) >= 40:
-        profile_program_names.add("StrongHer 40+ Programs")
+    found_program_name = None
+    for keyword, program_name in KEYWORD_TO_PROGRAM_NAME.items():
+        if keyword in user_message.lower():
+            found_program_name = program_name
+            break
 
-    # Combine profile and insights to find the best match
-    combined_program_names = profile_program_names.union(insight_program_names)
-    if not combined_program_names: return None
+    if not found_program_name:
+        return None
 
-    # Prioritize intersection, then insights, then profile
-    intersection = profile_program_names.intersection(insight_program_names)
-    if intersection:
-        target_name = list(intersection)[0]
-    elif insight_program_names:
-        target_name = list(insight_program_names)[0]
-    else:
-        target_name = list(profile_program_names)[0]
+    # 2. Cooldown Check (with an exception for direct questions)
+    is_direct_question = any(q_word in user_message.lower() for q_word in ["what is", "explain", "tell me about"])
+    
+    last_suggestion_ts = proactive_assistance.get("last_program_suggestion_ts")
+    if last_suggestion_ts and not is_direct_question:
+        last_suggestion_dt = datetime.fromisoformat(last_suggestion_ts)
+        if (datetime.now(timezone.utc) - last_suggestion_dt).days < PROGRAM_SUGGESTION_COOLDOWN_DAYS:
+            return None # Still in cooldown period and not a direct question
 
-    if target_name: return next((p for p in TRIBHER_DATA.get("programs", []) if p.get("name") == target_name), None)
-    return None
+    return next((p for p in TRIBHER_DATA.get("programs", []) if p.get("name") == found_program_name), None)
 
 def calculate_trimester(profile):
     details = profile.get("secondary_details", {})
@@ -758,7 +794,219 @@ def load_profile(profile_hash):
         except json.JSONDecodeError: return None
     return None
 
+# --- NEW: BEHAVIORAL SYNOPSIS LOGIC ---
+def _generate_behavioral_synopsis(profile):
+    if not gemini_model: return None
+    
+    log = profile.get("interaction_log", [])[:100] # Analyze last 100 interactions
+    if not log: return None
+
+    intent_counts = defaultdict(int)
+    entities = defaultdict(list)
+
+    for entry in log:
+        intent = entry.get("extracted_intent", {})
+        if not intent: continue
+        
+        for key, value in intent.items():
+            intent_counts[key] += 1
+            if key == 'medication_log' and 'name' in value:
+                entities['medications'].append(value['name'])
+            if key == 'query_chart' and 'type' in value:
+                 entities['charts'].append(value['type'])
+            if key == 'set_goal' and 'text' in value:
+                entities['goals'].append(value['text'])
+
+    if not intent_counts: return None
+
+    # Create a raw summary of actions
+    analysis_lines = ["User Action Log Summary:"]
+    for intent, count in intent_counts.items():
+        analysis_lines.append(f"- Used '{intent}' {count} time(s).")
+    
+    if entities['medications']:
+        analysis_lines.append(f"- Logged medications: {', '.join(list(set(entities['medications']))[:3])}.")
+    if entities['charts']:
+        analysis_lines.append(f"- Viewed charts: {', '.join(list(set(entities['charts']))[:3])}.")
+    if entities['goals']:
+        analysis_lines.append(f"- Set goals like: '{list(set(entities['goals']))[0]}'.")
+
+    analysis_text = "\n".join(analysis_lines)
+    
+    synopsis_prompt = f"""
+    You are a user behavior analyst. Based on the following summary of a user's actions, generate a concise, structured JSON list of 2-3 bullet points describing their primary focus and recent behavior. The tone should be neutral and factual.
+
+    **Example Input:**
+    User Action Log Summary:
+    - Used 'period_action' 8 time(s).
+    - Used 'query_chart' 4 time(s).
+    - Viewed charts: cycle_calendar, cycle_length.
+
+    **Example Output:**
+    ```json
+    [
+        "Frequently uses period tracking features.",
+        "Shows a strong interest in visualizing her cycle via the calendar and charts."
+    ]
+    ```
+
+    ---
+    **Now, analyze this user log:**
+    {analysis_text}
+    """
+    
+    try:
+        response = gemini_model.generate_content(synopsis_prompt)
+        cleaned_response = response.text.strip().lstrip("```json").rstrip("```").strip()
+        synopsis = json.loads(cleaned_response)
+        return synopsis if isinstance(synopsis, list) else None
+    except Exception as e:
+        print(f"!!! Could not generate behavioral synopsis: {e}")
+        return None
+
+def _update_synopsis_if_needed(profile):
+    if not ENABLE_BEHAVIORAL_SYNOPSIS: return profile
+
+    synopsis_data = profile.get("behavioral_synopsis", {})
+    interaction_log = profile.get("interaction_log", [])
+    
+    last_gen_str = synopsis_data.get("generated_at")
+    last_interaction_count = synopsis_data.get("last_interaction_count", 0)
+    
+    needs_update = False
+    
+    # Condition 1: Time-based update
+    if last_gen_str:
+        last_gen_dt = datetime.fromisoformat(last_gen_str)
+        if (datetime.now(timezone.utc) - last_gen_dt).days >= BEHAVIORAL_SYNOPSIS_INTERVAL_DAYS:
+            needs_update = True
+    else: # No synopsis exists yet
+        needs_update = True
+        
+    # Condition 2: Interaction-count-based update
+    if len(interaction_log) - last_interaction_count >= BEHAVIORAL_SYNOPSIS_MIN_INTERACTIONS:
+        needs_update = True
+
+    if needs_update and len(interaction_log) > 0:
+        print("--- Generating new behavioral synopsis ---")
+        new_synopsis = _generate_behavioral_synopsis(profile)
+        if new_synopsis:
+            profile["behavioral_synopsis"] = {
+                "synopsis": new_synopsis,
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "last_interaction_count": len(interaction_log)
+            }
+            
+    return profile
+
 # --- SHARED BUSINESS LOGIC HELPERS ---
+
+# Refactored logic to be callable by both monolith and API
+def _handle_upload_logic(file, user_query):
+    if not file or not gemini_model:
+        return {'error': 'Server not configured for uploads'}, 500
+    
+    temp_path, uploaded_file = None, None
+    try:
+        temp_path = os.path.join(UPLOADS_DIR, secure_filename(file.filename))
+        file.save(temp_path)
+        uploaded_file = genai.upload_file(path=temp_path, mime_type=file.mimetype)
+        if not wait_for_file_to_be_active(uploaded_file.name):
+            raise Exception("File processing timeout")
+        
+        final_prompt = None
+        if file.mimetype.startswith('image/') and ENABLE_VISUAL_TRIAGE:
+            final_prompt = get_visual_triage_prompt(user_query, uploaded_file)
+        elif ENABLE_DOCUMENT_UPLOAD:
+            ocr_response = gemini_model.generate_content(["Extract all text from this document.", uploaded_file])
+            final_prompt = get_holistic_report_summary_prompt(user_query, ocr_response.text)
+        else:
+            return {'error': 'Unsupported file type or feature disabled'}, 400
+        
+        final_response = gemini_model.generate_content(final_prompt)
+        return {"reply": md.render(final_response.text)}, 200
+    except Exception as e:
+        return {'error': str(e)}, 500
+    finally:
+        if temp_path and os.path.exists(temp_path): os.remove(temp_path)
+        if uploaded_file:
+            try: genai.delete_file(uploaded_file.name)
+            except exceptions.NotFound: pass # File might already be gone
+
+
+def _handle_transcription_logic(file):
+    if not file or not gemini_model:
+        return {'error': 'Server not configured for transcription'}, 500
+
+    temp_path, uploaded_file = None, None
+    try:
+        temp_path = os.path.join(UPLOADS_DIR, "voice_note.webm")
+        file.save(temp_path)
+        uploaded_file = genai.upload_file(path=temp_path, mime_type="audio/webm")
+        if not wait_for_file_to_be_active(uploaded_file.name):
+            raise Exception("File processing timeout")
+        response = gemini_model.generate_content(["Transcribe this audio.", uploaded_file])
+        return {"transcribed_text": response.text.strip()}, 200
+    except Exception as e:
+        return {'error': str(e)}, 500
+    finally:
+        if temp_path and os.path.exists(temp_path): os.remove(temp_path)
+        if uploaded_file:
+            try: genai.delete_file(uploaded_file.name)
+            except exceptions.NotFound: pass
+
+def _handle_quick_log_logic(profile, category, value):
+    profile.setdefault('health_logs', []).insert(0, {"timestamp": datetime.now().isoformat(), "category": category, "value": value})
+    lang_data = load_language_data(profile.get('language', 'en'))
+    confirmation_key = f"quick_log_confirm_{value.replace(' ', '_')}_{category}"
+    response_message = lang_data.get(confirmation_key, lang_data.get("quick_log_confirm_fallback"))
+    return {"reply": md.render(response_message)}
+
+def _get_dashboard_data(profile):
+    lang_code = profile.get('language', 'en') if ENABLE_MULTI_LANGUAGE else 'en'
+    lang_data = load_language_data(lang_code)
+
+    dashboard_data = {"name": profile.get("name", "User").split(" ")[0], "reminders": [], "cycle_stats": {}, "health_logs": [], "medications": [], "goals": []}
+    
+    if ENABLE_CUSTOM_REMINDERS:
+        reminders, upcoming_reminders = profile.get("proactive_assistance", {}).get("reminders", []), []
+        check_date = datetime.now()
+        for _ in range(90):
+            if len(upcoming_reminders) >= 5: break
+            for r in reminders:
+                if is_reminder_due(r, check_date) and not any(u['id'] == r.get('id') and u['date'] == check_date.strftime('%Y-%m-%d') for u in upcoming_reminders):
+                    upcoming_reminders.append({"id": r.get('id'), "text": r['text'], "date": check_date.strftime('%Y-%m-%d')})
+            check_date += timedelta(days=1)
+        dashboard_data["reminders"] = upcoming_reminders
+
+    if ENABLE_PERIOD_TRACKER:
+        period_data = profile.get("period_data", {})
+        if period_data.get("tracking_enabled"):
+            today = datetime.now().date()
+            if period_data.get("cycles"):
+                last_start_str = period_data.get("cycles", [{}])[0].get("start_date")
+                if last_start_str:
+                    last_start_dt = datetime.strptime(last_start_str, "%Y-%m-%d").date()
+                    dashboard_data["cycle_stats"]["current_day"] = (today - last_start_dt).days + 1
+            dashboard_data["cycle_stats"]["predicted_next"] = period_data.get("predicted_next_start_date")
+            dashboard_data["cycle_stats"]["avg_cycle_length"] = period_data.get("average_cycle_length")
+    
+    if ENABLE_EXPANDED_LOGGING:
+        logs = profile.get("health_logs", [])
+        for log in logs[:5]: 
+            log_date = dateparser.parse(log['timestamp']).strftime('%b %d')
+            category = log.get('category', 'log')
+            value = log.get('value', 'entry')
+            key = f"log_item_{category}"
+            fallback_key = "log_item_default"
+            template_str = lang_data.get(key, lang_data.get(fallback_key, "{date}: {value} {category}"))
+            log_text = template_str.format(date=log_date, value=value, category=category)
+            dashboard_data["health_logs"].append({"text": log_text})
+
+    if ENABLE_MEDICATION_TRACKING: dashboard_data["medications"] = profile.get("medication_log", [])
+    if ENABLE_GOAL_TRACKING: dashboard_data["goals"] = profile.get("goals", [])
+    
+    return dashboard_data
 
 def _handle_profile_check_or_creation(data, is_api_call=False):
     identifier = data.get('identifier')
@@ -809,9 +1057,25 @@ def _handle_profile_check_or_creation(data, is_api_call=False):
 
 
 def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
-    profile.setdefault("interaction_log", []).insert(0, {"timestamp": datetime.now().isoformat()})
+    # Recalculate dynamic and analytical data on every interaction.
+    calculate_child_ages(profile)
+    calculate_trimester(profile)
+    profile = _update_synopsis_if_needed(profile)
 
     insights = get_conversation_summary(user_message)
+    
+    log_entry = {
+        "timestamp": datetime.now().isoformat(),
+        "user_message": user_message,
+        "extracted_intent": insights if insights and 'error' not in insights else {}
+    }
+    profile.setdefault("interaction_log", []).insert(0, log_entry)
+    
+    # --- BUG FIX v97.3: Detect summary requests ---
+    summary_keywords = ["about me", "my profile", "my summary", "what do you know"]
+    is_summary_request = any(keyword in user_message.lower() for keyword in summary_keywords)
+
+
     if insights.get('error'): return jsonify({"reply": md.render("I'm having a little trouble understanding. Please rephrase.")})
 
     if ENABLE_CHART_VISUALIZATION and insights.get('query_chart'):
@@ -833,37 +1097,51 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
     if action_response:
         save_profile(profile_hash, profile)
         return jsonify({"reply": md.render(action_response)})
-
+    
+    # --- BUG FIX v97.1 & v97.4: Overhauled Suggestion/Follow-up Logic ---
     is_follow_up = False
     last_discussed_program_context = None
-    suggested_program_object = handle_follow_up_request(user_message, session)
-    if suggested_program_object:
+    suggested_program_object = None
+    special_context = None
+
+    # 1. Check if this is a follow-up to a pending offer.
+    follow_up_program, profile = handle_follow_up_request(profile, user_message)
+    if follow_up_program:
         is_follow_up = True
-        session['just_offered_program'] = suggested_program_object.get('name')
+        suggested_program_object = follow_up_program
     else:
-        suggested_program_object = get_program_suggestion(profile, insights, user_message)
-        if suggested_program_object:
-            session['just_offered_program'] = suggested_program_object.get('name')
-        else:
-            last_program_name = session.get('just_offered_program')
-            if last_program_name:
-                last_discussed_program_context = next((p for p in TRIBHER_DATA["programs"] if p["name"] == last_program_name), None) if TRIBHER_DATA else None
-            if "tribher" not in user_message.lower() and not last_discussed_program_context:
-                 session.pop('just_offered_program', None)
+        # 2. If not a follow-up, check if we should make a new suggestion.
+        new_suggestion = get_program_suggestion(profile, user_message)
+        if new_suggestion:
+            suggested_program_object = new_suggestion
+            profile.setdefault("proactive_assistance", {})["pending_program_offer"] = new_suggestion['name']
+            profile["proactive_assistance"]["last_program_suggestion_ts"] = datetime.now(timezone.utc).isoformat()
+            
+            # 3. Check if the user is asking directly about the topic we just found
+            question_is_about_suggestion = any(keyword in user_message.lower() for keyword in ["what is", "tell me about", "explain"])
+            if question_is_about_suggestion:
+                 special_context = {
+                    "type": "explain_and_offer_program",
+                    "program_name": new_suggestion['name']
+                }
+
     
     proactive_context = get_proactive_context(profile)
     context_prompt = format_profile_for_prompt(
         profile, 
-        CHATBOT_NAME, 
+        chatbot_name=CHATBOT_NAME, 
         proactive_context=proactive_context, 
         suggested_program_object=suggested_program_object, 
         is_follow_up=is_follow_up,
         last_discussed_program_context=last_discussed_program_context,
-        enable_ovulation_tracker=ENABLE_OVULATION_TRACKER
+        enable_ovulation_tracker=ENABLE_OVULATION_TRACKER,
+        enable_realtime_log_context=ENABLE_REALTIME_LOG_CONTEXT,
+        is_summary_request=is_summary_request,
+        special_context=special_context
     )
     
     try:
-        response = gemini_model.generate_content(f"{context_prompt}\nUSER QUESTION: {user_message}")
+        response = gemini_model.generate_content(f"{context_prompt}\n{user_message}")
         reply = response.text
     except Exception as e:
         reply = f"Sorry, an error occurred: {e}"
@@ -879,7 +1157,7 @@ def index():
     if app.config['ENABLE_WIDGET_MODE']:
         return jsonify({"status": "success", "message": "Tyra API is active in Widget Mode."})
 
-    # BUG FIX v94.4: Defensively clear any invalid "ghost" sessions.
+    # BUG FIX v94.5: Defensively clear any invalid "ghost" sessions.
     if session and not ('profile_hash' in session or session.get('is_guest')):
         session.clear()
 
@@ -918,73 +1196,36 @@ def index():
 @app.route('/dashboard')
 def dashboard():
     if not ENABLE_DASHBOARD: return "Not Found", 404
+    profile_hash = None
+    is_widget_context = False # CRITICAL FIX: Flag to control template rendering
+    token_for_template = None
     
-    # NEW: Logic to handle dashboard access token from widget
     token = request.args.get('token')
     if token:
         payload = decode_token(token)
-        if payload and payload.get('purpose') == 'dashboard_access':
-            session.clear()
-            session['profile_hash'] = payload['sub']
-            # Redirect to the clean URL after setting the session
-            return redirect(url_for('dashboard'))
-
-    profile_hash = session.get('profile_hash')
-    if not profile_hash:
-        # If no session and no token, redirect to monolith login
-        return redirect(url_for('index'))
-
+        if payload and not payload.get('is_guest'):
+            profile_hash = payload['sub']
+            is_widget_context = True # Authenticated via token
+            token_for_template = token
+    else:
+        profile_hash = session.get('profile_hash') # Authenticated via session
+    
+    if not profile_hash: return redirect(url_for('index'))
     profile = load_profile(profile_hash)
     if not profile: return redirect(url_for('index'))
-
+    
+    dashboard_data = _get_dashboard_data(profile) # Use the shared helper
     lang_code = profile.get('language', 'en') if ENABLE_MULTI_LANGUAGE else 'en'
     lang_data = load_language_data(lang_code)
     is_rtl = lang_code in ['ur', 'ar']
-    
-    dashboard_data = {"name": profile.get("name", "User").split(" ")[0], "reminders": [], "cycle_stats": {}, "health_logs": [], "medications": [], "goals": []}
-    if ENABLE_CUSTOM_REMINDERS:
-        reminders, upcoming_reminders = profile.get("proactive_assistance", {}).get("reminders", []), []
-        check_date = datetime.now()
-        for _ in range(90):
-            if len(upcoming_reminders) >= 5: break
-            for r in reminders:
-                if is_reminder_due(r, check_date) and not any(u['id'] == r.get('id') and u['date'] == check_date.strftime('%A, %b %d') for u in upcoming_reminders):
-                    upcoming_reminders.append({"id": r.get('id'), "text": r['text'], "date": check_date.strftime('%A, %b %d')})
-            check_date += timedelta(days=1)
-        dashboard_data["reminders"] = upcoming_reminders
-    if ENABLE_PERIOD_TRACKER:
-        period_data = profile.get("period_data", {})
-        if period_data.get("tracking_enabled"):
-            today = datetime.now().date()
-            if period_data.get("cycles"):
-                last_start_str = period_data.get("cycles", [{}])[0].get("start_date")
-                if last_start_str:
-                    last_start_dt = datetime.strptime(last_start_str, "%Y-%m-%d").date()
-                    dashboard_data["cycle_stats"]["current_day"] = (today - last_start_dt).days + 1
-            dashboard_data["cycle_stats"]["predicted_next"] = period_data.get("predicted_next_start_date")
-            dashboard_data["cycle_stats"]["avg_cycle_length"] = period_data.get("average_cycle_length")
-    
-    if ENABLE_EXPANDED_LOGGING:
-        logs = profile.get("health_logs", [])
-        for log in logs[:5]: 
-            log_date = dateparser.parse(log['timestamp']).strftime('%b %d')
-            category = log.get('category', 'log')
-            value = log.get('value', 'entry')
-            
-            key = f"log_item_{category}"
-            fallback_key = "log_item_default"
-            template_str = lang_data.get(key, lang_data.get(fallback_key, "{date}: {value} {category}"))
-            log_text = template_str.format(date=log_date, value=value, category=category)
-            dashboard_data["health_logs"].append(log_text)
-
-    if ENABLE_MEDICATION_TRACKING: dashboard_data["medications"] = profile.get("medication_log", [])
-    if ENABLE_GOAL_TRACKING: dashboard_data["goals"] = profile.get("goals", [])
     
     return render_template(
         'dashboard.html', 
         data=dashboard_data, 
         lang=lang_data, 
         is_rtl=is_rtl,
+        is_widget_context=is_widget_context, # Pass the flag to the template
+        auth_token=token_for_template, # Pass the token for client-side JS
         enable_dashboard_customization=ENABLE_DASHBOARD_CUSTOMIZATION,
         enable_shareable_reports=ENABLE_SHAREABLE_REPORTS,
         enable_medication_tracking=ENABLE_MEDICATION_TRACKING,
@@ -995,30 +1236,35 @@ def dashboard():
 # --- WIDGET API ROUTES ---
 if app.config['ENABLE_WIDGET_MODE']:
     @app.route('/api/v1/config')
+    @token_required
     def api_config():
         auth_mode = "otp" if app.config.get('ENABLE_EMAIL_OTP_API_VERIFICATION') else "guest"
-        return jsonify({"auth_mode": auth_mode})
+        # For authenticated users, load their specific language file
+        lang_code = 'en'
+        if g.profile and not g.is_guest:
+            lang_code = g.profile.get('language', 'en')
+        
+        lang_data = load_language_data(lang_code)
+
+        return jsonify({
+            "auth_mode": auth_mode,
+            "lang": lang_data
+        })
+
+    # The config route for a user who is not yet authenticated
+    @app.route('/api/v1/config/initial')
+    def api_config_initial():
+         auth_mode = "otp" if app.config.get('ENABLE_EMAIL_OTP_API_VERIFICATION') else "guest"
+         return jsonify({
+            "auth_mode": auth_mode,
+            "lang": load_language_data('en') # Default to English before profile is loaded
+        })
 
     @app.route('/api/v1/auth/guest', methods=['POST'])
     def api_guest_auth():
         guest_hash = f"guest_{uuid.uuid4().hex}"
         token = generate_token(guest_hash, is_guest=True)
-        return jsonify({"status": "success", "token": token})
-    
-    @app.route('/api/v1/auth/dashboard_token', methods=['POST'])
-    @token_required
-    def api_dashboard_token():
-        if g.is_guest:
-            return jsonify({'error': 'Dashboard is not available for guest users.'}), 403
-        
-        # Create a very short-lived token (1 minute) specifically for this purpose
-        dashboard_token = generate_token(
-            g.profile_hash, 
-            expires_in_minutes=1, 
-            additional_claims={'purpose': 'dashboard_access'}
-        )
-        return jsonify({"status": "success", "token": dashboard_token})
-
+        return jsonify({"status": "success", "token": token, "is_guest": True})
     
     if app.config.get('ENABLE_EMAIL_OTP_API_VERIFICATION'):
         @app.route('/api/v1/auth/request_otp', methods=['POST'])
@@ -1030,16 +1276,10 @@ if app.config['ENABLE_WIDGET_MODE']:
             otp = str(secrets.randbelow(900000) + 100000)
             api_otp_store[email] = {'otp': otp, 'timestamp': time.time()}
             
-            # For testing without a real email server, print the OTP
-            print(f"OTP for {email}: {otp}")
-            
             if send_otp_email(email, otp):
                 return jsonify({"status": "success", "message": "OTP sent."})
             else:
-                # Still return success for testing if email sending fails
-                print("WARNING: send_otp_email failed. Continuing for testing purposes.")
-                return jsonify({"status": "success", "message": "OTP sent (simulated)."}), 200
-
+                return jsonify({"status": "error", "message": "Failed to send OTP email."}), 500
 
         @app.route('/api/v1/auth/verify_otp', methods=['POST'])
         def api_verify_otp():
@@ -1065,7 +1305,7 @@ if app.config['ENABLE_WIDGET_MODE']:
             
             if existing_profile:
                 token = generate_token(profile_hash)
-                return jsonify({"status": "exists", "token": token, "name": existing_profile.get("name")})
+                return jsonify({"status": "exists", "token": token, "name": existing_profile.get("name"), "is_guest": False})
             else:
                 # Generate a short-lived token to authorize profile creation
                 verification_token = generate_token(
@@ -1108,7 +1348,7 @@ if app.config['ENABLE_WIDGET_MODE']:
                 
                 # Grant a full-access, long-lived token
                 final_token = generate_token(profile_hash)
-                return jsonify({"status": "created", "token": final_token, "name": new_profile.get("name")})
+                return jsonify({"status": "created", "token": final_token, "name": new_profile.get("name"), "is_guest": False})
                 
             except (ValueError, TypeError) as e:
                 return jsonify({"status": "error", "message": f"Invalid data: {e}"}), 400
@@ -1117,7 +1357,9 @@ if app.config['ENABLE_WIDGET_MODE']:
     @token_required
     def api_chat():
         if g.is_guest and app.config.get('ENABLE_EMAIL_OTP_API_VERIFICATION'):
-            return jsonify({"reply": "It looks like you're in guest mode. Please sign in to use the chat.", "action": "prompt_signup"}), 401
+            insights = get_conversation_summary(request.json['message'])
+            if insights.get('period_action') or insights.get('reminder_action'):
+                return jsonify({"reply": "To use this feature, please create an account.", "action": "prompt_signup"})
         
         # In non-OTP guest mode, we allow the chat to proceed
         if g.is_guest:
@@ -1126,28 +1368,382 @@ if app.config['ENABLE_WIDGET_MODE']:
 
         return _process_chat_message_for_auth_user(request.json['message'], g.profile, g.profile_hash)
 
+    # --- NEW API ENDPOINTS FOR FULL-FEATURED WIDGET ---
+    @app.route('/api/v1/upload', methods=['POST'])
+    @token_required
+    def api_upload():
+        if g.is_guest: return jsonify({'error': 'This feature requires an account.'}), 403
+        if 'file' not in request.files: return jsonify({'error': 'No file part'}), 400
+        file = request.files['file']
+        if file.filename == '': return jsonify({'error': 'No selected file'}), 400
+        user_query = request.form.get('message', "Can you tell me about this file?")
+        
+        response, status_code = _handle_upload_logic(file, user_query)
+        return jsonify(response), status_code
+        
+    @app.route('/api/v1/transcribe', methods=['POST'])
+    @token_required
+    def api_transcribe():
+        if g.is_guest: return jsonify({'error': 'This feature requires an account.'}), 403
+        if 'audio_file' not in request.files: return jsonify({'error': 'No audio file part'}), 400
+        file = request.files['audio_file']
+        if file.filename == '': return jsonify({'error': 'No selected file'}), 400
+
+        response, status_code = _handle_transcription_logic(file)
+        return jsonify(response), status_code
+
+    @app.route('/api/v1/quick_log', methods=['POST'])
+    @token_required
+    def api_quick_log():
+        if g.is_guest: return jsonify({"error": "This feature requires an account."}), 403
+        data = request.get_json()
+        category, value = data.get('category'), data.get('value')
+        if not category or not value: return jsonify({"error": "Invalid log data."}), 400
+        
+        response = _handle_quick_log_logic(g.profile, category, value)
+        save_profile(g.profile_hash, g.profile)
+        return jsonify(response)
+        
+    @app.route('/api/v1/dashboard_data', methods=['GET'])
+    @token_required
+    def api_dashboard_data():
+        if g.is_guest: return jsonify({"error": "This feature requires an account."}), 403
+        data = _get_dashboard_data(g.profile)
+        return jsonify(data)
+
+    @app.route('/api/v1/reminders/delete', methods=['POST'])
+    @token_required
+    def api_delete_reminder():
+        if g.is_guest: return jsonify({"error": "This feature requires an account."}), 403
+        reminder_id = request.json.get('reminder_id')
+        if not reminder_id: return jsonify({"error": "ID required"}), 400
+        reminders = g.profile.get("proactive_assistance", {}).get("reminders", [])
+        initial_length = len(reminders)
+        reminders[:] = [r for r in reminders if r.get('id') != reminder_id]
+        if len(reminders) < initial_length:
+            save_profile(g.profile_hash, g.profile)
+            return jsonify({"status": "success"})
+        return jsonify({"status": "error", "message": "Reminder not found"}), 404
+        
+    # Chart data endpoint for API is the same as for monolith, just token-protected
+    @app.route('/api/v1/chart_data', methods=['GET'])
+    @token_required
+    def api_chart_data():
+        if g.is_guest: return jsonify({"error": "This feature requires an account."}), 403
+        # The logic is identical, so we reuse the monolith endpoint's function
+        return chart_data(g.profile)
+
+# --- ROUTES SHARED BY MONOLITH & API LOGIC ---
+
+# This function can now be called directly by the API route
+@app.route('/chart_data', methods=['GET'])
+def chart_data(profile_override=None):
+    if not ENABLE_CHART_VISUALIZATION:
+        return jsonify({"error": "Chart visualization feature is disabled."}), 403
+
+    # In monolith mode, get profile from session. In API mode, profile is passed in.
+    if profile_override:
+        profile = profile_override
+    else:
+        profile_hash = session.get('profile_hash')
+        if not profile_hash: return jsonify({"error": "No active session."}), 403
+        profile = load_profile(profile_hash)
+        if not profile: return jsonify({"error": "Profile not found."}), 404
+
+    chart_type = request.args.get('type')
+    
+    if chart_type == 'cycle_length':
+        cycles = profile.get("period_data", {}).get("cycles", [])
+        cycles_with_length = [c for c in cycles if 'cycle_length' in c]
+        if len(cycles_with_length) < 1:
+            return jsonify({"error": "Not enough cycle data to generate a chart."}), 400
+        
+        cycles_with_length.sort(key=lambda x: x['start_date'])
+        
+        labels = [datetime.strptime(c['start_date'], '%Y-%m-%d').strftime('%b %Y') for c in cycles_with_length]
+        cycle_lengths = [c['cycle_length'] for c in cycles_with_length]
+        
+        return jsonify({
+            "type": "bar",
+            "data": {
+                "labels": labels,
+                "datasets": [{"label": "Cycle Length (Days)", "data": cycle_lengths, "backgroundColor": "rgba(168, 85, 168, 0.7)"}]
+            },
+            "options": {
+                "scales": {"y": {"beginAtZero": False, "title": {"display": True, "text": "Days"}}}
+            }
+        })
+
+    elif chart_type == 'interaction_time':
+        history = profile.get("interaction_log", [])
+        if not history:
+            return jsonify({"error": "No interaction history to display."}), 400
+        
+        interactions_per_day = defaultdict(int)
+        for entry in history:
+            try:
+                entry_date_str = datetime.fromisoformat(entry['timestamp']).strftime('%Y-%m-%d')
+                interactions_per_day[entry_date_str] += 1
+            except (ValueError, KeyError):
+                continue
+        
+        sorted_dates = sorted(interactions_per_day.keys())
+        labels = [datetime.strptime(d, '%Y-%m-%d').strftime('%b %d') for d in sorted_dates]
+        interaction_counts = [interactions_per_day[d] for d in sorted_dates]
+        
+        return jsonify({
+            "type": "line",
+            "data": {
+                "labels": labels,
+                "datasets": [{"label": "Interactions", "data": interaction_counts, "fill": True, "borderColor": "rgba(139, 74, 156, 1)", "backgroundColor": "rgba(168, 85, 156, 0.5)"}]
+            },
+            "options": {
+                "scales": {"y": {"beginAtZero": True, "ticks": {"stepSize": 1}, "title": {"display": True, "text": "Count"}}}
+            }
+        })
+    elif chart_type == 'cycle_calendar':
+        period_data = profile.get("period_data", {})
+        target_date_str = request.args.get('target_date')
+        today = datetime.today()
+
+        if target_date_str:
+            target_date = dateparser.parse(target_date_str, settings={'RELATIVE_BASE': datetime.now()})
+            if not target_date: target_date = today
+        else:
+            target_date = today
+
+        year, month = target_date.year, target_date.month
+        
+        predicted_days, fertile_days, logged_days = [], [], []
+        avg_period = period_data.get("average_period_length") or 5
+        avg_cycle = period_data.get("average_cycle_length") or 28
+        cycles = period_data.get("cycles", [])
+
+        # --- BUG FIX v96.0: RENDER LOGGED AND FERTILE DAYS CORRECTLY ---
+        # A "logged" cycle is one that exists in the cycles list. We visualize its
+        # period and fertile window based on stored data.
+        for cycle in cycles:
+            if 'start_date' not in cycle:
+                continue
+
+            # --- Populate Logged Days (Period) ---
+            start_dt = datetime.strptime(cycle['start_date'], '%Y-%m-%d')
+            # Use actual end date if available, or fall back to the average for visualization
+            if 'end_date' in cycle:
+                end_dt = datetime.strptime(cycle['end_date'], '%Y-%m-%d')
+            else:
+                end_dt = start_dt + timedelta(days=avg_period - 1)
+            
+            current = start_dt
+            while current <= end_dt:
+                if current.year == year and current.month == month:
+                    if current.day not in logged_days:
+                        logged_days.append(current.day)
+                current += timedelta(days=1)
+            
+            # --- Populate Fertile Days for this logged cycle if data exists ---
+            if ENABLE_OVULATION_TRACKER and 'fertile_start' in cycle and 'fertile_end' in cycle:
+                f_start = datetime.strptime(cycle['fertile_start'], '%Y-%m-%d')
+                f_end = datetime.strptime(cycle['fertile_end'], '%Y-%m-%d')
+                current = f_start
+                while current <= f_end:
+                    if current.year == year and current.month == month:
+                         if current.day not in fertile_days:
+                            fertile_days.append(current.day)
+                    current += timedelta(days=1)
+        
+        # --- RENDER PREDICTED future cycles ---
+        # This part only projects forward from the last known cycle's predicted next start.
+        next_pred_start_str = period_data.get("predicted_next_start_date")
+        if next_pred_start_str:
+            current_pred_start = datetime.strptime(next_pred_start_str, '%Y-%m-%d')
+            
+            for _ in range(12): # Project up to 12 months forward
+                # Render predicted period
+                for i in range(avg_period):
+                    day = current_pred_start + timedelta(days=i)
+                    if day.year == year and day.month == month: 
+                        if day.day not in logged_days and day.day not in predicted_days:
+                             predicted_days.append(day.day)
+
+                # Render predicted fertile window for the cycle starting on `current_pred_start`
+                if ENABLE_OVULATION_TRACKER:
+                    # Ovulation for this cycle occurs ~14 days before the *next* one starts.
+                    next_cycle_start = current_pred_start + timedelta(days=avg_cycle)
+                    ovulation_dt = next_cycle_start - timedelta(days=14)
+                    f_start = ovulation_dt - timedelta(days=5)
+                    f_end = ovulation_dt + timedelta(days=1)
+                    current = f_start
+                    while current <= f_end:
+                        if current.year == year and current.month == month:
+                            if current.day not in logged_days and current.day not in fertile_days:
+                                fertile_days.append(current.day)
+                        current += timedelta(days=1)
+
+                current_pred_start += timedelta(days=avg_cycle)
+
+        return jsonify({
+            "type": "calendar",
+            "data": {
+                "year": year,
+                "month": month,
+                "month_name": calendar.month_name[month],
+                "predicted_days": sorted(list(set(predicted_days))),
+                "logged_days": sorted(list(set(logged_days))),
+                "fertile_days": sorted(list(set(fertile_days))),
+                "current_day": today.day if today.year == year and today.month == month else None
+            }
+        })
+    else:
+        return jsonify({"error": "Invalid chart type requested."}), 400
+
+
+# --- REFACTORED SHARED EXPORT/SHARE LOGIC ---
+
+def _generate_pdf_report(profile):
+    user_name = profile.get("name", "User")
+    def sanitize(text): return str(text).encode('latin-1', 'replace').decode('latin-1')
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", size=16)
+    pdf.cell(0, 10, text=sanitize(f"{user_name}'s Health Report"), new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+    pdf.set_font("Helvetica", 'I', 8)
+    pdf.cell(0, 10, text=f"Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+    pdf.ln(10)
+
+    pdf.set_font("Helvetica", 'B', 12)
+    pdf.cell(0, 10, text="Upcoming Reminders", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_font("Helvetica", '', 10)
+    reminders = profile.get("proactive_assistance", {}).get("reminders", [])
+    if reminders:
+        for r in reminders:
+            pdf.set_x(pdf.l_margin)
+            pdf.multi_cell(0, 5, text=sanitize(f"- {r.get('text')}"))
+    else:
+        pdf.multi_cell(0, 5, text="No reminders set.")
+    pdf.ln(5)
+
+    pdf.set_font("Helvetica", 'B', 12)
+    pdf.cell(0, 10, text="Recent Health Logs", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_font("Helvetica", '', 10)
+    logs = profile.get("health_logs", [])
+    if logs:
+        for log in logs[:15]:
+            log_date = dateparser.parse(log['timestamp']).strftime('%Y-%m-%d')
+            log_text = f"- {log_date}: Noted {log.get('value')} for {log.get('category')}"
+            pdf.set_x(pdf.l_margin)
+            pdf.multi_cell(0, 5, text=sanitize(log_text))
+    else:
+        pdf.multi_cell(0, 5, text="No health logs recorded.")
+    pdf.ln(5)
+    
+    pdf.set_font("Helvetica", 'B', 12)
+    pdf.cell(0, 10, text="Medications & Supplements", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_font("Helvetica", '', 10)
+    meds = profile.get("medication_log", [])
+    if meds:
+        for med in meds:
+            med_text = f"- {med.get('name')} (Dosage: {med.get('dosage', 'N/A')}, Freq: {med.get('frequency', 'N/A')})"
+            pdf.set_x(pdf.l_margin)
+            pdf.multi_cell(0, 5, text=sanitize(med_text))
+    else:
+        pdf.multi_cell(0, 5, text="No medications logged.")
+    pdf.ln(5)
+    
+    pdf.set_font("Helvetica", 'B', 12)
+    pdf.cell(0, 10, text="Cycle History", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_font("Helvetica", '', 10)
+    cycles = profile.get("period_data", {}).get("cycles", [])
+    if cycles:
+        for c in cycles[:12]:
+            start = c.get('start_date', 'N/A')
+            length = c.get('cycle_length', 'N/A')
+            cycle_text = f"- Cycle started {start}, lasted {length} days."
+            pdf.set_x(pdf.l_margin)
+            pdf.multi_cell(0, 5, text=sanitize(cycle_text))
+    else:
+        pdf.multi_cell(0, 5, text="No cycle data recorded.")
+    pdf.ln(5)
+
+    return bytes(pdf.output())
+
+def _generate_csv_response(profile):
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Log Type", "Date", "Detail 1", "Detail 2"])
+    for log in profile.get("health_logs", []):
+        writer.writerow(["Health Log", log.get('timestamp'), log.get('category'), log.get('value')])
+    for cycle in profile.get("period_data", {}).get("cycles", []):
+        writer.writerow(["Cycle", cycle.get('start_date'), f"Cycle Length: {cycle.get('cycle_length', 'N/A')}", f"Period Ends: {cycle.get('end_date', 'N/A')}"])
+    for r in profile.get("proactive_assistance", {}).get("reminders", []):
+        writer.writerow(["Reminder", r.get('start_date'), r.get('text'), ""])
+    for med in profile.get("medication_log", []):
+        writer.writerow(["Medication", med.get('logged_date'), med.get('name'), f"Dosage: {med.get('dosage')}"])
+    
+    csv_bytes = output.getvalue().encode('utf-8')
+    user_name = profile.get("name", "User")
+    return Response(csv_bytes, mimetype="text/csv", headers={"Content-Disposition": f"attachment;filename={user_name}_health_report.csv"})
+
+def _generate_shareable_report(profile):
+    cleanup_expired_reports()
+    report_id = uuid.uuid4().hex
+    filepath = os.path.join(SHARED_REPORTS_DIR, f"{report_id}.pdf")
+    try:
+        pdf_bytes = _generate_pdf_report(profile)
+        with open(filepath, 'wb') as f:
+            f.write(pdf_bytes)
+        
+        db = load_report_db()
+        db[report_id] = {"filepath": f"{report_id}.pdf", "created_at": datetime.now().timestamp()}
+        save_report_db(db)
+        share_url = url_for('view_report', report_id=report_id, _external=True)
+        return {"status": "success", "share_url": share_url}
+    except Exception as e:
+        print(f"Error generating shareable report: {e}")
+        return {"error": "Could not generate report."}
+
+
+# --- NEW WIDGET API EXPORT ROUTES ---
+if app.config['ENABLE_WIDGET_MODE']:
+    @app.route('/api/v1/export/pdf', methods=['GET'])
+    @token_required
+    def api_export_pdf():
+        if g.is_guest: return jsonify({'error': 'This feature requires an account.'}), 403
+        pdf_bytes = _generate_pdf_report(g.profile)
+        user_name = g.profile.get("name", "User")
+        return Response(pdf_bytes, mimetype="application/pdf", headers={"Content-Disposition": f"attachment;filename={user_name}_health_report.pdf"})
+    
+    @app.route('/api/v1/export/csv', methods=['GET'])
+    @token_required
+    def api_export_csv():
+        if g.is_guest: return jsonify({'error': 'This feature requires an account.'}), 403
+        return _generate_csv_response(g.profile)
+
+    @app.route('/api/v1/share_report', methods=['POST'])
+    @token_required
+    def api_share_report():
+        if g.is_guest: return jsonify({'error': 'This feature requires an account.'}), 403
+        result = _generate_shareable_report(g.profile)
+        if "error" in result:
+            return jsonify(result), 500
+        return jsonify(result)
+
 # --- MONOLITH-ONLY ROUTES ---
 if not app.config['ENABLE_WIDGET_MODE']:
     # --- BEGIN AUTHENTICATION FLOW ROUTING ---
     if not app.config.get('ENABLE_EMAIL_OTP_VERIFICATION'):
-        # --- ORIGINAL AUTH FLOW (NO OTP) ---
         @app.route('/check_or_create_profile', methods=['POST'])
         def check_or_create_profile():
             return _handle_profile_check_or_creation(request.get_json(), is_api_call=False)
     else:
-        # --- NEW OTP-BASED AUTH FLOW ---
         @app.route('/request_otp', methods=['POST'])
         def request_otp():
             email = request.json.get('email', '').strip().lower()
             if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
                 return jsonify({"status": "error", "message": "Invalid email format."}), 400
             
-            otp = secrets.randbelow(900000) + 100000 # 6-digit OTP
-            session['otp_data'] = {
-                'email': email,
-                'otp': str(otp),
-                'timestamp': time.time()
-            }
+            otp = secrets.randbelow(900000) + 100000
+            session['otp_data'] = { 'email': email, 'otp': str(otp), 'timestamp': time.time() }
             
             if send_otp_email(email, otp):
                 return jsonify({"status": "success", "message": "OTP sent."})
@@ -1162,7 +1758,7 @@ if not app.config['ENABLE_WIDGET_MODE']:
             otp_data = session.get('otp_data')
 
             if not otp_data or otp_data['email'] != email:
-                return jsonify({"status": "error", "message": "No OTP request found for this session. Please start over."}), 400
+                return jsonify({"status": "error", "message": "No OTP request found. Please start over."}), 400
             
             if time.time() - otp_data['timestamp'] > OTP_LIFETIME_SECONDS:
                 session.pop('otp_data', None)
@@ -1171,7 +1767,6 @@ if not app.config['ENABLE_WIDGET_MODE']:
             if otp_data['otp'] != otp:
                 return jsonify({"status": "error", "message": "Invalid OTP."}), 400
             
-            # OTP is correct, proceed with login/signup check
             session['otp_verified_email'] = email
             profile_hash = get_profile_hash(email)
             existing_profile = load_profile(profile_hash)
@@ -1216,7 +1811,9 @@ if not app.config['ENABLE_WIDGET_MODE']:
         if 'profile_hash' in session:
             profile = load_profile(session['profile_hash'])
             if not profile: return jsonify({"error": "Profile not found"}), 404
+            
             return _process_chat_message_for_auth_user(request.json['message'], profile, session['profile_hash'])
+        
         elif session.get('is_guest'):
             insights = get_conversation_summary(request.json['message'])
             if insights.get('period_action') or insights.get('reminder_action'):
@@ -1246,47 +1843,22 @@ if not app.config['ENABLE_WIDGET_MODE']:
         data = request.get_json()
         category, value = data.get('category'), data.get('value')
         if not category or not value: return jsonify({"error": "Invalid log data."}), 400
-        profile.setdefault('health_logs', []).insert(0, {"timestamp": datetime.now().isoformat(), "category": category, "value": value})
+        
+        response = _handle_quick_log_logic(profile, category, value)
         save_profile(profile_hash, profile)
-        lang_data = load_language_data(profile.get('language', 'en'))
-        confirmation_key = f"quick_log_confirm_{value.replace(' ', '_')}_{category}"
-        response_message = lang_data.get(confirmation_key, lang_data.get("quick_log_confirm_fallback"))
-        return jsonify({"reply": md.render(response_message)})
+        return jsonify(response)
 
     @app.route('/upload', methods=['POST'])
     def upload():
-        if not ('profile_hash' in session or session.get('is_guest')):
-            return jsonify({"error": "No active session."}), 403
+        if not ('profile_hash' in session or session.get('is_guest')): return jsonify({"error": "No active session."}), 403
         if 'file' not in request.files: return jsonify({'error': 'No file part'}), 400
         file = request.files['file']
         if file.filename == '': return jsonify({'error': 'No selected file'}), 400
-        user_query = request.form.get('message', "Can you tell me about this?")
-        if file and gemini_model:
-            temp_path, uploaded_file = None, None
-            try:
-                temp_path = os.path.join(UPLOADS_DIR, secure_filename(file.filename))
-                file.save(temp_path)
-                uploaded_file = genai.upload_file(path=temp_path, mime_type=file.mimetype)
-                if not wait_for_file_to_be_active(uploaded_file.name): raise Exception("File processing timeout")
-                
-                final_prompt = None
-                if file.mimetype.startswith('image/') and ENABLE_VISUAL_TRIAGE:
-                    final_prompt = get_visual_triage_prompt(user_query, uploaded_file)
-                elif ENABLE_DOCUMENT_UPLOAD:
-                    ocr_response = gemini_model.generate_content(["Extract all text from this document.", uploaded_file])
-                    final_prompt = get_holistic_report_summary_prompt(user_query, ocr_response.text)
-                else:
-                    return jsonify({'error': 'Unsupported file type or feature disabled'}), 400
-                
-                final_response = gemini_model.generate_content(final_prompt)
-                return jsonify({"reply": md.render(final_response.text)})
-            except Exception as e:
-                return jsonify({'error': str(e)}), 500
-            finally:
-                if temp_path and os.path.exists(temp_path): os.remove(temp_path)
-                if uploaded_file: genai.delete_file(uploaded_file.name)
-        return jsonify({'error': 'Server not configured'}), 500
+        user_query = request.form.get('message', "Can you tell me about this file?")
 
+        response, status_code = _handle_upload_logic(file, user_query)
+        return jsonify(response), status_code
+        
     @app.route('/transcribe', methods=['POST'])
     def transcribe_audio():
         if not ENABLE_VOICE_INPUT: return jsonify({"error": "Voice input feature is disabled."}), 403
@@ -1294,399 +1866,9 @@ if not app.config['ENABLE_WIDGET_MODE']:
         if 'audio_file' not in request.files: return jsonify({'error': 'No audio file part'}), 400
         file = request.files['audio_file']
         if file.filename == '': return jsonify({'error': 'No selected file'}), 400
-        if file and gemini_model:
-            temp_path, uploaded_file = None, None
-            try:
-                temp_path = os.path.join(UPLOADS_DIR, "voice_note.webm")
-                file.save(temp_path)
-                uploaded_file = genai.upload_file(path=temp_path, mime_type="audio/webm")
-                if not wait_for_file_to_be_active(uploaded_file.name): raise Exception("File processing timeout")
-                response = gemini_model.generate_content(["Transcribe this audio.", uploaded_file])
-                return jsonify({"transcribed_text": response.text.strip()})
-            except Exception as e:
-                return jsonify({'error': str(e)}), 500
-            finally:
-                if temp_path and os.path.exists(temp_path): os.remove(temp_path)
-                if uploaded_file: genai.delete_file(uploaded_file.name)
-        return jsonify({'error': 'Server not configured'}), 500
 
-    @app.route('/export', methods=['POST'])
-    def export():
-        if not ENABLE_REPORT_EXPORTING: return "Not Found", 404
-        profile_hash = session.get('profile_hash')
-        if not profile_hash: return redirect(url_for('index'))
-        profile = load_profile(profile_hash)
-        if not profile: return redirect(url_for('index'))
-        export_format = request.form.get('format', 'pdf')
-        user_name = profile.get("name", "User")
-        def sanitize(text): return str(text).encode('latin-1', 'replace').decode('latin-1')
-
-        if export_format == 'pdf':
-            pdf = FPDF()
-            pdf.add_page()
-            pdf.set_font("Helvetica", size=16)
-            pdf.cell(0, 10, text=sanitize(f"{user_name}'s Health Report"), new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
-            pdf.set_font("Helvetica", 'I', 8)
-            pdf.cell(0, 10, text=f"Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
-            pdf.ln(10)
-
-            pdf.set_font("Helvetica", 'B', 12)
-            pdf.cell(0, 10, text="Upcoming Reminders", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-            pdf.set_font("Helvetica", '', 10)
-            reminders = profile.get("proactive_assistance", {}).get("reminders", [])
-            if reminders:
-                for r in reminders:
-                    pdf.set_x(pdf.l_margin)
-                    pdf.multi_cell(0, 5, text=sanitize(f"- {r.get('text')}"))
-            else:
-                pdf.multi_cell(0, 5, text="No reminders set.")
-            pdf.ln(5)
-
-            pdf.set_font("Helvetica", 'B', 12)
-            pdf.cell(0, 10, text="Recent Health Logs", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-            pdf.set_font("Helvetica", '', 10)
-            logs = profile.get("health_logs", [])
-            if logs:
-                for log in logs[:15]:
-                    log_date = dateparser.parse(log['timestamp']).strftime('%Y-%m-%d')
-                    log_text = f"- {log_date}: Noted {log.get('value')} for {log.get('category')}"
-                    pdf.set_x(pdf.l_margin)
-                    pdf.multi_cell(0, 5, text=sanitize(log_text))
-            else:
-                pdf.multi_cell(0, 5, text="No health logs recorded.")
-            pdf.ln(5)
-            
-            pdf.set_font("Helvetica", 'B', 12)
-            pdf.cell(0, 10, text="Medications & Supplements", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-            pdf.set_font("Helvetica", '', 10)
-            meds = profile.get("medication_log", [])
-            if meds:
-                for med in meds:
-                    med_text = f"- {med.get('name')} (Dosage: {med.get('dosage', 'N/A')}, Freq: {med.get('frequency', 'N/A')})"
-                    pdf.set_x(pdf.l_margin)
-                    pdf.multi_cell(0, 5, text=sanitize(med_text))
-            else:
-                pdf.multi_cell(0, 5, text="No medications logged.")
-            pdf.ln(5)
-            
-            pdf.set_font("Helvetica", 'B', 12)
-            pdf.cell(0, 10, text="Cycle History", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-            pdf.set_font("Helvetica", '', 10)
-            cycles = profile.get("period_data", {}).get("cycles", [])
-            if cycles:
-                for c in cycles[:12]:
-                    start = c.get('start_date', 'N/A')
-                    length = c.get('cycle_length', 'N/A')
-                    cycle_text = f"- Cycle started {start}, lasted {length} days."
-                    pdf.set_x(pdf.l_margin)
-                    pdf.multi_cell(0, 5, text=sanitize(cycle_text))
-            else:
-                pdf.multi_cell(0, 5, text="No cycle data recorded.")
-            pdf.ln(5)
-
-            pdf_output_bytearray = pdf.output()
-            response_bytes = bytes(pdf_output_bytearray)
-            return Response(response_bytes, mimetype="application/pdf", headers={"Content-Disposition": f"attachment;filename={user_name}_health_report.pdf"})
-        
-        elif export_format == 'csv':
-            output = io.StringIO()
-            writer = csv.writer(output)
-            writer.writerow(["Log Type", "Date", "Detail 1", "Detail 2"])
-            for log in profile.get("health_logs", []):
-                writer.writerow(["Health Log", log.get('timestamp'), log.get('category'), log.get('value')])
-            for cycle in profile.get("period_data", {}).get("cycles", []):
-                writer.writerow(["Cycle", cycle.get('start_date'), f"Cycle Length: {cycle.get('cycle_length', 'N/A')}", f"Period Ends: {cycle.get('end_date', 'N/A')}"])
-            for r in profile.get("proactive_assistance", {}).get("reminders", []):
-                writer.writerow(["Reminder", r.get('start_date'), r.get('text'), ""])
-            for med in profile.get("medication_log", []):
-                writer.writerow(["Medication", med.get('logged_date'), med.get('name'), f"Dosage: {med.get('dosage')}"])
-
-            csv_bytes = output.getvalue().encode('utf-8')
-            return Response(csv_bytes, mimetype="text/csv", headers={"Content-Disposition": f"attachment;filename={user_name}_health_report.csv"})
-        return "Invalid format", 400
-
-    @app.route('/share_report', methods=['POST'])
-    def share_report():
-        if not ENABLE_SHAREABLE_REPORTS: return jsonify({"error": "Feature disabled"}), 403
-        profile_hash = session.get('profile_hash')
-        if not profile_hash: return jsonify({"error": "Authentication required"}), 401
-        profile = load_profile(profile_hash)
-        if not profile: return jsonify({"error": "Profile not found"}), 404
-        cleanup_expired_reports()
-        user_name = profile.get("name", "User")
-        def sanitize(text): return str(text).encode('latin-1', 'replace').decode('latin-1')
-        
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Helvetica", size=16)
-        pdf.cell(0, 10, text=sanitize(f"{user_name}'s Health Report"), new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
-        pdf.set_font("Helvetica", 'I', 8)
-        pdf.cell(0, 10, text=f"Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
-        pdf.ln(10)
-
-        pdf.set_font("Helvetica", 'B', 12)
-        pdf.cell(0, 10, text="Upcoming Reminders", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-        pdf.set_font("Helvetica", '', 10)
-        reminders = profile.get("proactive_assistance", {}).get("reminders", [])
-        if reminders:
-            for r in reminders:
-                pdf.set_x(pdf.l_margin)
-                pdf.multi_cell(0, 5, text=sanitize(f"- {r.get('text')}"))
-        else:
-            pdf.multi_cell(0, 5, text="No reminders set.")
-        pdf.ln(5)
-
-        pdf.set_font("Helvetica", 'B', 12)
-        pdf.cell(0, 10, text="Recent Health Logs", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-        pdf.set_font("Helvetica", '', 10)
-        logs = profile.get("health_logs", [])
-        if logs:
-            for log in logs[:15]:
-                log_date = dateparser.parse(log['timestamp']).strftime('%Y-%m-%d')
-                log_text = f"- {log_date}: Noted {log.get('value')} for {log.get('category')}"
-                pdf.set_x(pdf.l_margin)
-                pdf.multi_cell(0, 5, text=sanitize(log_text))
-        else:
-            pdf.multi_cell(0, 5, text="No health logs recorded.")
-        pdf.ln(5)
-        
-        pdf.set_font("Helvetica", 'B', 12)
-        pdf.cell(0, 10, text="Medications & Supplements", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-        pdf.set_font("Helvetica", '', 10)
-        meds = profile.get("medication_log", [])
-        if meds:
-            for med in meds:
-                med_text = f"- {med.get('name')} (Dosage: {med.get('dosage', 'N/A')}, Freq: {med.get('frequency', 'N/A')})"
-                pdf.set_x(pdf.l_margin)
-                pdf.multi_cell(0, 5, text=sanitize(med_text))
-        else:
-            pdf.multi_cell(0, 5, text="No medications logged.")
-        pdf.ln(5)
-
-        pdf.set_font("Helvetica", 'B', 12)
-        pdf.cell(0, 10, text="Cycle History", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-        pdf.set_font("Helvetica", '', 10)
-        cycles = profile.get("period_data", {}).get("cycles", [])
-        if cycles:
-            for c in cycles[:12]:
-                start = c.get('start_date', 'N/A')
-                length = c.get('cycle_length', 'N/A')
-                cycle_text = f"- Cycle started {start}, lasted {length} days."
-                pdf.set_x(pdf.l_margin)
-                pdf.multi_cell(0, 5, text=sanitize(cycle_text))
-        else:
-            pdf.multi_cell(0, 5, text="No cycle data recorded.")
-        pdf.ln(5)
-
-
-        report_id = uuid.uuid4().hex
-        filepath = os.path.join(SHARED_REPORTS_DIR, f"{report_id}.pdf")
-        try:
-            pdf.output(filepath)
-            db = load_report_db()
-            db[report_id] = {"filepath": f"{report_id}.pdf", "created_at": datetime.now().timestamp()}
-            save_report_db(db)
-            share_url = url_for('view_report', report_id=report_id, _external=True)
-            return jsonify({"status": "success", "share_url": share_url})
-        except Exception as e:
-            return jsonify({"error": "Could not generate report."}), 500
-
-    @app.route('/view_report/<report_id>')
-    def view_report(report_id):
-        if not ENABLE_SHAREABLE_REPORTS: return "Feature disabled", 404
-        db = load_report_db()
-        report_data = db.get(report_id)
-        if not report_data or datetime.now().timestamp() - report_data.get('created_at', 0) > REPORT_LIFETIME_HOURS * 3600:
-            return "Report not found or has expired.", 404
-        return send_from_directory(SHARED_REPORTS_DIR, report_data['filepath'])
-    
-    @app.route('/chart_data', methods=['GET'])
-    def chart_data():
-        if not ENABLE_CHART_VISUALIZATION:
-            return jsonify({"error": "Chart visualization feature is disabled."}), 403
-
-        profile_hash = session.get('profile_hash')
-        if not profile_hash:
-            return jsonify({"error": "No active session."}), 403
-        
-        profile = load_profile(profile_hash)
-        if not profile:
-            return jsonify({"error": "Profile not found."}), 404
-
-        chart_type = request.args.get('type')
-        
-        if chart_type == 'cycle_length':
-            cycles = profile.get("period_data", {}).get("cycles", [])
-            cycles_with_length = [c for c in cycles if 'cycle_length' in c]
-            if len(cycles_with_length) < 1:
-                return jsonify({"error": "Not enough cycle data to generate a chart."}), 400
-            
-            cycles_with_length.sort(key=lambda x: x['start_date'])
-            
-            labels = [datetime.strptime(c['start_date'], '%Y-%m-%d').strftime('%b %Y') for c in cycles_with_length]
-            cycle_lengths = [c['cycle_length'] for c in cycles_with_length]
-            
-            return jsonify({
-                "type": "bar",
-                "data": {
-                    "labels": labels,
-                    "datasets": [{"label": "Cycle Length (Days)", "data": cycle_lengths, "backgroundColor": "rgba(168, 85, 168, 0.7)"}]
-                },
-                "options": {
-                    "scales": {"y": {"beginAtZero": False, "title": {"display": True, "text": "Days"}}}
-                }
-            })
-
-        elif chart_type == 'interaction_time':
-            history = profile.get("interaction_log", [])
-            if not history:
-                return jsonify({"error": "No interaction history to display."}), 400
-            
-            interactions_per_day = defaultdict(int)
-            for entry in history:
-                try:
-                    entry_date_str = datetime.fromisoformat(entry['timestamp']).strftime('%Y-%m-%d')
-                    interactions_per_day[entry_date_str] += 1
-                except (ValueError, KeyError):
-                    continue
-            
-            sorted_dates = sorted(interactions_per_day.keys())
-            labels = [datetime.strptime(d, '%Y-%m-%d').strftime('%b %d') for d in sorted_dates]
-            interaction_counts = [interactions_per_day[d] for d in sorted_dates]
-            
-            return jsonify({
-                "type": "line",
-                "data": {
-                    "labels": labels,
-                    "datasets": [{"label": "Interactions", "data": interaction_counts, "fill": True, "borderColor": "rgba(139, 74, 156, 1)", "backgroundColor": "rgba(168, 85, 156, 0.5)"}]
-                },
-                "options": {
-                    "scales": {"y": {"beginAtZero": True, "ticks": {"stepSize": 1}, "title": {"display": True, "text": "Count"}}}
-                }
-            })
-
-        elif chart_type == 'period_days_visual':
-            cycles = profile.get("period_data", {}).get("cycles", [])
-            complete_cycles = [c for c in cycles if 'end_date' in c and 'start_date' in c and 'cycle_length' in c]
-            if not complete_cycles:
-                return jsonify({"error": "Not enough complete cycles with length found."}), 400
-            
-            complete_cycles.sort(key=lambda x: x['start_date'], reverse=True)
-            
-            labels = []
-            period_lengths = []
-            follicular_lengths = []
-
-            for cycle in complete_cycles[:3]:
-                try:
-                    start_date = datetime.strptime(cycle['start_date'], '%Y-%m-%d')
-                    period_length = cycle.get('period_length', 0)
-                    cycle_length = cycle.get('cycle_length')
-                    
-                    if period_length and cycle_length:
-                        labels.append(start_date.strftime('%b %Y Cycle'))
-                        period_lengths.append(period_length)
-                        follicular_lengths.append(cycle_length - period_length)
-                except (ValueError, KeyError):
-                    continue
-            
-            labels.reverse()
-            period_lengths.reverse()
-            follicular_lengths.reverse()
-
-            return jsonify({
-                "type": "bar",
-                "data": {
-                    "labels": labels,
-                    "datasets": [
-                        {"label": "Period", "data": period_lengths, "backgroundColor": "rgba(168, 85, 168, 0.8)"},
-                        {"label": "Other Phases", "data": follicular_lengths, "backgroundColor": "rgba(220, 220, 220, 0.8)"}
-                    ]
-                },
-                "options": {
-                    "indexAxis": "y",
-                    "scales": { "x": {"stacked": True, "title": {"display": True, "text": "Days"}}, "y": {"stacked": True} },
-                    "responsive": True,
-                    "maintainAspectRatio": False
-                }
-            })
-
-        elif chart_type == 'cycle_calendar':
-            period_data = profile.get("period_data", {})
-            target_date_str = request.args.get('target_date')
-            today = datetime.today()
-
-            if target_date_str:
-                target_date = dateparser.parse(target_date_str, settings={'RELATIVE_BASE': datetime.now()})
-                if not target_date: target_date = today
-            else:
-                target_date = today
-
-            year, month = target_date.year, target_date.month
-            
-            predicted_days, fertile_days, logged_days = [], [], []
-
-            for cycle in period_data.get("cycles", []):
-                if 'start_date' in cycle and 'end_date' in cycle:
-                    start = datetime.strptime(cycle['start_date'], '%Y-%m-%d')
-                    end = datetime.strptime(cycle['end_date'], '%Y-%m-%d')
-                    current = start
-                    while current <= end:
-                        if current.year == year and current.month == month:
-                            logged_days.append(current.day)
-                        current += timedelta(days=1)
-                
-                if ENABLE_OVULATION_TRACKER and 'fertile_start' in cycle and 'fertile_end' in cycle:
-                    f_start = datetime.strptime(cycle['fertile_start'], '%Y-%m-%d')
-                    f_end = datetime.strptime(cycle['fertile_end'], '%Y-%m-%d')
-                    current = f_start
-                    while current <= f_end:
-                        if current.year == year and current.month == month:
-                            fertile_days.append(current.day)
-                        current += timedelta(days=1)
-            
-            next_pred_start_str = period_data.get("predicted_next_start_date")
-            if next_pred_start_str:
-                current_pred_start = datetime.strptime(next_pred_start_str, '%Y-%m-%d')
-                avg_cycle = period_data.get("average_cycle_length", 28)
-                avg_period = period_data.get("average_period_length", 5)
-                
-                for _ in range(12): # Project up to 12 months
-                    if current_pred_start.year > year or (current_pred_start.year == year and current_pred_start.month > month):
-                        break
-
-                    if current_pred_start.year == year and current_pred_start.month == month:
-                         for i in range(avg_period):
-                            day = current_pred_start + timedelta(days=i)
-                            if day.month == month: predicted_days.append(day.day)
-
-                    if ENABLE_OVULATION_TRACKER:
-                        ovulation_dt = current_pred_start + timedelta(days=avg_cycle - 14)
-                        f_start = ovulation_dt - timedelta(days=5)
-                        f_end = ovulation_dt + timedelta(days=1)
-                        current = f_start
-                        while current <= f_end:
-                            if current.year == year and current.month == month:
-                                fertile_days.append(current.day)
-                            current += timedelta(days=1)
-
-                    current_pred_start += timedelta(days=avg_cycle)
-
-            return jsonify({
-                "type": "calendar",
-                "data": {
-                    "year": year,
-                    "month": month,
-                    "month_name": calendar.month_name[month],
-                    "predicted_days": list(set(predicted_days)),
-                    "logged_days": list(set(logged_days)),
-                    "fertile_days": list(set(fertile_days)),
-                    "current_day": today.day if today.year == year and today.month == month else None
-                }
-            })
-
-        else:
-            return jsonify({"error": "Invalid chart type requested."}), 400
+        response, status_code = _handle_transcription_logic(file)
+        return jsonify(response), status_code
 
     @app.route('/delete_reminder', methods=['POST'])
     def delete_reminder():
@@ -1704,6 +1886,47 @@ if not app.config['ENABLE_WIDGET_MODE']:
             save_profile(profile_hash, profile)
             return jsonify({"status": "success"})
         return jsonify({"status": "error"}), 404
+
+    @app.route('/export', methods=['POST'])
+    def export():
+        if not ENABLE_REPORT_EXPORTING: return "Not Found", 404
+        profile_hash = session.get('profile_hash')
+        if not profile_hash: return redirect(url_for('index'))
+        profile = load_profile(profile_hash)
+        if not profile: return redirect(url_for('index'))
+        export_format = request.form.get('format', 'pdf')
+
+        if export_format == 'pdf':
+            pdf_bytes = _generate_pdf_report(profile)
+            user_name = profile.get("name", "User")
+            return Response(pdf_bytes, mimetype="application/pdf", headers={"Content-Disposition": f"attachment;filename={user_name}_health_report.pdf"})
+        
+        elif export_format == 'csv':
+            return _generate_csv_response(profile)
+        return "Invalid format", 400
+
+    @app.route('/share_report', methods=['POST'])
+    def share_report():
+        if not ENABLE_SHAREABLE_REPORTS: return jsonify({"error": "Feature disabled"}), 403
+        profile_hash = session.get('profile_hash')
+        if not profile_hash: return jsonify({"error": "Authentication required"}), 401
+        profile = load_profile(profile_hash)
+        if not profile: return jsonify({"error": "Profile not found"}), 404
+        
+        result = _generate_shareable_report(profile)
+        if "error" in result:
+            return jsonify(result), 500
+        return jsonify(result)
+
+# This route must be accessible in both modes
+@app.route('/view_report/<report_id>')
+def view_report(report_id):
+    if not ENABLE_SHAREABLE_REPORTS: return "Feature disabled", 404
+    db = load_report_db()
+    report_data = db.get(report_id)
+    if not report_data or datetime.now().timestamp() - report_data.get('created_at', 0) > REPORT_LIFETIME_HOURS * 3600:
+        return "Report not found or has expired.", 404
+    return send_from_directory(SHARED_REPORTS_DIR, report_data['filepath'])
 
 if __name__ == '__main__':
     if not app.config.get("FLASK_SECRET_KEY"):

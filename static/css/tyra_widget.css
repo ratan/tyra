@@ -1,224 +1,414 @@
-/* Scopes all styles to the widget to prevent conflicts with the host page */
-.tyra-widget-container {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background-color: #ffffff;
-    border: 1px solid #dbdbdb;
-    border-radius: 12px;
-    box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+/* static/css/tyra_widget.css */
+:root {
+    --primary-color: #8B4A9C; /* Deep Purple */
+    --secondary-color: #A855A8; /* Lighter Purple */
+    --accent-color: #E6A4E6; /* Light Purple Accent */
+    --background-color: #FAF7FB;
+    --text-color: #333;
+    --border-color: #e0e0e0;
+    --error-color: #D32F2F;
+    --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --border-radius: 8px;
+
+    /* Calendar colors - FIX v97.6: Restored distinct color scheme */
+    --logged-day-bg: rgba(139, 74, 156, 0.7);    /* Deep Purple */
+    --predicted-day-bg: rgba(230, 164, 230, 0.6); /* Light Purple Accent */
+    --fertile-day-bg: rgba(76, 175, 80, 0.6);      /* Green for Fertility */
+    --current-day-border: #8B4A9C;
+}
+
+/* --- Launcher Icon --- */
+.tyra-launcher {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 60px;
+    height: 60px;
+    background-color: var(--primary-color);
+    border-radius: 50%;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
     display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    height: 500px;
-    max-height: 80vh;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    z-index: 9998;
+    transition: transform 0.2s ease-in-out, opacity 0.3s ease, visibility 0.3s;
+}
+.tyra-launcher:hover {
+    transform: scale(1.1);
+}
+.tyra-launcher.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: scale(0.8);
+}
+
+.tyra-launcher-icon svg {
+    width: 32px;
+    height: 32px;
+}
+.tyra-launcher-icon text {
+    font-family: var(--font-family);
+    font-weight: bold;
+    font-size: 14px;
+    fill: var(--primary-color);
+}
+
+/* --- Base Widget Container --- */
+.tyra-widget-container {
+    font-family: var(--font-family);
     width: 100%;
     max-width: 400px;
-    box-sizing: border-box;
-    position: relative;
-}
-
-.tyra-widget-container * {
-    box-sizing: border-box;
-}
-
-.tyra-widget-header {
-    background: linear-gradient(135deg, #8B4A9C 0%, #A855A8 100%);
-    color: white;
-    padding: 12px 15px;
-    font-size: 1.1em;
-    font-weight: 500;
-    flex-shrink: 0;
+    height: 600px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    overflow: hidden;
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    flex-direction: column;
+    background-color: var(--background-color);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    color: var(--text-color);
+    position: fixed;
+    bottom: 90px;
+    right: 20px;
+    z-index: 9999;
+    opacity: 0;
+    transform: translateY(20px);
+    visibility: hidden;
+    transition: opacity 0.3s ease, transform 0.3s ease, visibility 0.3s;
 }
+
+.tyra-widget-container.open {
+    opacity: 1;
+    transform: translateY(0);
+    visibility: visible;
+}
+
 
 .tyra-view-container {
-    flex-grow: 1;
+    flex: 1;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
 }
 
+/* --- Header --- */
+.tyra-widget-header {
+    background-color: var(--primary-color);
+    color: white;
+    padding: 10px 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    min-height: 50px;
+    box-sizing: border-box;
+}
+
+.tyra-widget-header h3 {
+    margin: 0;
+    font-size: 1.1em;
+    font-weight: 600;
+    flex-grow: 1;
+    text-align: center;
+}
+
+.tyra-header-button {
+    background: none;
+    border: 1px solid white;
+    color: white;
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85em;
+    transition: background-color 0.2s;
+    white-space: nowrap;
+}
+.tyra-header-button:hover {
+    background-color: var(--secondary-color);
+}
+.tyra-close-btn {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 5px;
+}
+
+
+/* --- Form Views (Login, OTP, Profile) --- */
+.tyra-form-view {
+    padding: 20px;
+    text-align: center;
+    overflow-y: auto;
+    flex-grow: 1;
+}
+
+.tyra-form-view h2 {
+    color: var(--primary-color);
+    margin-top: 0;
+}
+
+.tyra-form-view p {
+    color: #666;
+    margin-bottom: 20px;
+}
+
+.tyra-form-view form {
+    display: flex;
+    flex-direction: column;
+    text-align: left;
+}
+
+.tyra-form-view label {
+    font-weight: 600;
+    margin-bottom: 5px;
+    font-size: 0.9em;
+}
+
+.tyra-form-view input[type="text"],
+.tyra-form-view input[type="email"],
+.tyra-form-view input[type="number"],
+.tyra-form-view input[type="date"],
+.tyra-form-view select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    margin-bottom: 15px;
+    box-sizing: border-box;
+    font-size: 1em;
+}
+
+.tyra-form-view button[type="submit"],
+.tyra-guest-button {
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 12px;
+    border-radius: var(--border-radius);
+    font-size: 1em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.tyra-form-view button[type="submit"]:hover {
+    background-color: var(--secondary-color);
+}
+
+.tyra-form-view button:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+}
+
+.tyra-form-error {
+    color: var(--error-color);
+    margin-bottom: 10px;
+    min-height: 1.2em;
+    font-size: 0.9em;
+}
+
+.tyra-or-separator {
+    margin: 15px 0;
+    color: #aaa;
+}
+
+.tyra-guest-button {
+    background-color: #777;
+}
+.tyra-guest-button:hover {
+    background-color: #555;
+}
+
+.tyra-profile-view fieldset {
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: 10px 15px;
+    margin-bottom: 15px;
+    text-align: left;
+}
+.tyra-profile-view fieldset.hidden { display: none; }
+.tyra-profile-view legend { font-weight: 600; color: var(--primary-color); }
+.tyra-profile-view .tyra-checkbox-group { display: flex; align-items: center; margin-bottom: 5px; }
+.tyra-profile-view .tyra-checkbox-group input { width: auto; margin-right: 10px; }
+.tyra-profile-view .tyra-sub-group { margin-left: 25px; margin-bottom: 10px; }
+.tyra-profile-view .tyra-sub-group.hidden { display: none; }
+.tyra-profile-view #add-child-btn {
+    padding: 5px 10px;
+    margin-left: 10px;
+    background-color: var(--secondary-color);
+    color: white; border: none; border-radius: 4px; cursor: pointer;
+}
+#added-dobs-display { font-size: 0.8em; color: #666; margin-top: 5px; }
+
+/* --- Chat View --- */
 .tyra-chat-log {
     flex-grow: 1;
-    padding: 15px;
+    padding: 10px;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 10px;
 }
 
 .tyra-message {
-    padding: 8px 12px;
-    border-radius: 18px;
-    line-height: 1.5;
-    max-width: 85%;
+    padding: 10px 15px;
+    border-radius: 15px;
+    max-width: 80%;
     word-wrap: break-word;
 }
+.tyra-message p:first-child { margin-top: 0; }
+.tyra-message p:last-child { margin-bottom: 0; }
+.tyra-message ul { padding-left: 20px; margin: 5px 0; }
+.tyra-message ol { padding-left: 20px; margin: 5px 0; }
+
 
 .tyra-user-message {
-    background-color: #8B4A9C;
+    background-color: var(--primary-color);
     color: white;
     align-self: flex-end;
-    border-bottom-right-radius: 4px;
+    border-bottom-right-radius: 3px;
 }
 
 .tyra-ai-message {
-    background-color: #f0f2f5;
-    color: #050505;
+    background-color: #f1f1f1;
+    color: var(--text-color);
     align-self: flex-start;
-    border-bottom-left-radius: 4px;
+    border-bottom-left-radius: 3px;
 }
 
+.tyra-chat-form-container {
+    padding: 10px;
+    border-top: 1px solid var(--border-color);
+    background-color: white;
+}
 .tyra-chat-form {
     display: flex;
-    padding: 15px;
-    border-top: 1px solid #dbdbdb;
-    gap: 10px;
-    flex-shrink: 0;
+    align-items: center;
+    gap: 5px;
 }
-
-.tyra-chat-form input {
+.tyra-chat-input {
     flex-grow: 1;
-    border: 1px solid #ccc;
+    border: 1px solid var(--border-color);
     border-radius: 20px;
     padding: 10px 15px;
     font-size: 1em;
 }
-
-.tyra-chat-form input:focus {
-    outline: none;
-    border-color: #8B4A9C;
-    box-shadow: 0 0 0 2px rgba(139, 74, 156, 0.2);
-}
-
-.tyra-chat-form button {
-    border: none;
-    background: #8B4A9C;
-    color: white;
-    font-weight: bold;
-    border-radius: 20px;
-    padding: 0 20px;
-    cursor: pointer;
-    transition: background-color 0.2s;
-}
-
-/* Auth & Settings Form Styles */
-.tyra-form-view {
-    padding: 20px;
-    text-align: center;
-}
-
-.tyra-form-view h2 {
-    font-size: 1.2em;
-    color: #333;
-    margin-top: 0;
-}
-
-.tyra-form-view p {
-    color: #666;
-    font-size: 0.9em;
-}
-
-.tyra-form-view form {
-    margin-top: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    text-align: left;
-}
-
-.tyra-form-view label {
-    font-weight: 500;
-    font-size: 0.9em;
-}
-
-.tyra-form-view input {
-    width: 100%;
-    padding: 10px;
-    border-radius: 5px;
-    border: 1px solid #ccc;
-    font-size: 1em;
-}
-
-.tyra-form-view button {
-    width: 100%;
-    background: #8B4A9C;
-    color: white;
-    font-weight: bold;
-    border: none;
-    cursor: pointer;
-    margin-top: 10px;
-    padding: 12px;
-    border-radius: 8px;
-    font-size: 1em;
-}
-
-.tyra-form-view button:disabled {
-    background: #ccc;
-    cursor: not-allowed;
-}
-
-.tyra-form-error {
-    color: #c0392b;
-    font-size: 0.85em;
-    text-align: center;
-    margin-top: 5px;
-    min-height: 1.2em;
-}
-
-/* Header Controls */
-.tyra-header-controls {
-    position: relative;
-}
-
-.tyra-settings-btn {
+.tyra-icon-button {
     background: none;
     border: none;
-    color: white;
+    font-size: 1.5em;
     cursor: pointer;
-    padding: 4px;
+    color: #888;
+}
+.tyra-voice-btn.recording { color: var(--error-color); }
+.tyra-send-button {
+    background: none; border: none; font-size: 1.5em;
+    cursor: pointer; color: var(--primary-color);
+}
+
+.tyra-quick-log-buttons {
     display: flex;
-    align-items: center;
-    justify-content: center;
+    gap: 5px;
+    padding-bottom: 10px;
+    overflow-x: auto;
+    flex-wrap: wrap; /* FIX: Allow wrapping */
+}
+.tyra-quick-log-btn {
+    /* FIX: Compacted buttons */
+    padding: 4px 8px; 
+    border: 1px solid var(--secondary-color);
+    background-color: transparent;
+    color: var(--secondary-color);
+    border-radius: 15px;
+    font-size: 0.75em; /* Reduced font size */
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+/* Chart & Calendar Containers */
+.tyra-chart-container, .tyra-calendar-container {
+    background-color: white;
+    padding: 15px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    width: 100%;
+    max-width: 100%;
+    align-self: center;
+}
+.tyra-calendar-table { width: 100%; border-collapse: collapse; text-align: center; }
+.tyra-calendar-table th { padding: 5px; }
+.tyra-calendar-day {
+    display: inline-block; width: 28px; height: 28px; line-height: 28px;
     border-radius: 50%;
 }
-.tyra-settings-btn:hover {
-    background-color: rgba(255, 255, 255, 0.2);
-}
-.tyra-settings-btn svg {
-    width: 20px;
-    height: 20px;
-}
+.tyra-calendar-day.logged-day { background-color: var(--logged-day-bg); }
+.tyra-calendar-day.predicted-day { background-color: var(--predicted-day-bg); }
+.tyra-calendar-day.fertile-day { background-color: var(--fertile-day-bg); }
+.tyra-calendar-day.current-day { border: 2px solid var(--current-day-border); }
+.tyra-calendar-legend { display: flex; justify-content: center; gap: 15px; margin-top: 10px; font-size: 0.8em; }
+.legend-item { display: flex; align-items: center; }
+.legend-color { width: 12px; height: 12px; border-radius: 3px; margin-right: 5px; }
 
-.tyra-settings-menu {
-    display: none;
-    position: absolute;
-    top: 100%;
-    right: 0;
+
+/* --- Dashboard View --- */
+.tyra-dashboard-view {
+    padding: 15px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 15px;
+    background-color: #f4f4f9;
+}
+.tyra-widget {
     background-color: white;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    padding: 8px;
-    width: 150px;
-    z-index: 10;
+    padding: 15px;
+    border-radius: var(--border-radius);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    display: flex;
+    flex-direction: column;
 }
-.tyra-settings-menu.visible {
-    display: block;
+.tyra-widget h4 {
+    margin-top: 0;
+    color: var(--primary-color);
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 8px;
+    margin-bottom: 10px;
 }
-
-.tyra-settings-menu button {
-    display: block;
-    width: 100%;
-    background: none;
+.tyra-widget ul { list-style: none; padding: 0; margin: 0; }
+.tyra-widget li {
+    padding: 8px 0;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.tyra-widget li:last-child { border-bottom: none; }
+.tyra-reminder-item button {
+    background-color: #4CAF50;
+    color: white;
     border: none;
-    color: #333;
-    padding: 10px;
-    text-align: left;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.9em;
+    border-radius: 50%;
+    width: 24px; height: 24px;
+    cursor: pointer; font-weight: bold;
 }
-
-.tyra-settings-menu button:hover {
-    background-color: #f0f2f5;
+.tyra-cycle-stats .stat-value {
+    font-size: 1.5em; font-weight: bold; color: var(--secondary-color);
 }
+.tyra-export-buttons { display: flex; gap: 10px; margin-top: 10px; }
+.tyra-export-buttons button, .tyra-share-link-container button {
+    flex-grow: 1; padding: 8px; border-radius: 4px; border: 1px solid var(--primary-color);
+    background-color: var(--primary-color); color: white; cursor: pointer;
+}
+.tyra-export-buttons button[data-action="export-csv"] {
+    background-color: white; color: var(--primary-color);
+}
+.tyra-share-link-container {
+    margin-top: 10px;
+    display: flex;
+}
+.tyra-share-link-container.hidden { display: none; }
+.tyra-share-link-container input { flex-grow: 1; border: 1px solid var(--border-color); padding: 8px; border-radius: 4px 0 0 4px; }
+.tyra-share-link-container button { border-radius: 0 4px 4px 0; }

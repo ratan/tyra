@@ -33,8 +33,11 @@ def create_user_profile(name, email, phone, age, details, lang_code='en'):
             "last_shown_milestone": None,
             "reminders": [],
             "last_symptom_analysis_date": None,
-            "last_general_analysis_date": None
+            "last_general_analysis_date": None,
+            "last_program_suggestion_ts": None,
+            "pending_program_offer": None
         },
+        "behavioral_synopsis": {},
         "health_logs": [],
         "medication_log": [],
         "goals": [],
@@ -65,7 +68,7 @@ def format_program_for_prompt(program_object):
     return "\n".join(lines)
 
 
-def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of_day=False, suggested_program_object=None, is_follow_up=False, proactive_context=None, special_context=None, enable_realtime_log_context=False, enable_ovulation_tracker=False, last_discussed_program_context=None):
+def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of_day=False, suggested_program_object=None, is_follow_up=False, proactive_context=None, special_context=None, enable_realtime_log_context=False, enable_ovulation_tracker=False, last_discussed_program_context=None, is_summary_request=False):
     if not profile: return f"You are a helpful AI assistant named {chatbot_name}."
     
     lang_code = profile.get("language", "en")
@@ -91,47 +94,55 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
         context_lines.append(f"- Is a parent of {num_children} child/children. Last child born {details.get('last_child_birth_ago', 'not specified')} ago. Ages: {ages_str}.")
     if details.get('is_perimenopausal'): context_lines.append("- Is experiencing perimenopause symptoms.")
     
-    meds = profile.get("medication_log", [])
-    if meds:
-        context_lines.append("\n--- CURRENT MEDICATIONS/SUPPLEMENTS ---")
-        for med in meds:
-            context_lines.append(f"- {med.get('name')} ({med.get('dosage', 'N/A')}), Frequency: {med.get('frequency', 'N/A')}")
+    synopsis_data = profile.get("behavioral_synopsis", {})
+    if synopsis_data and synopsis_data.get('synopsis'):
+        context_lines.append("\n--- BEHAVIORAL SYNOPSIS (User's recent focus) ---")
+        for point in synopsis_data['synopsis']:
+            context_lines.append(f"- {point}")
 
-    goals = profile.get("goals", [])
-    if goals:
-        context_lines.append("\n--- USER'S GOALS ---")
-        for goal in goals:
-            context_lines.append(f"- Goal: {goal.get('text')}")
+    # --- BUG FIX v97.3: Conditionally show detailed data only on request ---
+    if is_summary_request:
+        meds = profile.get("medication_log", [])
+        if meds:
+            context_lines.append("\n--- CURRENT MEDICATIONS/SUPPLEMENTS ---")
+            for med in meds:
+                context_lines.append(f"- {med.get('name')} ({med.get('dosage', 'N/A')}), Frequency: {med.get('frequency', 'N/A')}")
 
-    if enable_realtime_log_context:
-        health_logs = profile.get("health_logs", [])
-        if health_logs:
-            context_lines.append("\n--- RECENT HEALTH LOGS (for immediate context) ---")
-            for log in health_logs[:RECENT_LOG_LIMIT]:
-                try:
-                    log_date = dateparser.parse(log['timestamp']).strftime('%Y-%m-%d')
-                    category = log.get('category', 'log')
-                    value = log.get('value', 'entry')
-                    context_lines.append(f"- On {log_date}: Logged '{value}' for '{category}'.")
-                except (TypeError, ValueError):
-                    continue
-    
-    period_data = profile.get('period_data')
-    if period_data and period_data.get('tracking_enabled'):
-        context_lines.append("\n--- PERIOD & FERTILITY SUMMARY ---")
-        context_lines.append("- Status: Tracking is enabled.")
-        if period_data.get('average_cycle_length'): context_lines.append(f"- Average Cycle Length: {period_data['average_cycle_length']} days.")
-        if period_data.get('average_period_length'): context_lines.append(f"- Average Period Length: {period_data['average_period_length']} days.")
+        goals = profile.get("goals", [])
+        if goals:
+            context_lines.append("\n--- USER'S GOALS ---")
+            for goal in goals:
+                context_lines.append(f"- Goal: {goal.get('text')}")
+
+        if enable_realtime_log_context:
+            health_logs = profile.get("health_logs", [])
+            if health_logs:
+                context_lines.append("\n--- RECENT HEALTH LOGS ---")
+                for log in health_logs[:RECENT_LOG_LIMIT]:
+                    try:
+                        log_date = dateparser.parse(log['timestamp']).strftime('%Y-%m-%d')
+                        category = log.get('category', 'log')
+                        value = log.get('value', 'entry')
+                        context_lines.append(f"- On {log_date}: Logged '{value}' for '{category}'.")
+                    except (TypeError, ValueError):
+                        continue
         
-        if period_data.get('cycles'):
-            last_cycle = period_data['cycles'][0]
-            context_lines.append(f"- Last Logged Period Started: {last_cycle.get('start_date', 'N/A')}.")
-            if enable_ovulation_tracker and last_cycle.get('fertile_start'):
-                context_lines.append(f"- Last Cycle's Estimated Fertile Window: {last_cycle.get('fertile_start')} to {last_cycle.get('fertile_end')}")
+        period_data = profile.get('period_data')
+        if period_data and period_data.get('tracking_enabled'):
+            context_lines.append("\n--- PERIOD & FERTILITY SUMMARY ---")
+            context_lines.append("- Status: Tracking is enabled.")
+            if period_data.get('average_cycle_length'): context_lines.append(f"- Average Cycle Length: {period_data['average_cycle_length']} days.")
+            if period_data.get('average_period_length'): context_lines.append(f"- Average Period Length: {period_data['average_period_length']} days.")
+            
+            if period_data.get('cycles'):
+                last_cycle = period_data['cycles'][0]
+                context_lines.append(f"- Last Logged Period Started: {last_cycle.get('start_date', 'N/A')}.")
+                if enable_ovulation_tracker and last_cycle.get('fertile_start'):
+                    context_lines.append(f"- Last Cycle's Estimated Fertile Window: {last_cycle.get('fertile_start')} to {last_cycle.get('fertile_end')}")
 
-        if enable_ovulation_tracker and period_data.get('predicted_next_start_date'):
-             context_lines.append(f"- Predicted Next Period Start: {period_data.get('predicted_next_start_date')}")
-             context_lines.append(f"- Predicted Next Fertile Window: {period_data.get('predicted_fertile_start')} to {period_data.get('predicted_fertile_end')}.")
+            if enable_ovulation_tracker and period_data.get('predicted_next_start_date'):
+                 context_lines.append(f"- Predicted Next Period Start: {period_data.get('predicted_next_start_date')}")
+                 context_lines.append(f"- Predicted Next Fertile Window: {period_data.get('predicted_fertile_start')} to {period_data.get('predicted_fertile_end')}.")
 
     reminders = profile.get("proactive_assistance", {}).get("reminders", [])
     if reminders:
@@ -149,7 +160,16 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
             entry_parts = [f"{summary_map.get(k, 'Mentioned')}: {', '.join(v)}" for k, v in insights.items() if v]
             if entry_parts: context_lines.append(f"- On {entry.get('timestamp', 'an unknown time').split('T')[0]}: " + "; ".join(entry_parts))
     
-    if special_context and special_context.get("type") == "empathetic_follow_up":
+    # --- BUG FIX v97.4: Enhanced instruction logic for more natural suggestions ---
+    if special_context and special_context.get("type") == "explain_and_offer_program":
+        context_lines.append("\n--- CRITICAL INSTRUCTION FOR THIS TURN ---")
+        context_lines.append(
+            "The user's question is a direct inquiry about a topic for which you have a relevant program suggestion. Your response MUST follow this two-part structure:\n"
+            "1. **Explain:** First, directly and helpfully answer the user's question (e.g., 'what is postnatal yoga').\n"
+            "2. **Offer:** Immediately after, on a new line, seamlessly transition to an offer. Example: 'Since this is something you're asking about, you might be interested to know that Tribher offers a specialized [Program Name] designed to help with exactly these goals. Would you like to know more about it?'\n"
+            "This is your primary directive for this conversational turn."
+        )
+    elif special_context and special_context.get("type") == "empathetic_follow_up":
         context_lines.append("\n--- CRITICAL INSTRUCTION FOR THIS TURN ---")
         confirmation = special_context.get("confirmation_message", "Okay, I've noted that.")
         context_lines.append(
@@ -182,7 +202,7 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
             program_knowledge = format_program_for_prompt(final_program_context)
             context_lines.append(f"CRITICAL: The user just said 'yes' to learning more about the '{final_program_context.get('name')}'. IGNORE their 'yes' message and provide a detailed explanation of the program using the knowledge base below. Start enthusiastically.")
             context_lines.append(program_knowledge)
-        elif suggested_program_object:
+        elif suggested_program_object and not special_context: # Only trigger the generic offer if a special context isn't active
             program_name = suggested_program_object.get('name', 'a relevant program')
             context_lines.append(f"A relevant program was found: '{program_name}'.")
             context_lines.append("CRITICAL INSTRUCTION: First, answer the user's question as your primary goal. Then, as a mandatory final step, you MUST conclude your response with the following two sentences verbatim, without any modification: \"For more specialized guidance, Tribher offers programs designed for this life stage. Would you like to know more about it?\" This action is not optional.")
