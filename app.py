@@ -1936,7 +1936,11 @@ def view_report(report_id):
     report_data = db.get(report_id)
     if not report_data or datetime.now().timestamp() - report_data.get('created_at', 0) > REPORT_LIFETIME_HOURS * 3600:
         return "Report not found or has expired.", 404
-    return send_from_directory(SHARED_REPORTS_DIR, report_data['filepath'])
+
+    # CORRECT WAY: Use os.path.basename to get just the filename.
+    # This securely serves the file from the absolute path directory.
+    filename = os.path.basename(report_data['filepath'])
+    return send_from_directory(SHARED_REPORTS_DIR, filename)
 
 if __name__ == '__main__':
     if not app.config.get("FLASK_SECRET_KEY"):
