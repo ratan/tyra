@@ -35,6 +35,7 @@ OTP_LIFETIME_SECONDS = 300 # 5 minutes
 BEHAVIORAL_SYNOPSIS_INTERVAL_DAYS = 3
 BEHAVIORAL_SYNOPSIS_MIN_INTERACTIONS = 15
 PROGRAM_SUGGESTION_COOLDOWN_DAYS = 3
+MAX_CYCLE_HISTORY = 120
 
 # --- Feature Flags ---
 ENABLE_MULTI_LANGUAGE = True
@@ -67,11 +68,6 @@ ENABLE_EMAIL_OTP_VERIFICATION = True
 ENABLE_EMAIL_OTP_API_VERIFICATION = True
 ENABLE_BEHAVIORAL_SYNOPSIS = True
 # ---
-TRIBHER_DATA_FILE = "tribher_data_final.json"
-MAX_CYCLE_HISTORY = 120
-MILESTONES_DATA_FILE = "milestones_data.json"
-SHARED_REPORTS_DB_FILE = "shared_reports_db.json"
-
 app = Flask(__name__)
 
 # BUG FIX v94.5: Robustly load config from .env into Flask's config object.
@@ -92,19 +88,32 @@ app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SESSION_FILE_DIR'] = SESSION_DIR
 Session(app)
 
-PROFILES_DIR = "user_profiles"
-UPLOADS_DIR = "temp_uploads"
+# --- FIX v98.0, v98.1, v98.2: Persistent Storage for Production ---
+# Check for a persistent storage path from an environment variable (set in Render).
+# If it exists, use it. Otherwise, fall back to local directories for development.
+DATA_BASE_PATH = os.environ.get('PERSISTENT_DATA_PATH', '.')
+
+PROFILES_DIR = os.path.join(DATA_BASE_PATH, "user_profiles")
+UPLOADS_DIR = os.path.join(DATA_BASE_PATH, "temp_uploads")
+SHARED_REPORTS_DIR = os.path.join(DATA_BASE_PATH, "shared_reports")
+TRIBHER_DATA_FILE = os.path.join(DATA_BASE_PATH, "tribher_data_final.json")
+MILESTONES_DATA_FILE = os.path.join(DATA_BASE_PATH, "milestones_data.json")
+
+# Define static directories separately as they are part of the app package
+STATIC_CSS_DIR = os.path.join('static', 'css')
+STATIC_JS_DIR = os.path.join('static', 'js')
 LOCALES_DIR = "locales"
-SHARED_REPORTS_DIR = "static/shared_reports"
-# Create static subdirectories if they don't exist
-os.makedirs(os.path.join('static', 'css'), exist_ok=True)
-os.makedirs(os.path.join('static', 'js'), exist_ok=True)
 
-
+# Create all necessary directories
 os.makedirs(PROFILES_DIR, exist_ok=True)
 os.makedirs(UPLOADS_DIR, exist_ok=True)
+os.makedirs(SHARED_REPORTS_DIR, exist_ok=True) # Create the directory first
+SHARED_REPORTS_DB_FILE = os.path.join(SHARED_REPORTS_DIR, "shared_reports_db.json") # Then define the file path within it
+os.makedirs(STATIC_CSS_DIR, exist_ok=True)
+os.makedirs(STATIC_JS_DIR, exist_ok=True)
 os.makedirs(LOCALES_DIR, exist_ok=True)
-os.makedirs(SHARED_REPORTS_DIR, exist_ok=True)
+# --- End of Fix ---
+
 
 TRIBHER_DATA = None
 MILESTONES_DATA = None
@@ -227,6 +236,7 @@ def cleanup_expired_reports():
     if expired_ids:
         for report_id in expired_ids:
             del db[report_id]
+            # Use os.path.basename to get just the filename for the send_from_directory path
             filepath = os.path.join(SHARED_REPORTS_DIR, f"{report_id}.pdf")
             if os.path.exists(filepath): os.remove(filepath)
         save_report_db(db)
@@ -688,7 +698,7 @@ def update_and_predict_cycles(profile, enable_ovulation_tracker=False):
     period_data["cycles"] = valid_cycles[:MAX_CYCLE_HISTORY]
     return profile
 
-# --- BUG FIX v97.1: Overhauled suggestion and follow-up logic ---
+# --- BUG FIX v97.1 & v97.5: Overhauled suggestion and follow-up logic ---
 
 def handle_follow_up_request(profile, user_message):
     """
