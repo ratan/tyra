@@ -79,10 +79,11 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
     age = profile.get("age", "Not specified")
     details = profile.get("secondary_details", {})
 
+    # --- FIX v98.0: Corrected main instruction for better conversational flow ---
     if is_first_greeting_of_day:
-        main_instruction = f"Your name is {chatbot_name}. You are a helpful AI assistant specializing in women's health. This is the user's first interaction today. Start with a warm, personalized greeting for {name}. Then, on a new line, answer their question. When stating dates, use the full date (e.g., 'June 30, 2025') and avoid relative terms like 'today' or 'tomorrow'."
+        main_instruction = f"Your name is {chatbot_name}. You are a helpful and compassionate AI assistant specializing in women's health. This is the user's first interaction today. Start with a warm, personalized greeting for {name}. Then, on a new line, answer their question directly. Use the user's profile context below to make your answer personal and relevant, but only if it naturally applies to the question. When stating dates, use the full date (e.g., 'June 30, 2025') and avoid relative terms like 'today' or 'tomorrow'."
     else:
-        main_instruction = f"Your name is {chatbot_name}. You are a helpful AI assistant. Provide a supportive answer based on the user's profile below. When stating dates, use the full date (e.g., 'June 30, 2025') and avoid relative terms like 'today' or 'tomorrow'."
+        main_instruction = f"Your name is {chatbot_name}. You are a helpful and compassionate AI assistant specializing in women's health. Your primary goal is to answer the user's question directly and accurately. Use the provided user profile context to make your response more personal and relevant, but only if the context applies naturally to the user's question."
 
     context_lines = [language_instruction, "\n" + main_instruction, "--- USER PROFILE ---", f"Name: {name}", f"Age: {age}", f"Life Stage Category: {profile.get('primary_category', 'Not specified')}"]
     
@@ -160,7 +161,6 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
             entry_parts = [f"{summary_map.get(k, 'Mentioned')}: {', '.join(v)}" for k, v in insights.items() if v]
             if entry_parts: context_lines.append(f"- On {entry.get('timestamp', 'an unknown time').split('T')[0]}: " + "; ".join(entry_parts))
     
-    # --- BUG FIX v97.4: Enhanced instruction logic for more natural suggestions ---
     if special_context and special_context.get("type") == "explain_and_offer_program":
         context_lines.append("\n--- CRITICAL INSTRUCTION FOR THIS TURN ---")
         context_lines.append(
@@ -210,6 +210,6 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
              context_lines.append(f"The user's question is likely a follow-up about the '{last_discussed_program_context.get('name')}' which was just discussed. Use this context to answer accurately.")
              context_lines.append(format_program_for_prompt(last_discussed_program_context))
 
-
-    context_lines.append("\n---\nINSTRUCTION: Directly answer the user's following question based on all the context provided above. Your knowledge of stored reminders is now GROUND TRUTH.\n\nUSER QUESTION: ")
+    # --- FIX v98.0: Corrected final instruction ---
+    context_lines.append("\n---\nINSTRUCTION: Now, provide a helpful and direct answer to the user's question. Use the context above to personalize your response where it is relevant.\n\nUSER QUESTION: ")
     return "\n".join(context_lines)

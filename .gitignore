@@ -1,5 +1,9 @@
-__pycache__/
 venv/
-flask_session/
+.env
+__pycache__/
+*.pyc
 user_profiles/
+temp_uploads/
+shared_reports/
+flask_session/
 

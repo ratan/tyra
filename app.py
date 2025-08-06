@@ -80,19 +80,21 @@ app.config['ENABLE_WIDGET_MODE'] = ENABLE_WIDGET_MODE
 app.config['ENABLE_EMAIL_OTP_VERIFICATION'] = ENABLE_EMAIL_OTP_VERIFICATION
 app.config['ENABLE_EMAIL_OTP_API_VERIFICATION'] = ENABLE_EMAIL_OTP_API_VERIFICATION
 
-
-# Configure Server-Side Sessions for Monolith Mode
-SESSION_DIR = './flask_session'
-os.makedirs(SESSION_DIR, exist_ok=True)
-app.config['SESSION_TYPE'] = 'filesystem'
-app.config['SESSION_FILE_DIR'] = SESSION_DIR
-Session(app)
-
 # --- FIX v98.0, v98.1, v98.2: Persistent Storage for Production ---
 # Check for a persistent storage path from an environment variable (set in Render).
 # If it exists, use it. Otherwise, fall back to local directories for development.
 DATA_BASE_PATH = os.environ.get('PERSISTENT_DATA_PATH', '.')
 
+# Configure Server-Side Sessions for Monolith Mode (Production Ready)
+# This ensures session files are also saved to the persistent disk on Render.
+SESSION_DIR = os.path.join(DATA_BASE_PATH, "flask_session")
+os.makedirs(SESSION_DIR, exist_ok=True)
+app.config['SESSION_TYPE'] = 'filesystem'
+app.config['SESSION_FILE_DIR'] = SESSION_DIR
+Session(app)
+
+
+# --- FIX v98.0, v98.1, v98.2: Persistent Storage for Production ---
 PROFILES_DIR = os.path.join(DATA_BASE_PATH, "user_profiles")
 UPLOADS_DIR = os.path.join(DATA_BASE_PATH, "temp_uploads")
 SHARED_REPORTS_DIR = os.path.join(DATA_BASE_PATH, "shared_reports")
