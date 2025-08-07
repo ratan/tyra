@@ -1,4 +1,4 @@
-# app.py
+# app.py (v98.6)
 import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets
 from datetime import datetime, timedelta, timezone
 from flask import Flask, Response, render_template, request, jsonify, session, redirect, url_for, send_from_directory, g
@@ -1001,8 +1001,10 @@ def _get_dashboard_data(profile):
             dashboard_data["cycle_stats"]["avg_cycle_length"] = period_data.get("average_cycle_length")
     
     if ENABLE_EXPANDED_LOGGING:
-        logs = profile.get("health_logs", [])
-        for log in logs[:5]: 
+        # FIX v98.6: Explicitly sort by timestamp descending to guarantee newest-first order.
+        all_logs = sorted(profile.get("health_logs", []), key=lambda x: x.get('timestamp', ''), reverse=True)
+        # Now take the top 5 from the correctly sorted list
+        for log in all_logs[:5]: 
             log_date = dateparser.parse(log['timestamp']).strftime('%b %d')
             category = log.get('category', 'log')
             value = log.get('value', 'entry')
@@ -1012,8 +1014,14 @@ def _get_dashboard_data(profile):
             log_text = template_str.format(date=log_date, value=value, category=category)
             dashboard_data["health_logs"].append({"text": log_text})
 
-    if ENABLE_MEDICATION_TRACKING: dashboard_data["medications"] = profile.get("medication_log", [])
-    if ENABLE_GOAL_TRACKING: dashboard_data["goals"] = profile.get("goals", [])
+    # --- FIX v98.5: Consistently limit dashboard widgets to the 5 most recent items ---
+    if ENABLE_MEDICATION_TRACKING:
+        # Sort by logged_date descending and take the top 5
+        meds_log = sorted(profile.get("medication_log", []), key=lambda x: x.get('logged_date', ''), reverse=True)
+        dashboard_data["medications"] = meds_log[:5]
+    if ENABLE_GOAL_TRACKING:
+        goals_log = sorted(profile.get("goals", []), key=lambda x: x.get('created_date', ''), reverse=True)
+        dashboard_data["goals"] = goals_log[:5]
     
     return dashboard_data
 
