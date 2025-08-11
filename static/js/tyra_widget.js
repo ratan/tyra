@@ -16,7 +16,8 @@
         dashboardData: null,
         mediaRecorder: null,
         audioChunks: [],
-        childDobs: [] // For profile creation form
+        childDobs: [], // For profile creation form
+        isDashboardStale: false // FIX v100.2: Flag to signal dashboard needs a refresh
     };
 
     // --- TEMPLATES ---
@@ -24,7 +25,7 @@
         launcher: () => `<div class="tyra-launcher">
                             <div class="tyra-launcher-icon">
                                 <svg viewBox="0 0 24 24">
-                                    <path fill="white" d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"></path>
+                                    <path fill="white" d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2z"></path>
                                     <text x="50%" y="55%" text-anchor="middle" dominant-baseline="central">T</text>
                                 </svg>
                             </div>
@@ -455,6 +456,9 @@
         addMessage(messageText, 'user');
         input.value = '';
         
+        // --- FIX v100.2: Signal that dashboard data is now stale ---
+        state.isDashboardStale = true;
+
         const { ok, data } = await api.post('chat', { message: messageText });
         if (ok) {
             addMessage(data.reply, 'ai');
@@ -518,6 +522,10 @@
         const button = e.target.closest('.tyra-quick-log-btn');
         if (!button) return;
         const { logCategory, logValue, logLabel } = button.dataset;
+
+        // --- FIX v100.2: Signal that dashboard data is now stale ---
+        state.isDashboardStale = true;
+
         addMessage(logLabel, 'user');
         const { ok, data } = await api.post('quick_log', { category: logCategory, value: logValue });
         if (ok) addMessage(data.reply, 'ai');
@@ -594,8 +602,12 @@
         const container = state.targetElement.querySelector('.tyra-dashboard-view');
         container.innerHTML = '<p>Loading dashboard...</p>';
         try {
-            const data = state.dashboardData || await api.get('dashboard_data');
-            state.dashboardData = data;
+            // FIX v100.2: Only fetch new data if it's stale or doesn't exist
+            if (state.isDashboardStale || !state.dashboardData) {
+                state.dashboardData = await api.get('dashboard_data');
+                state.isDashboardStale = false; // Reset the flag after fetching
+            }
+            const data = state.dashboardData; // Use the (potentially new) data
             
             const widgets = {
                 cycle: () => {
@@ -737,7 +749,7 @@
         init: async function(options) {
             if (!options.targetElementId || !options.apiUrl) return console.error("Tyra Widget: 'targetElementId' and 'apiUrl' are required.");
             
-            Object.assign(state, { apiUrl: options.apiUrl.replace(/\/$/, ''), targetElement: document.getElementById(options.targetElementId), jwtToken: null, verificationToken: null, isGuest: false, userEmail: '', currentView: 'loading', userName: '', lang: {}, dashboardData: null, childDobs: [] });
+            Object.assign(state, { apiUrl: options.apiUrl.replace(/\/$/, ''), targetElement: document.getElementById(options.targetElementId), jwtToken: null, verificationToken: null, isGuest: false, userEmail: '', currentView: 'loading', userName: '', lang: {}, dashboardData: null, childDobs: [], isDashboardStale: false });
 
             if (!state.targetElement) return console.error(`Tyra Widget: Target element "#${options.targetElementId}" not found.`);
             

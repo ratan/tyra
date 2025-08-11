@@ -447,6 +447,20 @@
                     modal.style.display = "none";
                 }
             };
+
+            // --- FIX v100.1: Instant, deterministic dashboard refresh ---
+            // This replaces the unreliable timer-based reload.
+            document.addEventListener('visibilitychange', function() {
+                // When the tab becomes visible again...
+                if (document.visibilityState === 'visible') {
+                    // Check if the chat page has set the refresh flag.
+                    if (localStorage.getItem('dashboardNeedsRefresh') === 'true') {
+                        // IMPORTANT: Clear the flag immediately to prevent reload loops.
+                        localStorage.removeItem('dashboardNeedsRefresh');
+                        window.location.reload();
+                    }
+                }
+            });
         });
     </script>
 </body>

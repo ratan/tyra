@@ -580,6 +580,9 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
+        // --- FIX v100.1: Signal that dashboard data is now stale ---
+        localStorage.setItem('dashboardNeedsRefresh', 'true');
+
         appendMessage(data.reply, 'ai');
         
         if (data.action === 'prompt_signup') {
@@ -804,6 +807,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ category: category, value: value })
                 });
+
+                // --- FIX v100.1: Signal that dashboard data is now stale ---
+                localStorage.setItem('dashboardNeedsRefresh', 'true');
+
                 const data = await response.json();
                 if (response.ok) {
                     appendMessage(data.reply, 'ai');

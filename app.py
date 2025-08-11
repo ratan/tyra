@@ -1,4 +1,4 @@
-# app.py (v98.6)
+# app.py (v100.0)
 import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets
 from datetime import datetime, timedelta, timezone
 from flask import Flask, Response, render_template, request, jsonify, session, redirect, url_for, send_from_directory, g
@@ -301,6 +301,7 @@ def normalize_date_string(date_str: str) -> str:
 def get_conversation_summary(user_message):
     today_date = datetime.now().strftime('%Y-%m-%d')
     # FIX v95.8: Added new example to handle "period length" synonym for "cycle length"
+    # FIX v98.7: Restored contextual reminder logic
     summary_prompt = f"""
 You are an expert tool for converting natural language into a structured JSON object.
 Your output MUST be a single, raw, valid JSON object.
@@ -310,9 +311,10 @@ Today's date is {today_date}. Resolve all relative dates to 'YYYY-MM-DD' format.
 1.  **CHARTING OVERRIDE:** This is your highest priority. If the message contains 'chart', 'calendar', 'graph', or 'visualize', you MUST return a `query_chart` intent.
 2.  **SET GOAL:** For phrases like "my goal is..." or "I want to start...", return a `set_goal` intent with the full goal text.
 3.  **MEDICATION LOG:** For phrases about taking or logging medicine, return `medication_log` with `name`, `dosage`, and `frequency`.
-4.  **REMINDERS:** For phrases like "remind me to..." or "set a reminder", return `reminder_action` with the `text` and `due_date`.
-5.  **OTHER ACTIONS:** Process `health_log`, `period_action`, or `ambiguous_log` as normal.
-6.  **GENERAL CHAT:** For anything else, return an empty JSON object `{{}}`.
+4.  **REMINDERS (EXPLICIT):** For command-like phrases ("remind me to", "set a reminder"), return `reminder_action` with the `text` and `due_date`.
+5.  **REMINDERS (CONTEXTUAL):** For future events mentioned conversationally (e.g., "I have an appointment on Friday"), return `potential_reminder` with `text` and `date`.
+6.  **OTHER ACTIONS:** Process `health_log`, `period_action`, or `ambiguous_log` as normal.
+7.  **GENERAL CHAT:** For anything else, return an empty JSON object `{{}}`.
 
 --- EXAMPLES ---
 User: 'my period started on july 1st'
@@ -329,6 +331,9 @@ User: 'show my period calendar for june month'
 
 User: 'Remind me to call the doctor tomorrow.'
 {{"reminder_action": {{"text": "call the doctor", "due_date": "{(datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')}"}}}}
+
+User: 'My follow-up appointment is next Tuesday.'
+{{"potential_reminder": {{"text": "follow-up appointment", "date": "{(datetime.now() + timedelta(days=(8 - datetime.now().isoweekday() + 1) % 7)).strftime('%Y-%m-%d')}" }}}}
 
 User: 'Log that I am taking Vitamin D 500mg daily.'
 {{"medication_log": {{"name": "Vitamin D", "dosage": "500mg", "frequency": "daily"}}}}
@@ -500,7 +505,7 @@ def handle_reminder_action(action, profile):
     if any(r.get('text').lower() == text.lower() for r in reminders):
         return profile, f"You already have a reminder for '{text}'.", None
     new_reminder = { "id": f"rem_{int(time.time())}", "text": text, "start_date": action.get("due_date", datetime.now().strftime("%Y-%m-%d")), "recurrence_rule": {"frequency": "once"} }
-    reminders.append(new_reminder)
+    reminders.insert(0, new_reminder) # FIX v100.0: Use insert(0) for newest-first
     return profile, f"Okay, I've set a reminder for: '{text}'.", None
 
 def handle_medication_log(action, profile):
@@ -511,7 +516,7 @@ def handle_medication_log(action, profile):
     dosage = action.get("dosage", "N/A")
     frequency = action.get("frequency", "as needed")
     new_med = {"name": name, "dosage": dosage, "frequency": frequency, "logged_date": datetime.now().isoformat()}
-    profile["medication_log"].append(new_med)
+    profile["medication_log"].insert(0, new_med) # FIX v100.0: Use insert(0) for newest-first
     reminder_text = f"Take {name} ({dosage})"
     reminder_action = {"text": reminder_text}
     if "daily" in frequency.lower() or "every morning" in frequency.lower():
@@ -527,7 +532,7 @@ def handle_set_goal(action, profile):
     if any(g.get('text', '').lower() == goal_text.lower() for g in profile["goals"]):
         return profile, f"It looks like you already have a goal to '{goal_text}'.", None
     new_goal = {"text": goal_text, "created_date": datetime.now().strftime("%Y-%m-%d"), "last_check_in_date": datetime.now().strftime("%Y-%m-%d")}
-    profile["goals"].append(new_goal)
+    profile["goals"].insert(0, new_goal) # FIX v100.0: Use insert(0) for newest-first
     return profile, f"That's a great goal! I've saved it for you: **'{goal_text}'**.", None
 
 def handle_period_action(action, profile):
@@ -1001,10 +1006,8 @@ def _get_dashboard_data(profile):
             dashboard_data["cycle_stats"]["avg_cycle_length"] = period_data.get("average_cycle_length")
     
     if ENABLE_EXPANDED_LOGGING:
-        # FIX v98.6: Explicitly sort by timestamp descending to guarantee newest-first order.
-        all_logs = sorted(profile.get("health_logs", []), key=lambda x: x.get('timestamp', ''), reverse=True)
-        # Now take the top 5 from the correctly sorted list
-        for log in all_logs[:5]: 
+        # Data is now stored newest-first, so sorting is no longer needed. Just slice.
+        for log in profile.get("health_logs", [])[:5]:
             log_date = dateparser.parse(log['timestamp']).strftime('%b %d')
             category = log.get('category', 'log')
             value = log.get('value', 'entry')
@@ -1014,14 +1017,8 @@ def _get_dashboard_data(profile):
             log_text = template_str.format(date=log_date, value=value, category=category)
             dashboard_data["health_logs"].append({"text": log_text})
 
-    # --- FIX v98.5: Consistently limit dashboard widgets to the 5 most recent items ---
-    if ENABLE_MEDICATION_TRACKING:
-        # Sort by logged_date descending and take the top 5
-        meds_log = sorted(profile.get("medication_log", []), key=lambda x: x.get('logged_date', ''), reverse=True)
-        dashboard_data["medications"] = meds_log[:5]
-    if ENABLE_GOAL_TRACKING:
-        goals_log = sorted(profile.get("goals", []), key=lambda x: x.get('created_date', ''), reverse=True)
-        dashboard_data["goals"] = goals_log[:5]
+    if ENABLE_MEDICATION_TRACKING: dashboard_data["medications"] = profile.get("medication_log", [])[:5]
+    if ENABLE_GOAL_TRACKING: dashboard_data["goals"] = profile.get("goals", [])[:5]
     
     return dashboard_data
 
@@ -1103,14 +1100,71 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
         save_profile(profile_hash, profile)
         return jsonify(json_response)
         
+    # --- RESTORED v98.7: Contextual Reminder & Pending Question Logic ---
+    # This logic is session-dependent and primarily for the monolith experience.
+    pending_question = session.get('pending_question')
+    if pending_question:
+        session.pop('pending_question', None) # Consume the pending question
+        
+        if pending_question == 'clarify_reminder_creation':
+            potential_reminder_context = session.pop('pending_action_context', None)
+            affirmative_keywords = ['yes', 'sure', 'ok', 'okay', 'please', 'do it']
+            if any(keyword in user_message.lower() for keyword in affirmative_keywords) and potential_reminder_context:
+                # Create a standard reminder action from the context
+                action_to_create = {
+                    "text": potential_reminder_context.get('text'),
+                    "due_date": potential_reminder_context.get('date')
+                }
+                profile, action_response, _ = handle_reminder_action(action_to_create, profile)
+            else:
+                action_response = "Okay, no problem. I won't set a reminder this time."
+        
+        # If a response was generated, save and return it.
+        if action_response:
+            save_profile(profile_hash, profile)
+            return jsonify({"reply": md.render(action_response)})
+    # --- End of Restore ---
+
     action_response = None
     new_pending_question = None
+    special_context = None # RESTORED v98.8
     action_handlers = {'medication_log': handle_medication_log, 'period_action': handle_period_action, 'set_goal': handle_set_goal, 'reminder_action': handle_reminder_action}
+    
     for action_type, handler in action_handlers.items():
         if insights.get(action_type):
             profile, action_response, new_pending_question = handler(insights[action_type], profile)
             break
-    
+            
+    # --- RESTORED v98.7: Check for new potential reminders ---
+    if not action_response and ENABLE_CONTEXTUAL_REMINDERS and insights.get('potential_reminder'):
+        potential_reminder_data = insights.pop('potential_reminder')
+        session['pending_question'] = 'clarify_reminder_creation'
+        session['pending_action_context'] = potential_reminder_data
+        action_response = f"I noticed you mentioned your '{potential_reminder_data.get('text')}'. Would you like me to set a reminder for that?"
+
+    # --- RESTORED v98.8: AI Follow-up Questions for Negative Logs ---
+    if not action_response and ENABLE_EXPANDED_LOGGING and insights.get('health_log'):
+        log_data = insights['health_log']
+        profile.setdefault('health_logs', []).insert(0, {"timestamp": datetime.now().isoformat(), **log_data})
+        
+        category, value = log_data.get('category'), log_data.get('value')
+        lang_data = load_language_data(profile.get('language', 'en'))
+        confirmation_key = f"quick_log_confirm_{value.replace(' ', '_')}_{category}"
+        confirmation_message = lang_data.get(confirmation_key, lang_data.get("quick_log_confirm_fallback"))
+        
+        negative_log_values = ['high', 'poor', 'terrible', 'anxious', 'headache', 'cramps']
+        if ENABLE_AI_FOLLOW_UP_QUESTIONS and value in negative_log_values:
+            special_context = {
+                "type": "empathetic_follow_up",
+                "confirmation_message": confirmation_message,
+                "log_details": log_data
+            }
+        else:
+            action_response = confirmation_message
+
+    if new_pending_question:
+        session['pending_question'] = new_pending_question
+        
     if action_response:
         save_profile(profile_hash, profile)
         return jsonify({"reply": md.render(action_response)})
@@ -1119,7 +1173,6 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
     is_follow_up = False
     last_discussed_program_context = None
     suggested_program_object = None
-    special_context = None
 
     # 1. Check if this is a follow-up to a pending offer.
     follow_up_program, profile = handle_follow_up_request(profile, user_message)
@@ -1168,6 +1221,12 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
 
 
 # --- ROUTES ---
+
+# NEW in v100.3: Health Check Endpoint for Production
+@app.route('/health')
+def health_check():
+    """Endpoint for cloud provider health checks."""
+    return jsonify({"status": "ok"}), 200
 
 @app.route('/')
 def index():
@@ -1247,7 +1306,9 @@ def dashboard():
         enable_shareable_reports=ENABLE_SHAREABLE_REPORTS,
         enable_medication_tracking=ENABLE_MEDICATION_TRACKING,
         enable_goal_tracking=ENABLE_GOAL_TRACKING,
-        enable_ovulation_tracker=ENABLE_OVULATION_TRACKER
+        enable_ovulation_tracker=ENABLE_OVULATION_TRACKER,
+        # RESTORED v98.8: Pass mood tracking flag to template
+        enable_expanded_mood_tracking=ENABLE_EXPANDED_MOOD_TRACKING
     )
 
 # --- WIDGET API ROUTES ---
@@ -1832,11 +1893,27 @@ if not app.config['ENABLE_WIDGET_MODE']:
             return _process_chat_message_for_auth_user(request.json['message'], profile, session['profile_hash'])
         
         elif session.get('is_guest'):
-            insights = get_conversation_summary(request.json['message'])
+            user_message = request.json.get('message', '')
+            # --- RESTORED v98.8: LLM Caching for Guests ---
+            if ENABLE_LLM_CACHING:
+                cache_key = re.sub(r'[^\w\s]', '', user_message).lower().strip()
+                if cache_key in llm_response_cache:
+                    cached_reply = llm_response_cache[cache_key]
+                    return jsonify({"reply": md.render(cached_reply)})
+
+            insights = get_conversation_summary(user_message)
             if insights.get('period_action') or insights.get('reminder_action'):
                 return jsonify({"reply": "To use this feature, please create an account.", "action": "prompt_signup"})
-            response = gemini_model.generate_content(f"You are a helpful assistant. Answer the user's question: {request.json['message']}")
-            return jsonify({"reply": md.render(response.text)})
+            
+            response = gemini_model.generate_content(f"You are a helpful assistant. Answer the user's question: {user_message}")
+            reply_text = response.text
+
+            if ENABLE_LLM_CACHING:
+                if len(llm_response_cache) > MAX_CACHE_SIZE:
+                    llm_response_cache.clear()
+                llm_response_cache[cache_key] = reply_text
+            
+            return jsonify({"reply": md.render(reply_text)})
         return jsonify({"error": "No active session"})
     
     @app.route('/logout', methods=['POST'])
