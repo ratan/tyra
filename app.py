@@ -1,4 +1,4 @@
-# app.py (v100.9)
+# app.py (v101.4 - Dual-Backend Persistence)
 import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets
 from datetime import datetime, timedelta, timezone
 from flask import Flask, Response, render_template, request, jsonify, session, redirect, url_for, send_from_directory, g
@@ -16,6 +16,7 @@ from functools import wraps
 from flask_session import Session
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
+from flask_sqlalchemy import SQLAlchemy
 
 from user_profiler import create_user_profile, format_profile_for_prompt, LANG_MAP
 
@@ -45,6 +46,7 @@ ALLOWED_ORIGINS = [
 ]
 
 # --- Feature Flags ---
+ENABLE_SQLITE_DATABASE = True # NEW in v101.4: Toggles between SQLite and JSON file storage
 ENABLE_MULTI_LANGUAGE = True
 ENABLE_TRIBHER_SUGGESTIONS = True
 ENABLE_PERIOD_TRACKER = True
@@ -74,7 +76,6 @@ ENABLE_WIDGET_MODE = True
 ENABLE_EMAIL_OTP_VERIFICATION = True
 ENABLE_EMAIL_OTP_API_VERIFICATION = True
 ENABLE_BEHAVIORAL_SYNOPSIS = True
-# NEW in v100.9: Feature flag for CORS policy
 ENABLE_SECURE_CORS_POLICY = False # !!! SET TO TRUE FOR PRODUCTION DEPLOYMENT !!!
 # ---
 app = Flask(__name__)
@@ -89,22 +90,43 @@ app.config['ENABLE_WIDGET_MODE'] = ENABLE_WIDGET_MODE
 app.config['ENABLE_EMAIL_OTP_VERIFICATION'] = ENABLE_EMAIL_OTP_VERIFICATION
 app.config['ENABLE_EMAIL_OTP_API_VERIFICATION'] = ENABLE_EMAIL_OTP_API_VERIFICATION
 
-# --- FIX v98.0, v98.1, v98.2: Persistent Storage for Production ---
+# --- DUAL-BACKEND PERSISTENT STORAGE CONFIGURATION (v101.4) ---
 # Check for a persistent storage path from an environment variable (set in Render).
-# If it exists, use it. Otherwise, fall back to local directories for development.
 DATA_BASE_PATH = os.environ.get('PERSISTENT_DATA_PATH', '.')
 
 # Configure Server-Side Sessions for Monolith Mode (Production Ready)
-# This ensures session files are also saved to the persistent disk on Render.
 SESSION_DIR = os.path.join(DATA_BASE_PATH, "flask_session")
 os.makedirs(SESSION_DIR, exist_ok=True)
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SESSION_FILE_DIR'] = SESSION_DIR
 Session(app)
 
+# --- Conditional Backend Setup ---
+if ENABLE_SQLITE_DATABASE:
+    # --- SQLITE DATABASE CONFIGURATION ---
+    DATABASE_FILE = 'tyra_prod.db'
+    DATABASE_PATH = os.path.join(DATA_BASE_PATH, DATABASE_FILE)
 
-# --- FIX v98.0, v98.1, v98.2: Persistent Storage for Production ---
-PROFILES_DIR = os.path.join(DATA_BASE_PATH, "user_profiles")
+    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DATABASE_PATH}'
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    db = SQLAlchemy(app)
+
+    class User(db.Model):
+        id = db.Column(db.Integer, primary_key=True)
+        profile_hash = db.Column(db.String(64), unique=True, nullable=False, index=True) 
+        profile_json = db.Column(db.Text, nullable=False)
+        def to_dict(self): return json.loads(self.profile_json)
+
+    with app.app_context():
+        db.create_all()
+    # --- END SQLITE CONFIGURATION ---
+else:
+    # --- JSON FILE STORAGE CONFIGURATION (Legacy Fallback) ---
+    PROFILES_DIR = os.path.join(DATA_BASE_PATH, "user_profiles")
+    os.makedirs(PROFILES_DIR, exist_ok=True)
+    # --- END JSON FILE CONFIGURATION ---
+
+# Define other persistent data paths
 UPLOADS_DIR = os.path.join(DATA_BASE_PATH, "temp_uploads")
 SHARED_REPORTS_DIR = os.path.join(DATA_BASE_PATH, "shared_reports")
 TRIBHER_DATA_FILE = os.path.join(DATA_BASE_PATH, "tribher_data_final.json")
@@ -115,23 +137,20 @@ STATIC_CSS_DIR = os.path.join('static', 'css')
 STATIC_JS_DIR = os.path.join('static', 'js')
 LOCALES_DIR = "locales"
 
-# Create all necessary directories
-os.makedirs(PROFILES_DIR, exist_ok=True)
+# Create all necessary non-profile directories
 os.makedirs(UPLOADS_DIR, exist_ok=True)
-os.makedirs(SHARED_REPORTS_DIR, exist_ok=True) # Create the directory first
-SHARED_REPORTS_DB_FILE = os.path.join(SHARED_REPORTS_DIR, "shared_reports_db.json") # Then define the file path within it
+os.makedirs(SHARED_REPORTS_DIR, exist_ok=True)
+SHARED_REPORTS_DB_FILE = os.path.join(SHARED_REPORTS_DIR, "shared_reports_db.json")
 os.makedirs(STATIC_CSS_DIR, exist_ok=True)
 os.makedirs(STATIC_JS_DIR, exist_ok=True)
 os.makedirs(LOCALES_DIR, exist_ok=True)
-# --- End of Fix ---
-
+# --- End of Storage Configuration ---
 
 TRIBHER_DATA = None
 MILESTONES_DATA = None
 gemini_model = None
 llm_response_cache = {}
 ip_request_timestamps = {}
-# In-memory store for API OTPs. In production, use Redis or a database.
 api_otp_store = {}
 
 
@@ -830,15 +849,39 @@ def calculate_child_ages(profile):
         details['last_child_birth_ago'] = f"{min_total_months // 12} years, {min_total_months % 12} months"
 
 def get_profile_hash(identifier): return hashlib.sha256(identifier.strip().lower().encode()).hexdigest()
+
+# --- DATABASE/FILE DISPATCHER FUNCTIONS (v101.4) ---
 def save_profile(profile_hash, data):
-    with open(os.path.join(PROFILES_DIR, f"{profile_hash}.json"), 'w') as f: json.dump(data, f, indent=4)
+    """Dispatcher function to save a profile to the configured backend."""
+    if ENABLE_SQLITE_DATABASE:
+        user = User.query.filter_by(profile_hash=profile_hash).first()
+        profile_as_string = json.dumps(data, indent=4)
+        if user:
+            user.profile_json = profile_as_string
+        else:
+            user = User(profile_hash=profile_hash, profile_json=profile_as_string)
+            db.session.add(user)
+        db.session.commit()
+    else: # Fallback to JSON file storage
+        with open(os.path.join(PROFILES_DIR, f"{profile_hash}.json"), 'w') as f:
+            json.dump(data, f, indent=4)
+
 def load_profile(profile_hash):
-    filepath = os.path.join(PROFILES_DIR, f"{profile_hash}.json")
-    if os.path.exists(filepath):
-        try:
-            with open(filepath, 'r') as f: return json.load(f)
-        except json.JSONDecodeError: return None
-    return None
+    """Dispatcher function to load a profile from the configured backend."""
+    if ENABLE_SQLITE_DATABASE:
+        user = User.query.filter_by(profile_hash=profile_hash).first()
+        if user:
+            return user.to_dict()
+        return None
+    else: # Fallback to JSON file storage
+        filepath = os.path.join(PROFILES_DIR, f"{profile_hash}.json")
+        if os.path.exists(filepath):
+            try:
+                with open(filepath, 'r') as f:
+                    return json.load(f)
+            except json.JSONDecodeError:
+                return None
+        return None
 
 # --- NEW: BEHAVIORAL SYNOPSIS LOGIC ---
 def _generate_behavioral_synopsis(profile):
@@ -2057,6 +2100,31 @@ def view_report(report_id):
     # This securely serves the file from the absolute path directory.
     filename = os.path.basename(report_data['filepath'])
     return send_from_directory(SHARED_REPORTS_DIR, filename)
+
+# --- ADMIN DEBUG ENDPOINT (NEW for v101.4) ---
+# This route is only active when the SQLite backend is enabled
+if ENABLE_SQLITE_DATABASE:
+    # WARNING: This endpoint provides direct download access to the production database.
+    # It MUST be protected by a strong, unpredictable secret key set as an environment variable.
+    @app.route('/admin/backup/download_db/<secret_key>')
+    def download_database(secret_key):
+        # Load the secret key from the environment variables
+        correct_key = os.environ.get('ADMIN_SECRET_KEY')
+        
+        # 1. Check if a key is configured and if the provided key matches
+        if not correct_key or secret_key != correct_key:
+            return "Unauthorized", 401
+
+        # 2. Use the persistent path to find the database file
+        # (The same path variables we defined at the top of the file)
+        db_directory = DATA_BASE_PATH
+        db_filename = DATABASE_FILE
+
+        # 3. Securely send the file for download
+        try:
+            return send_from_directory(db_directory, db_filename, as_attachment=True)
+        except FileNotFoundError:
+            return "Database file not found on the server.", 404
 
 if __name__ == '__main__':
     if not app.config.get("FLASK_SECRET_KEY"):

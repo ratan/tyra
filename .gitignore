@@ -6,4 +6,4 @@ user_profiles/
 temp_uploads/
 shared_reports/
 flask_session/
-
+instance/
