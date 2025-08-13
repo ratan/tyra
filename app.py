@@ -1,4 +1,4 @@
-# app.py (v100.7)
+# app.py (v100.9)
 import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets
 from datetime import datetime, timedelta, timezone
 from flask import Flask, Response, render_template, request, jsonify, session, redirect, url_for, send_from_directory, g
@@ -37,7 +37,7 @@ BEHAVIORAL_SYNOPSIS_MIN_INTERACTIONS = 15
 PROGRAM_SUGGESTION_COOLDOWN_DAYS = 3
 MAX_CYCLE_HISTORY = 120
 
-# NEW in v100.4: Secure CORS allow-list
+# Secure CORS allow-list for production
 ALLOWED_ORIGINS = [
     'http://localhost:8000',
     'https://tribher.com',
@@ -74,6 +74,8 @@ ENABLE_WIDGET_MODE = True
 ENABLE_EMAIL_OTP_VERIFICATION = True
 ENABLE_EMAIL_OTP_API_VERIFICATION = True
 ENABLE_BEHAVIORAL_SYNOPSIS = True
+# NEW in v100.9: Feature flag for CORS policy
+ENABLE_SECURE_CORS_POLICY = False # !!! SET TO TRUE FOR PRODUCTION DEPLOYMENT !!!
 # ---
 app = Flask(__name__)
 
@@ -133,17 +135,20 @@ ip_request_timestamps = {}
 api_otp_store = {}
 
 
-# --- FIX v100.7: Add CORS headers to non-preflight requests ---
+# --- FIX v100.9: Add CORS headers to non-preflight requests, respecting the feature flag ---
 @app.after_request
 def after_request(response):
     if app.config['ENABLE_WIDGET_MODE']:
-        origin = request.headers.get('Origin')
-        if origin in ALLOWED_ORIGINS:
-            response.headers['Access-Control-Allow-Origin'] = origin
-            # Note: The other headers are now handled in the before_request for preflight
-            # but can also be added here for completeness on actual requests.
-            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
-            response.headers['Access-Control-Allow-Methods'] = 'POST, GET, OPTIONS, PUT, DELETE'
+        if ENABLE_SECURE_CORS_POLICY:
+            origin = request.headers.get('Origin')
+            if origin in ALLOWED_ORIGINS:
+                response.headers['Access-Control-Allow-Origin'] = origin
+        else:
+            # Insecure mode for testing
+            response.headers['Access-Control-Allow-Origin'] = '*'
+
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Allow-Methods'] = 'POST, GET, OPTIONS, PUT, DELETE'
     return response
 
 # --- Token Helper Functions (for Widget Mode) ---
@@ -187,26 +192,24 @@ def token_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-# --- FIX v100.7: Correctly handle CORS Preflight & Throttling ---
+# --- FIX v100.9: Handle CORS Preflight & Throttling, respecting the feature flag ---
 @app.before_request
 def before_request_handler():
     # 1. Handle CORS Preflight (OPTIONS) requests
-    # This must run before throttling or any other checks.
     if request.method.upper() == 'OPTIONS':
-        # Create an empty response object with a 200 OK status.
         resp = Response(status=200)
 
-        # Manually add the required CORS headers to this preflight response.
-        # This is crucial because returning a response from a before_request function
-        # bypasses the after_request handlers.
-        origin = request.headers.get('Origin')
-        if origin in ALLOWED_ORIGINS:
-            resp.headers['Access-Control-Allow-Origin'] = origin
+        if ENABLE_SECURE_CORS_POLICY:
+            origin = request.headers.get('Origin')
+            if origin in ALLOWED_ORIGINS:
+                resp.headers['Access-Control-Allow-Origin'] = origin
+        else:
+            # Insecure mode for testing
+            resp.headers['Access-Control-Allow-Origin'] = '*'
 
         resp.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
         resp.headers['Access-Control-Allow-Methods'] = 'POST, GET, OPTIONS, PUT, DELETE'
 
-        # Return the response immediately to satisfy the browser's preflight check.
         return resp
 
     # 2. Handle Throttling for all other (non-OPTIONS) requests
@@ -1891,7 +1894,7 @@ if not app.config['ENABLE_WIDGET_MODE']:
             if not verified_email:
                 return jsonify({"status": "error", "message": "OTP not verified. Please start over."}), 403
 
-            data = request.get_json()
+            data = request.json
             name, age_str = data.get('name'), data.get('age')
             if not name or not age_str:
                 return jsonify({"status": "error", "message": "Name and age are required."}), 400
