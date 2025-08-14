@@ -1,4 +1,4 @@
-/* static/css/tyra_widget.css */
+/* static/css/tyra_widget.css (v101.5 - Scoping & Sizing Fixes) */
 :root {
     --primary-color: #8B4A9C; /* Deep Purple */
     --secondary-color: #A855A8; /* Lighter Purple */
@@ -77,7 +77,16 @@
     transform: translateY(20px);
     visibility: hidden;
     transition: opacity 0.3s ease, transform 0.3s ease, visibility 0.3s;
+    /* FIX v101.5: Establish a stable font-size base for the widget */
+    font-size: 16px; 
 }
+
+/* FIX v101.5: Apply border-box sizing to all elements within the widget */
+/* This prevents padding and borders from causing horizontal scrollbars. */
+.tyra-widget-container *, .tyra-widget-container *::before, .tyra-widget-container *::after {
+    box-sizing: border-box;
+}
+
 
 .tyra-widget-container.open {
     opacity: 1;
@@ -102,7 +111,6 @@
     justify-content: space-between;
     align-items: center;
     min-height: 50px;
-    box-sizing: border-box;
 }
 
 .tyra-widget-header h3 {
@@ -178,7 +186,6 @@
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius);
     margin-bottom: 15px;
-    box-sizing: border-box;
     font-size: 1em;
 }
 
@@ -376,6 +383,8 @@
     border-bottom: 1px solid var(--border-color);
     padding-bottom: 8px;
     margin-bottom: 10px;
+    /* Use em so header scales with base font-size */
+    font-size: 1.1em; 
 }
 .tyra-widget ul { list-style: none; padding: 0; margin: 0; }
 .tyra-widget li {
@@ -384,15 +393,26 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+    /* Use em for consistent text sizing */
+    font-size: 0.9em;
 }
 .tyra-widget li:last-child { border-bottom: none; }
 .tyra-reminder-item button {
+    /* FIX v101.5: Explicitly size the button and its contents */
     background-color: #4CAF50;
     color: white;
     border: none;
     border-radius: 50%;
-    width: 24px; height: 24px;
-    cursor: pointer; font-weight: bold;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0; /* Prevents button from shrinking */
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 16px; /* Use px for the icon to prevent scaling */
+    line-height: 1; /* Center the checkmark vertically */
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 .tyra-cycle-stats .stat-value {
     font-size: 1.5em; font-weight: bold; color: var(--secondary-color);
