@@ -1,4 +1,4 @@
-/* static/css/tyra_widget.css (v101.5 - Scoping & Sizing Fixes) */
+/* static/css/tyra_widget.css (v101.6 - Dashboard Layout Fix) */
 :root {
     --primary-color: #8B4A9C; /* Deep Purple */
     --secondary-color: #A855A8; /* Lighter Purple */
@@ -417,7 +417,13 @@
 .tyra-cycle-stats .stat-value {
     font-size: 1.5em; font-weight: bold; color: var(--secondary-color);
 }
-.tyra-export-buttons { display: flex; gap: 10px; margin-top: 10px; }
+.tyra-export-buttons {
+    /* FIX v101.6: Stack buttons vertically */
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 10px;
+}
 .tyra-export-buttons button, .tyra-share-link-container button {
     flex-grow: 1; padding: 8px; border-radius: 4px; border: 1px solid var(--primary-color);
     background-color: var(--primary-color); color: white; cursor: pointer;
