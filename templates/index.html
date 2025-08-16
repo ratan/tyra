@@ -551,8 +551,16 @@ document.addEventListener('DOMContentLoaded', function() {
         const messageText = inputs.userInput.value.trim();
         if (!messageText && !selectedFile) return;
 
-        if (messageText) { appendMessage(messageText, 'user'); } 
-        else if (selectedFile) { appendMessage(`(File: ${selectedFile.name})`, 'user'); }
+        // --- START OF CHANGES (v101.7) ---
+        // 1. Add user message but disable auto-scrolling for now, and capture the element.
+        let userMessageDiv = null;
+        if (messageText) { 
+            userMessageDiv = appendMessage(messageText, 'user', false); 
+        } else if (selectedFile) { 
+            userMessageDiv = appendMessage(`(File: ${selectedFile.name})`, 'user', false); 
+        }
+        // --- END OF CHANGES ---
+
         inputs.userInput.value = '';
 
         let endpoint = '/chat';
@@ -580,10 +588,11 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
-        // --- FIX v100.1: Signal that dashboard data is now stale ---
         localStorage.setItem('dashboardNeedsRefresh', 'true');
 
-        appendMessage(data.reply, 'ai');
+        // --- START OF CHANGES (v101.7) ---
+        // 2. Add AI's reply, also with auto-scrolling disabled.
+        appendMessage(data.reply, 'ai', false);
         
         if (data.action === 'prompt_signup') {
             modals.identifierForm.classList.remove('hidden');
@@ -595,7 +604,14 @@ document.addEventListener('DOMContentLoaded', function() {
         if (data.chart_type) {
             renderVisualization(data.chart_type, data.target_date);
         }
+
+        // 3. Now, scroll the original user question to the top of the view.
+        if (userMessageDiv) {
+            userMessageDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        // --- END OF CHANGES ---
     }
+
 
     // --- HELPER & UTILITY FUNCTIONS ---
     function showSection(sectionName) {
@@ -635,7 +651,8 @@ document.addEventListener('DOMContentLoaded', function() {
         inputs.chatLog.innerHTML = `<div class="message ai-message"><p>${message}</p></div>`;
     }
 
-    function appendMessage(content, sender) {
+    // FIX v101.7: Modified function to support targeted scrolling
+    function appendMessage(content, sender, doAutoScroll = true) {
         const div = document.createElement('div');
         div.classList.add('message', sender === 'user' ? 'user-message' : 'ai-message');
         if (sender === 'user') {
@@ -646,7 +663,10 @@ document.addEventListener('DOMContentLoaded', function() {
             div.innerHTML = content;
         }
         inputs.chatLog.appendChild(div);
-        inputs.chatLog.scrollTop = inputs.chatLog.scrollHeight;
+        if (doAutoScroll) {
+            inputs.chatLog.scrollTop = inputs.chatLog.scrollHeight;
+        }
+        return div; // Return the created element
     }
     
     async function renderVisualization(visType, targetDate = null) {

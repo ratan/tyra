@@ -1,4 +1,4 @@
-// static/js/tyra_widget.js
+// static/js/tyra_widget.js (v101.7 - Targeted Scroll Fix)
 (function() {
     'use strict';
 
@@ -207,13 +207,13 @@
         }
     }
     
-    function addMessage(htmlContent, sender, type = 'text') {
+    // FIX v101.7: Modified function to support targeted scrolling
+    function addMessage(htmlContent, sender, type = 'text', doAutoScroll = true) {
         const chatLog = state.targetElement.querySelector('.tyra-chat-log');
         if (!chatLog) return;
         const messageDiv = document.createElement('div');
         messageDiv.classList.add('tyra-message', `tyra-${sender}-message`);
 
-        // FIX v95.8: Handle 'bar' and 'line' types specifically for charts.
         if (['bar', 'line'].includes(type)) {
             messageDiv.classList.add('tyra-chart-container');
             const canvas = document.createElement('canvas');
@@ -228,8 +228,14 @@
         }
         
         chatLog.appendChild(messageDiv);
-        // FIX: Auto-scroll to the bottom
-        chatLog.scrollTop = chatLog.scrollHeight;
+        
+        // Only scroll to the bottom if requested (default is true)
+        if (doAutoScroll) {
+            chatLog.scrollTop = chatLog.scrollHeight;
+        }
+
+        // Return the created element so it can be targeted
+        return messageDiv;
     }
 
     function setFormError(formId, message) {
@@ -239,7 +245,6 @@
 
     // --- API & DATA HANDLING ---
     const api = {
-        // FIX v95.7: Re-engineer `get` to robustly handle URL parameters
         async get(endpoint, params = {}, isBlob = false) {
             const headers = { 'Authorization': `Bearer ${state.jwtToken}` };
             const url = new URL(`${state.apiUrl}/api/v1/${endpoint}`);
@@ -292,7 +297,6 @@
 
     // --- EVENT HANDLERS & LOGIC ---
     function bindEventListeners() {
-        // These listeners are rebound each time render() is called for the current view
         const navButton = state.targetElement.querySelector('#tyra-header-nav-btn');
         if (navButton) navButton.addEventListener('click', onNavButtonClick);
 
@@ -453,18 +457,26 @@
         const messageText = input.value.trim();
         if (!messageText) return;
         
-        addMessage(messageText, 'user');
+        // FIX v101.7: Add user message but disable auto-scrolling for now.
+        const userMessageDiv = addMessage(messageText, 'user', 'text', false);
         input.value = '';
         
-        // --- FIX v100.2: Signal that dashboard data is now stale ---
         state.isDashboardStale = true;
 
         const { ok, data } = await api.post('chat', { message: messageText });
         if (ok) {
-            addMessage(data.reply, 'ai');
-            if(data.chart_type) renderChartInChat(data.chart_type, data.target_date);
+            // FIX v101.7: Add AI message, also with auto-scrolling disabled.
+            addMessage(data.reply, 'ai', 'text', false);
+            if(data.chart_type) {
+                renderChartInChat(data.chart_type, data.target_date);
+            }
         } else {
             addMessage(data.error || 'Sorry, an error occurred.', 'ai');
+        }
+
+        // FIX v101.7: After both messages are added, scroll the user's question into view.
+        if (userMessageDiv) {
+            userMessageDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
     }
 
@@ -523,7 +535,6 @@
         if (!button) return;
         const { logCategory, logValue, logLabel } = button.dataset;
 
-        // --- FIX v100.2: Signal that dashboard data is now stale ---
         state.isDashboardStale = true;
 
         addMessage(logLabel, 'user');
@@ -583,13 +594,11 @@
 
     async function renderChartInChat(chartType, targetDate) {
         if (state.isGuest) return;
-        // FIX v95.7: Standardize API call to use params object
         const params = { type: chartType };
         if (targetDate) params.target_date = targetDate;
         try {
             const config = await api.get('chart_data', params);
             if(config.type) {
-                // CRITICAL FIX v95.6: Pass the type ('chart' or 'calendar') to addMessage
                 addMessage(config, 'ai', config.type);
             }
         } catch (e) {
@@ -602,12 +611,11 @@
         const container = state.targetElement.querySelector('.tyra-dashboard-view');
         container.innerHTML = '<p>Loading dashboard...</p>';
         try {
-            // FIX v100.2: Only fetch new data if it's stale or doesn't exist
             if (state.isDashboardStale || !state.dashboardData) {
                 state.dashboardData = await api.get('dashboard_data');
-                state.isDashboardStale = false; // Reset the flag after fetching
+                state.isDashboardStale = false;
             }
-            const data = state.dashboardData; // Use the (potentially new) data
+            const data = state.dashboardData;
             
             const widgets = {
                 cycle: () => {
@@ -674,7 +682,6 @@
     }
     
     async function renderDashboardCharts() {
-        // FIX v95.7: Standardize API call to use params object
         try {
             const cycleChartConfig = await api.get('chart_data', { type: 'cycle_length' });
             new Chart(document.getElementById('tyra-cycle-chart').getContext('2d'), cycleChartConfig);
@@ -696,7 +703,6 @@
             button.textContent = 'Generating...';
             button.disabled = true;
             try {
-                // FIX v95.7: Use the robust api.get helper for file downloads
                 const blob = await api.get(`export/${format}`, {}, true);
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
