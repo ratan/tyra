@@ -214,8 +214,15 @@ https://ai.google.dev/gemini-api/docs/rate-limits#free-tier
 3.  TBD
 4.  TBD
 
+#### **Point 7: SCP to Render**
+1.  From Render, Shell, SSH Address: ssh srv-d2675ure5dus73d8l7qg@ssh.singapore.render.com
+2.  ssh srv-d2675ure5dus73d8l7qg@ssh.singapore.render.com
+3.  When asked, enter yes
+4.  cd /data/tyra/
+5.  You can see all the persistant files
+6.  scp -r milestones_data.json srv-d2675ure5dus73d8l7qg@ssh.singapore.render.com:/data/tyra
 
-#### **Point 7: Language Support**
+#### **Point 8: Language Support**
 ```html
 <select name="language" id="language" required>
     <option value="en" selected>English</option>
