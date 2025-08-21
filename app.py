@@ -1,4 +1,4 @@
-# app.py (v101.4 - Dual-Backend Persistence)
+# app.py (v102.1 - Robustness Bug Fix)
 import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets
 from datetime import datetime, timedelta, timezone
 from flask import Flask, Response, render_template, request, jsonify, session, redirect, url_for, send_from_directory, g
@@ -37,6 +37,7 @@ BEHAVIORAL_SYNOPSIS_INTERVAL_DAYS = 3
 BEHAVIORAL_SYNOPSIS_MIN_INTERACTIONS = 15
 PROGRAM_SUGGESTION_COOLDOWN_DAYS = 3
 MAX_CYCLE_HISTORY = 120
+MAX_KEY_MEMORIES = 15 # NEW in v102.0
 
 # Secure CORS allow-list for production
 ALLOWED_ORIGINS = [
@@ -1217,25 +1218,34 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
         session['pending_action_context'] = potential_reminder_data
         action_response = f"I noticed you mentioned your '{potential_reminder_data.get('text')}'. Would you like me to set a reminder for that?"
 
-    # --- RESTORED v98.8: AI Follow-up Questions for Negative Logs ---
+    # --- RESTORED v98.8 & ENHANCED v101.9: AI Follow-up Questions for Negative Logs ---
     if not action_response and ENABLE_EXPANDED_LOGGING and insights.get('health_log'):
         log_data = insights['health_log']
         profile.setdefault('health_logs', []).insert(0, {"timestamp": datetime.now().isoformat(), **log_data})
         
         category, value = log_data.get('category'), log_data.get('value')
-        lang_data = load_language_data(profile.get('language', 'en'))
-        confirmation_key = f"quick_log_confirm_{value.replace(' ', '_')}_{category}"
-        confirmation_message = lang_data.get(confirmation_key, lang_data.get("quick_log_confirm_fallback"))
         
-        negative_log_values = ['high', 'poor', 'terrible', 'anxious', 'headache', 'cramps']
-        if ENABLE_AI_FOLLOW_UP_QUESTIONS and value in negative_log_values:
-            special_context = {
-                "type": "empathetic_follow_up",
-                "confirmation_message": confirmation_message,
-                "log_details": log_data
-            }
-        else:
-            action_response = confirmation_message
+        # --- BUG FIX v102.1: Add a guard clause ---
+        # Check if both category and value were successfully extracted by the AI.
+        # If not, skip this block and fall through to the general AI response.
+        if category and value:
+            lang_data = load_language_data(profile.get('language', 'en'))
+            confirmation_key = f"quick_log_confirm_{value.replace(' ', '_')}_{category}"
+            confirmation_message = lang_data.get(confirmation_key, lang_data.get("quick_log_confirm_fallback"))
+            
+            # --- NEW v101.9: Expanded list of empathetic triggers ---
+            negative_log_values = [
+                'high', 'poor', 'terrible', 'anxious', 'sad', 'stressed', 
+                'overwhelmed', 'exhausted', 'headache', 'cramps', 'painful'
+            ]
+            if ENABLE_AI_FOLLOW_UP_QUESTIONS and value in negative_log_values:
+                special_context = {
+                    "type": "empathetic_follow_up",
+                    "confirmation_message": confirmation_message,
+                    "log_details": log_data
+                }
+            else:
+                action_response = confirmation_message
 
     if new_pending_question:
         session['pending_question'] = new_pending_question
@@ -1287,7 +1297,28 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
     
     try:
         response = gemini_model.generate_content(f"{context_prompt}\n{user_message}")
-        reply = response.text
+        raw_reply = response.text
+        
+        # --- NEW in v102.0: Conversational Memory Processing ---
+        memory_match = re.search(r"\[SUGGEST_MEMORY:\s*(.*?)\]", raw_reply)
+        if memory_match:
+            memory_text = memory_match.group(1).strip()
+            if memory_text:
+                profile.setdefault("key_memories", [])
+                new_memory = {
+                    "memory": memory_text,
+                    "timestamp": datetime.now(timezone.utc).strftime('%Y-%m-%d')
+                }
+                # Avoid duplicate memories
+                if not any(mem['memory'] == new_memory['memory'] for mem in profile["key_memories"]):
+                    profile["key_memories"].insert(0, new_memory)
+                    # Prune old memories if list is too long
+                    profile["key_memories"] = profile["key_memories"][:MAX_KEY_MEMORIES]
+            # Clean the tag from the reply that will be sent to the user
+            reply = re.sub(r"\[SUGGEST_MEMORY:\s*(.*?)\]", "", raw_reply).strip()
+        else:
+            reply = raw_reply
+
     except Exception as e:
         reply = f"Sorry, an error occurred: {e}"
     
@@ -2131,4 +2162,4 @@ if __name__ == '__main__':
         raise ValueError("No FLASK_SECRET_KEY set for Flask application.")
     if app.config.get('ENABLE_EMAIL_OTP_VERIFICATION') and (not app.config.get("SENDGRID_API_KEY") or not app.config.get("SENDER_EMAIL")):
         print("WARNING: ENABLE_EMAIL_OTP_VERIFICATION is True, but SENDGRID_API_KEY or SENDER_EMAIL is not set. OTP emails will fail.")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5001, debug=True)

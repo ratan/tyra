@@ -1,9 +1,10 @@
-# user_profiler.py
+# user_profiler.py (v102.0 - Conversational Memory)
 from datetime import datetime
 import dateparser
 
 PROMPT_HISTORY_LIMIT = 5
 RECENT_LOG_LIMIT = 7
+KEY_MEMORIES_LIMIT = 5 # NEW in v102.0
 
 # BUG FIX v92.0: Add Arabic to the language map
 LANG_MAP = {
@@ -41,7 +42,8 @@ def create_user_profile(name, email, phone, age, details, lang_code='en'):
         "health_logs": [],
         "medication_log": [],
         "goals": [],
-        "interaction_log": []
+        "interaction_log": [],
+        "key_memories": [] # NEW in v102.0
     }
     if age <= 19: profile["primary_category"] = "Adolescence/Teen"
     elif 20 <= age <= 39: profile["primary_category"] = "Young Adulthood"
@@ -79,13 +81,45 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
     age = profile.get("age", "Not specified")
     details = profile.get("secondary_details", {})
 
-    # --- FIX v98.0: Corrected main instruction for better conversational flow ---
-    if is_first_greeting_of_day:
-        main_instruction = f"Your name is {chatbot_name}. You are a helpful and compassionate AI assistant specializing in women's health. This is the user's first interaction today. Start with a warm, personalized greeting for {name}. Then, on a new line, answer their question directly. Use the user's profile context below to make your answer personal and relevant, but only if it naturally applies to the question. When stating dates, use the full date (e.g., 'June 30, 2025') and avoid relative terms like 'today' or 'tomorrow'."
-    else:
-        main_instruction = f"Your name is {chatbot_name}. You are a helpful and compassionate AI assistant specializing in women's health. Your primary goal is to answer the user's question directly and accurately. Use the provided user profile context to make your response more personal and relevant, but only if the context applies naturally to the user's question."
+    # --- NEW v101.8: Explicit Persona Definition ---
+    persona_instruction = (
+        f"--- CORE PERSONA: {chatbot_name} ---\n"
+        "1.  **Your Role:** You are an empathetic wellness companion, not a clinical doctor.\n"
+        "2.  **Your Traits:** You are calm, knowledgeable, encouraging, and completely non-judgmental.\n"
+        "3.  **Your Tone:** Your tone is warm and supportive. Avoid being overly bubbly or using excessive emojis.\n"
+        "4.  **CRITICAL RULE:** Always validate the user's feelings, especially when they express distress. Never be dismissive."
+    )
 
-    context_lines = [language_instruction, "\n" + main_instruction, "--- USER PROFILE ---", f"Name: {name}", f"Age: {age}", f"Life Stage Category: {profile.get('primary_category', 'Not specified')}"]
+    # --- NEW v102.0: Memory Protocol Instruction ---
+    memory_protocol = (
+        "--- MEMORY PROTOCOL ---\n"
+        "If the user mentions a significant, forward-looking life event (e.g., an upcoming exam, a new job, a vacation, a doctor's appointment), you MUST embed a special tag in your response for the system to save it. The tag format is `[SUGGEST_MEMORY: Text of the memory]`. The system will remove this tag before showing the user your message.\n"
+        "Example User Message: 'I'm so stressed, I have a huge final exam next Friday.'\n"
+        "Example AI Response: That sounds very stressful. Make sure to take breaks! [SUGGEST_MEMORY: User has a final exam next Friday]\n"
+        "DO NOT use this for simple health logs like 'I have a headache'."
+    )
+    
+    # --- MODIFIED v101.8: Main instruction now includes the empathetic response pattern ---
+    if is_first_greeting_of_day:
+        main_instruction = f"Your name is {chatbot_name}. Start with a warm, personalized greeting for {name}. Then, on a new line, answer their question directly. When stating dates, use the full date (e.g., 'June 30, 2025') and avoid relative terms like 'today' or 'tomorrow'."
+    else:
+        main_instruction = (
+            f"Your name is {chatbot_name}. Your primary goal is to answer the user's question directly and accurately. "
+            "When the user expresses a negative feeling or symptom (e.g., stress, sadness, pain), your response structure MUST be:\n"
+            "1.  **Validate their feeling** (e.g., 'That sounds really tough,' or 'I'm sorry you're dealing with that.').\n"
+            "2.  **Directly answer their question or confirm the action** (e.g., 'I've logged that for you.').\n"
+            "3.  **Gently offer support** (e.g., 'If you'd like to talk more about it, I'm here to listen.').\n\n"
+            "Use the provided user profile context below to make your response more personal and relevant."
+        )
+
+    context_lines = [
+        language_instruction,
+        "\n" + persona_instruction,
+        "\n" + memory_protocol,
+        "\n" + main_instruction,
+        "--- USER PROFILE ---",
+        f"Name: {name}", f"Age: {age}", f"Life Stage Category: {profile.get('primary_category', 'Not specified')}"
+    ]
     
     if details.get('is_trying_to_conceive'): context_lines.append(f"- Is trying to conceive for {details.get('months_trying', 'N/A')} months.")
     if details.get('is_pregnant'): context_lines.append(f"- Is currently pregnant: {details.get('weeks_gestation', 'N/A')} weeks gestation ({details.get('current_trimester', 'N/A')}).")
@@ -95,13 +129,20 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
         context_lines.append(f"- Is a parent of {num_children} child/children. Last child born {details.get('last_child_birth_ago', 'not specified')} ago. Ages: {ages_str}.")
     if details.get('is_perimenopausal'): context_lines.append("- Is experiencing perimenopause symptoms.")
     
+    # --- NEW v102.0: Add Key Memories to context ---
+    memories = profile.get("key_memories", [])
+    if memories:
+        context_lines.append("\n--- KEY MEMORIES (User's significant life events) ---")
+        for mem in memories[:KEY_MEMORIES_LIMIT]:
+            context_lines.append(f"- On {mem['timestamp']}: {mem['memory']}")
+        context_lines.append("INSTRUCTION: You can occasionally and naturally reference an older, relevant memory to build rapport and show you remember the user's journey. Do this subtly.")
+
     synopsis_data = profile.get("behavioral_synopsis", {})
     if synopsis_data and synopsis_data.get('synopsis'):
         context_lines.append("\n--- BEHAVIORAL SYNOPSIS (User's recent focus) ---")
         for point in synopsis_data['synopsis']:
             context_lines.append(f"- {point}")
 
-    # --- BUG FIX v97.3: Conditionally show detailed data only on request ---
     if is_summary_request:
         meds = profile.get("medication_log", [])
         if meds:
@@ -210,6 +251,5 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
              context_lines.append(f"The user's question is likely a follow-up about the '{last_discussed_program_context.get('name')}' which was just discussed. Use this context to answer accurately.")
              context_lines.append(format_program_for_prompt(last_discussed_program_context))
 
-    # --- FIX v98.0: Corrected final instruction ---
     context_lines.append("\n---\nINSTRUCTION: Now, provide a helpful and direct answer to the user's question. Use the context above to personalize your response where it is relevant.\n\nUSER QUESTION: ")
     return "\n".join(context_lines)
