@@ -105,5 +105,15 @@
   "otp_placeholder": "6-digit code",
   "otp_sent_message": "An OTP has been sent to {email}. It will expire in 5 minutes.",
   "otp_invalid_error": "Invalid or expired OTP. Please try again.",
-  "otp_request_failed": "Could not send OTP. Please check the email and try again."
+  "otp_request_failed": "Could not send OTP. Please check the email and try again.",
+  "onboarding_ask_name": "It looks like you're new here! I'm Tyra, your personal wellness companion. To get started, what's your first name or a nickname you'd like me to use?",
+  "onboarding_ask_language": "It's lovely to meet you, {name}! To make sure we understand each other perfectly, please select your preferred language below.",
+  "onboarding_language_select_placeholder": "Select your language...",
+  "onboarding_ask_age": "Thank you! What is your age?",
+  "onboarding_ask_details_adult": "Thanks! Just one last question to help me personalize your experience. Is there anything specific on your mind right now? For example, are you trying to conceive, currently pregnant, a new mom, or perhaps navigating perimenopause or menopause?",
+  "onboarding_ask_details_teen": "Got it. To help me be more useful, are you interested in things like understanding your cycle better, managing stress, or something else?",
+  "onboarding_ask_details_senior": "Thank you. Are there any particular wellness topics you'd like to focus on, such as managing menopause symptoms or maintaining energy levels?",
+  "onboarding_complete": "Perfect, we're all set up, {name}! Your profile is ready. How can I help you today?",
+  "onboarding_invalid_name": "That name seems a bit short. Could you please provide a valid name?",
+  "onboarding_invalid_age": "Please enter a valid age between 13 and 100."
 }

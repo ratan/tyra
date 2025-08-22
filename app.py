@@ -1,4 +1,4 @@
-# app.py (v102.1 - Robustness Bug Fix)
+# app.py (v103.1 - Conversational Onboarding Language Fix)
 import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets
 from datetime import datetime, timedelta, timezone
 from flask import Flask, Response, render_template, request, jsonify, session, redirect, url_for, send_from_directory, g
@@ -47,6 +47,7 @@ ALLOWED_ORIGINS = [
 ]
 
 # --- Feature Flags ---
+ENABLE_CONVERSATIONAL_ONBOARDING = True # NEW in v103.0: Toggles between chat-based and form-based new user setup.
 ENABLE_SQLITE_DATABASE = True # NEW in v101.4: Toggles between SQLite and JSON file storage
 ENABLE_MULTI_LANGUAGE = True
 ENABLE_TRIBHER_SUGGESTIONS = True
@@ -90,6 +91,7 @@ app.config['SECRET_KEY'] = app.config.get("FLASK_SECRET_KEY")
 app.config['ENABLE_WIDGET_MODE'] = ENABLE_WIDGET_MODE
 app.config['ENABLE_EMAIL_OTP_VERIFICATION'] = ENABLE_EMAIL_OTP_VERIFICATION
 app.config['ENABLE_EMAIL_OTP_API_VERIFICATION'] = ENABLE_EMAIL_OTP_API_VERIFICATION
+app.config['ENABLE_CONVERSATIONAL_ONBOARDING'] = ENABLE_CONVERSATIONAL_ONBOARDING # NEW in v103.0
 
 # --- DUAL-BACKEND PERSISTENT STORAGE CONFIGURATION (v101.4) ---
 # Check for a persistent storage path from an environment variable (set in Render).
@@ -202,12 +204,20 @@ def token_required(f):
         if not payload:
             return jsonify({'error': 'Token is invalid or expired!'}), 401
         
-        g.profile_hash = payload['sub']
-        g.is_guest = payload.get('is_guest', False)
-        g.profile = None if g.is_guest else load_profile(g.profile_hash)
-
-        if not g.is_guest and not g.profile:
-            return jsonify({'error': 'Profile associated with this token not found.'}), 404
+        # NEW in v103.0: Check if it's a special-purpose token
+        if payload.get('purpose') == 'onboarding':
+            g.profile_hash = payload['sub']
+            g.onboarding_data = payload.get('onboarding_data', {})
+            g.is_onboarding_token = True
+            g.profile = None # No full profile exists yet
+            g.is_guest = False
+        else:
+            g.is_onboarding_token = False
+            g.profile_hash = payload['sub']
+            g.is_guest = payload.get('is_guest', False)
+            g.profile = None if g.is_guest else load_profile(g.profile_hash)
+            if not g.is_guest and not g.profile:
+                return jsonify({'error': 'Profile associated with this token not found.'}), 404
             
         return f(*args, **kwargs)
     return decorated_function
@@ -1143,6 +1153,8 @@ def _handle_profile_check_or_creation(data, is_api_call=False):
         except (ValueError, TypeError) as e:
             return jsonify({"status": "error", "message": f"Invalid data: {e}"}), 400
     else:
+        # MODIFIED in v103.0: This is now the entrypoint for conversational onboarding.
+        # This function no longer handles it directly, just signals the frontend.
         return jsonify({"status": "new_user_needed"})
 
 
@@ -1355,7 +1367,8 @@ def index():
     is_rtl = lang_code in ['ur', 'ar']
     
     js_config = {
-        'ENABLE_EMAIL_OTP_VERIFICATION': app.config.get('ENABLE_EMAIL_OTP_VERIFICATION')
+        'ENABLE_EMAIL_OTP_VERIFICATION': app.config.get('ENABLE_EMAIL_OTP_VERIFICATION'),
+        'ENABLE_CONVERSATIONAL_ONBOARDING': app.config.get('ENABLE_CONVERSATIONAL_ONBOARDING') # NEW in v103.0
     }
 
     return render_template(
@@ -1372,7 +1385,8 @@ def index():
         enable_voice_input=ENABLE_VOICE_INPUT,
         enable_dashboard=ENABLE_DASHBOARD,
         enable_guest_mode=ENABLE_GUEST_MODE,
-        enable_multi_language=ENABLE_MULTI_LANGUAGE
+        enable_multi_language=ENABLE_MULTI_LANGUAGE,
+        enable_conversational_onboarding=app.config.get('ENABLE_CONVERSATIONAL_ONBOARDING') # NEW in v103.0
     )
 
 @app.route('/dashboard')
@@ -1491,13 +1505,27 @@ if app.config['ENABLE_WIDGET_MODE']:
                 token = generate_token(profile_hash)
                 return jsonify({"status": "exists", "token": token, "name": existing_profile.get("name"), "is_guest": False})
             else:
-                # Generate a short-lived token to authorize profile creation
-                verification_token = generate_token(
-                    profile_hash, 
-                    expires_in_minutes=10, 
-                    additional_claims={'verified_email': email, 'purpose': 'create_profile'}
-                )
-                return jsonify({"status": "new_user_needed", "verification_token": verification_token})
+                # --- NEW in v103.0: Conversational Onboarding Flow ---
+                if app.config.get('ENABLE_CONVERSATIONAL_ONBOARDING'):
+                    lang_data = load_language_data('en') # Start with default lang
+                    onboarding_data = {'step': 'awaiting_name', 'email': email, 'lang_code': 'en', 'profile_data': {}}
+                    onboarding_token = generate_token(
+                        profile_hash,
+                        expires_in_minutes=15,
+                        additional_claims={'purpose': 'onboarding', 'onboarding_data': onboarding_data}
+                    )
+                    return jsonify({
+                        "status": "onboarding_started",
+                        "onboarding_token": onboarding_token,
+                        "reply": md.render(lang_data.get('onboarding_ask_name', ''))
+                    })
+                else: # Fallback to v102.1 form-based flow
+                    verification_token = generate_token(
+                        profile_hash, 
+                        expires_in_minutes=10, 
+                        additional_claims={'verified_email': email, 'purpose': 'create_profile'}
+                    )
+                    return jsonify({"status": "new_user_needed", "verification_token": verification_token})
 
         @app.route('/api/v1/auth/create_profile', methods=['POST'])
         def api_create_profile():
@@ -1536,6 +1564,22 @@ if app.config['ENABLE_WIDGET_MODE']:
                 
             except (ValueError, TypeError) as e:
                 return jsonify({"status": "error", "message": f"Invalid data: {e}"}), 400
+    
+    # --- NEW in v103.0: Conversational Onboarding Endpoint for Widget ---
+    @app.route('/api/v1/auth/onboard/step', methods=['POST'])
+    @token_required
+    def api_onboard_step():
+        if not g.is_onboarding_token:
+            return jsonify({"error": "Invalid token for onboarding."}), 403
+        
+        user_message = request.json.get('message', '')
+        response = _handle_onboarding_step(
+            profile_hash=g.profile_hash,
+            user_message=user_message,
+            onboarding_data=g.onboarding_data,
+            is_api_call=True
+        )
+        return response
 
     @app.route('/api/v1/chat', methods=['POST'])
     @token_required
@@ -1960,7 +2004,16 @@ if not app.config['ENABLE_WIDGET_MODE']:
                 session['profile_hash'] = profile_hash
                 return jsonify({"status": "exists", "profile": existing_profile})
             else:
-                return jsonify({"status": "new_user_needed"})
+                # --- NEW in v103.0: Conversational Onboarding Flow ---
+                if app.config.get('ENABLE_CONVERSATIONAL_ONBOARDING'):
+                    session['onboarding_state'] = { 'step': 'awaiting_name', 'profile_hash': profile_hash, 'email': email, 'lang_code': 'en', 'profile_data': {} }
+                    lang_data = load_language_data('en')
+                    return jsonify({
+                        "status": "onboarding_started",
+                        "reply": md.render(lang_data.get('onboarding_ask_name', ''))
+                    })
+                else: # Fallback to v102.1 form-based flow
+                    return jsonify({"status": "new_user_needed"})
 
         @app.route('/create_profile_with_otp', methods=['POST'])
         def create_profile_with_otp():
@@ -1992,6 +2045,23 @@ if not app.config['ENABLE_WIDGET_MODE']:
 
     @app.route('/chat', methods=['POST'])
     def chat():
+        # --- NEW in v103.0: Intercept for conversational onboarding ---
+        if 'onboarding_state' in session:
+            user_message = request.json.get('message', '')
+            response = _handle_onboarding_step(
+                profile_hash=session['onboarding_state']['profile_hash'],
+                user_message=user_message,
+                onboarding_data=session['onboarding_state'],
+                is_api_call=False
+            )
+            # Update session state if a new state was returned
+            if 'onboarding_state' in response.get_json():
+                session['onboarding_state'] = response.get_json()['onboarding_state']
+            else: # Onboarding finished or failed, clear the state
+                session.pop('onboarding_state', None)
+
+            return response
+        
         if 'profile_hash' in session:
             profile = load_profile(session['profile_hash'])
             if not profile: return jsonify({"error": "Profile not found"}), 404
@@ -2156,6 +2226,163 @@ if ENABLE_SQLITE_DATABASE:
             return send_from_directory(db_directory, db_filename, as_attachment=True)
         except FileNotFoundError:
             return "Database file not found on the server.", 404
+
+# --- NEW in v103.0: Conversational Onboarding Logic ---
+def _parse_life_events_from_text(user_text, age):
+    """Uses AI to parse natural language into structured secondary_details."""
+    if not gemini_model: return {}
+
+    prompt = f"""
+    You are an expert data extraction tool. Your task is to analyze a user's free-text description of their life stage and convert it into a structured JSON object.
+
+    The user is {age} years old. Use this age to inform your interpretation.
+
+    **Possible JSON output fields (all boolean):**
+    - "is_trying_to_conceive"
+    - "is_pregnant"
+    - "is_parent"
+    - "is_perimenopausal"
+    - "is_menopausal"
+
+    **CRITICAL RULES:**
+    1.  Your output MUST be a single, raw, valid JSON object and nothing else.
+    2.  Only include fields that are strongly implied by the user's text.
+    3.  If the user's text is vague or doesn't match any category, return an empty JSON object `{{}}`.
+
+    --- EXAMPLES ---
+    User Text: "I'm trying to have a baby."
+    {{ "is_trying_to_conceive": true }}
+
+    User Text: "I'm 14 weeks pregnant and I already have a two year old."
+    {{ "is_pregnant": true, "is_parent": true }}
+
+    User Text: "I think I'm starting perimenopause, the symptoms are crazy."
+    {{ "is_perimenopausal": true }}
+    
+    User Text: "I'm not really focused on anything specific right now"
+    {{}}
+
+    User Text: "My period is irregular."
+    {{}}
+
+    ---
+    Now, process this user's text: "{user_text}"
+    """
+    try:
+        response = gemini_model.generate_content(prompt)
+        cleaned_response = response.text.strip().lstrip("```json").rstrip("```").strip()
+        return json.loads(cleaned_response)
+    except Exception:
+        return {} # Return empty on any failure
+
+def _handle_onboarding_step(profile_hash, user_message, onboarding_data, is_api_call=False):
+    """
+    State machine for handling the multi-step conversational onboarding process.
+    Works for both monolith (session) and widget (token) modes.
+    """
+    step = onboarding_data.get('step')
+    profile_data = onboarding_data.get('profile_data', {})
+    lang_code = onboarding_data.get('lang_code', 'en')
+    
+    next_step = step
+    next_question = ''
+    response_payload = {} # Start with an empty payload
+
+    if step == 'awaiting_name':
+        if len(user_message) < 2:
+            lang_data = load_language_data(lang_code)
+            next_question = lang_data.get('onboarding_invalid_name', 'That seems a bit short. Could you please provide your name?')
+        else:
+            profile_data['name'] = user_message
+            lang_data = load_language_data(lang_code)
+            next_question = lang_data.get('onboarding_ask_language', '').format(name=user_message.split(' ')[0])
+            response_payload['reply_type'] = 'language_picker' # FIX v103.1
+            next_step = 'awaiting_language'
+
+    elif step == 'awaiting_language': # NEW STEP in v103.1
+        if user_message in LANG_MAP:
+            lang_code = user_message
+            onboarding_data['lang_code'] = lang_code
+            lang_data = load_language_data(lang_code)
+            next_question = lang_data.get('onboarding_ask_age', '').format(name=profile_data['name'].split(' ')[0])
+            next_step = 'awaiting_age'
+        else:
+            lang_data = load_language_data(lang_code)
+            next_question = "I'm sorry, I didn't recognize that language. Please select one from the list."
+            response_payload['reply_type'] = 'language_picker'
+
+    elif step == 'awaiting_age':
+        lang_data = load_language_data(lang_code) # Use the chosen language
+        try:
+            age = int(user_message)
+            if 13 <= age <= 100:
+                profile_data['age'] = age
+                if age < 20: key = 'onboarding_ask_details_teen'
+                elif age > 50: key = 'onboarding_ask_details_senior'
+                else: key = 'onboarding_ask_details_adult'
+                next_question = lang_data.get(key, '')
+                next_step = 'awaiting_details'
+            else:
+                next_question = lang_data.get('onboarding_invalid_age', 'Please enter a valid age between 13 and 100.')
+        except ValueError:
+            next_question = lang_data.get('onboarding_invalid_age', 'Please enter a valid age between 13 and 100.')
+
+    elif step == 'awaiting_details':
+        lang_data = load_language_data(lang_code)
+        age = profile_data.get('age')
+        secondary_details = _parse_life_events_from_text(user_message, age)
+        
+        # Create and save the full profile
+        new_profile = create_user_profile(
+            name=profile_data['name'],
+            email=onboarding_data.get('email', ''),
+            phone='',
+            age=age,
+            details=secondary_details,
+            lang_code=lang_code
+        )
+        save_profile(profile_hash, new_profile)
+        
+        # Prepare final response
+        final_reply = lang_data.get('onboarding_complete', '').format(name=profile_data['name'].split(' ')[0])
+        
+        if is_api_call:
+            final_token = generate_token(profile_hash)
+            return jsonify({
+                "status": "created",
+                "token": final_token,
+                "name": new_profile.get("name"),
+                "is_guest": False,
+                "reply": md.render(final_reply)
+            })
+        else: # Monolith
+            session.clear() # Clear onboarding and OTP data
+            session['profile_hash'] = profile_hash
+            return jsonify({
+                "status": "created", 
+                "profile": new_profile, 
+                "reply": md.render(final_reply)
+            })
+    
+    # If onboarding is not finished, update the state and prepare the response
+    onboarding_data['step'] = next_step
+    onboarding_data['profile_data'] = profile_data
+    response_payload['reply'] = md.render(next_question)
+
+    if is_api_call:
+        new_token = generate_token(
+            profile_hash,
+            expires_in_minutes=15,
+            additional_claims={'purpose': 'onboarding', 'onboarding_data': onboarding_data}
+        )
+        response_payload['status'] = "onboarding_inprogress"
+        response_payload['onboarding_token'] = new_token
+        return jsonify(response_payload)
+    else: # Monolith
+        response_payload['status'] = "onboarding_inprogress"
+        response_payload['onboarding_state'] = onboarding_data
+        return jsonify(response_payload)
+
 
 if __name__ == '__main__':
     if not app.config.get("FLASK_SECRET_KEY"):

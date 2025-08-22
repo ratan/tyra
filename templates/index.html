@@ -88,6 +88,20 @@
         .ai-message p, .ai-message ul, .ai-message ol, .ai-message h1, .ai-message h2, .ai-message h3 { margin: 0.5em 0; }
         .ai-message ul, .ai-message ol { padding-left: 20px; }
         .ai-message li { margin-bottom: 8px; }
+        
+        /* NEW in v103.1: Language Picker styles */
+        .language-picker-container {
+            margin-top: 10px;
+        }
+        .language-picker-container select {
+            width: 100%;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            font-size: 1em;
+            background-color: white;
+        }
+
         #chat-form { display: flex; gap: 10px; align-items: center; }
         #quick-log-buttons { display: flex; gap: 8px; margin-bottom: 10px; justify-content: center; flex-wrap: wrap; }
         .quick-log-btn { background-color: #f3eef7; border: 1px solid #d8b8e3; color: #5a2d66; padding: 6px 12px; border-radius: 15px; font-size: 0.8em; cursor: pointer; transition: background-color 0.2s; }
@@ -202,10 +216,13 @@
             </div>
         </div>
         
+        {# NEW in v103.0: This section is now conditional #}
+        {% if not enable_conversational_onboarding %}
         <div id="new-user-section" class="form-section">
             <p class="welcome-text">{{ lang.new_user_welcome }}</p>
             <form id="profile-form" class="profile-form-body"></form>
         </div>
+        {% endif %}
         
         <div id="chat-section" class="form-section">
             <div id="chat-container">
@@ -336,6 +353,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let childDobsArrays = { '': [], '_modal': [] };
     let tempModalIdentifier = null;
     let tempLoginEmail = ''; // For OTP flow
+    let onboardingMode = false; // NEW in v103.0
 
     // --- FORM POPULATION AND INITIALIZATION ---
     function populateAndInitializeForm(formContainer, idSuffix = '') {
@@ -485,7 +503,11 @@ document.addEventListener('DOMContentLoaded', function() {
         if (response.ok) {
             if (data.status === 'exists') {
                 window.location.reload();
-            } else if (data.status === 'new_user_needed') {
+            } else if (data.status === 'onboarding_started') { // NEW in v103.0
+                onboardingMode = true;
+                showSection('chat');
+                appendMessage(data.reply, 'ai', data.reply_type);
+            } else if (data.status === 'new_user_needed') { // Fallback for v102.1
                 showSection('newUser');
             }
         } else {
@@ -551,21 +573,19 @@ document.addEventListener('DOMContentLoaded', function() {
         const messageText = inputs.userInput.value.trim();
         if (!messageText && !selectedFile) return;
 
-        // --- START OF CHANGES (v101.7) ---
-        // 1. Add user message but disable auto-scrolling for now, and capture the element.
         let userMessageDiv = null;
         if (messageText) { 
-            userMessageDiv = appendMessage(messageText, 'user', false); 
+            userMessageDiv = appendMessage(messageText, 'user', 'text', false); 
         } else if (selectedFile) { 
-            userMessageDiv = appendMessage(`(File: ${selectedFile.name})`, 'user', false); 
+            userMessageDiv = appendMessage(`(File: ${selectedFile.name})`, 'user', 'text', false); 
         }
-        // --- END OF CHANGES ---
-
+        
         inputs.userInput.value = '';
+        inputs.userInput.disabled = true;
 
         let endpoint = '/chat';
         let body;
-        const headers = {};
+        const headers = {'Content-Type': 'application/json'};
 
         if (selectedFile) {
             endpoint = '/upload';
@@ -573,27 +593,41 @@ document.addEventListener('DOMContentLoaded', function() {
             formData.append('file', selectedFile);
             formData.append('message', messageText || "Can you tell me about this file?");
             body = formData;
+            delete headers['Content-Type']; // Let browser set it for FormData
         } else {
-            endpoint = '/chat';
             body = JSON.stringify({ message: messageText });
-            headers['Content-Type'] = 'application/json';
         }
         
         clearFileInput();
 
         const response = await fetch(endpoint, { method: 'POST', headers: headers, body: body });
         const data = await response.json();
+        
+        inputs.userInput.disabled = false;
+        inputs.userInput.focus();
+        
         if (!response.ok) { 
             appendMessage(`Sorry, something went wrong: ${data.error || 'A server error occurred.'}`, 'ai');
             return;
         }
-        
-        localStorage.setItem('dashboardNeedsRefresh', 'true');
 
-        // --- START OF CHANGES (v101.7) ---
-        // 2. Add AI's reply, also with auto-scrolling disabled.
-        appendMessage(data.reply, 'ai', false);
+        // NEW in v103.0: Handle onboarding completion
+        if (data.status === 'created') {
+            onboardingMode = false;
+            // The final reply is in the payload, so we just append it and then reload
+            // to establish the final authenticated session correctly.
+            appendMessage(data.reply, 'ai', 'text', false);
+            setTimeout(() => window.location.reload(), 1000); // Reload to get full session
+            return;
+        }
         
+        // This handles both regular chat and in-progress onboarding steps
+        appendMessage(data.reply, 'ai', data.reply_type || 'text', false);
+        
+        if(!onboardingMode) {
+             localStorage.setItem('dashboardNeedsRefresh', 'true');
+        }
+
         if (data.action === 'prompt_signup') {
             modals.identifierForm.classList.remove('hidden');
             modals.profileForm.classList.add('hidden');
@@ -605,18 +639,20 @@ document.addEventListener('DOMContentLoaded', function() {
             renderVisualization(data.chart_type, data.target_date);
         }
 
-        // 3. Now, scroll the original user question to the top of the view.
         if (userMessageDiv) {
             userMessageDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
-        // --- END OF CHANGES ---
     }
 
 
     // --- HELPER & UTILITY FUNCTIONS ---
     function showSection(sectionName) {
-        Object.values(sections).forEach(s => s.classList.remove('active'));
-        sections[sectionName].classList.add('active');
+        Object.values(sections).forEach(s => { 
+            if (s) s.classList.remove('active');
+        });
+        if (sections[sectionName]) {
+            sections[sectionName].classList.add('active');
+        }
         if (sectionName === 'chat') {
             inputs.userInput.focus();
             if (inputs.quickLogContainer) {
@@ -651,17 +687,44 @@ document.addEventListener('DOMContentLoaded', function() {
         inputs.chatLog.innerHTML = `<div class="message ai-message"><p>${message}</p></div>`;
     }
 
-    // FIX v101.7: Modified function to support targeted scrolling
-    function appendMessage(content, sender, doAutoScroll = true) {
+    // MODIFIED in v103.1 to handle special reply types
+    function appendMessage(content, sender, replyType = 'text', doAutoScroll = true) {
         const div = document.createElement('div');
         div.classList.add('message', sender === 'user' ? 'user-message' : 'ai-message');
+        
         if (sender === 'user') {
             const p = document.createElement('p');
             p.textContent = content;
             div.appendChild(p);
-        } else {
+        } else if (replyType === 'language_picker') {
+            div.innerHTML = content;
+            const pickerContainer = document.createElement('div');
+            pickerContainer.className = 'language-picker-container';
+            const select = document.createElement('select');
+            
+            const languages = { "en": "English", "hi": "हिन्दी (Hindi)", "bn": "বাংলা (Bengali)", "te": "తెలుగు (Telugu)", "mr": "मराठी (Marathi)", "ta": "தமிழ் (Tamil)", "gu": "ગુજરાતી (Gujarati)", "ur": "اردو (Urdu)", "kn": "ಕನ್ನಡ (Kannada)", "or": "ଓଡ଼ିଆ (Odia)", "ml": "മലയാളം (Malayalam)", "pa": "ਪੰਜਾਬੀ (Punjabi)", "ar": "العربية (Arabic)" };
+            
+            let optionsHtml = `<option value="">${LANG_STRINGS.onboarding_language_select_placeholder || 'Select your language...'}</option>`;
+            for (const [code, name] of Object.entries(languages)) {
+                optionsHtml += `<option value="${code}">${name}</option>`;
+            }
+            select.innerHTML = optionsHtml;
+
+            select.addEventListener('change', (e) => {
+                if (e.target.value) {
+                    inputs.userInput.value = e.target.value;
+                    handleChatSubmit({ preventDefault: () => {} });
+                    e.target.disabled = true;
+                }
+            });
+
+            pickerContainer.appendChild(select);
+            div.appendChild(pickerContainer);
+        }
+        else {
             div.innerHTML = content;
         }
+
         inputs.chatLog.appendChild(div);
         if (doAutoScroll) {
             inputs.chatLog.scrollTop = inputs.chatLog.scrollHeight;
@@ -742,6 +805,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     async function startRecording() {
+        if (onboardingMode) return; // Disable during onboarding
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
@@ -779,7 +843,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // --- INITIAL PAGE LOAD LOGIC ---
-    populateAndInitializeForm(forms.profile, '');
+    if (!CONFIG.ENABLE_CONVERSATIONAL_ONBOARDING && forms.profile) {
+        populateAndInitializeForm(forms.profile, '');
+    }
     
     if (modals.signup) {
         modals.closeSignup.onclick = () => modals.signup.classList.remove('active');
@@ -812,7 +878,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (inputs.quickLogContainer) {
         inputs.quickLogContainer.addEventListener('click', async function(e) {
             const button = e.target.closest('.quick-log-btn');
-            if (!button) return;
+            if (!button || onboardingMode) return; // Disable during onboarding
 
             const category = button.dataset.logCategory;
             const value = button.dataset.logValue;
@@ -828,7 +894,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     body: JSON.stringify({ category: category, value: value })
                 });
 
-                // --- FIX v100.1: Signal that dashboard data is now stale ---
                 localStorage.setItem('dashboardNeedsRefresh', 'true');
 
                 const data = await response.json();
@@ -844,7 +909,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    if (inputs.fileInput) { inputs.fileInput.addEventListener('change', () => { selectedFile = inputs.fileInput.files[0]; if (selectedFile) { inputs.fileNameDisplay.textContent = selectedFile.name; inputs.fileNameDisplay.classList.remove('hidden'); } }); }
+    if (inputs.fileInput) { inputs.fileInput.addEventListener('change', () => { if (onboardingMode) return; selectedFile = inputs.fileInput.files[0]; if (selectedFile) { inputs.fileNameDisplay.textContent = selectedFile.name; inputs.fileNameDisplay.classList.remove('hidden'); } }); }
     if (inputs.voiceInputBtn) { inputs.voiceInputBtn.addEventListener('click', () => { if (!mediaRecorder || mediaRecorder.state === 'inactive') { startRecording(); } else { stopRecording(); } }); }
     
     if (IS_SESSION_ACTIVE) {

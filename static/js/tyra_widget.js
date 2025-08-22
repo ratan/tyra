@@ -1,4 +1,4 @@
-// static/js/tyra_widget.js (v101.7 - Targeted Scroll Fix)
+// static/js/tyra_widget.js (v103.1 - Conversational Onboarding Language Fix)
 (function() {
     'use strict';
 
@@ -7,7 +7,7 @@
         apiUrl: '',
         targetElement: null,
         jwtToken: null,
-        verificationToken: null,
+        onboardingToken: null, // NEW in v103.0
         isGuest: false, 
         userEmail: '',
         currentView: 'loading', // loading, email_entry, otp_entry, profile_creation, chat, dashboard
@@ -166,10 +166,10 @@
             case 'chat':
                 viewHTML = templates.chatView();
                 headerTitle.textContent = state.lang.app_title || 'Tyra';
-                if (state.jwtToken) {
+                if (state.jwtToken || state.onboardingToken) { // MODIFIED v103.0
                     logoutButton.textContent = state.lang.logout_link || 'Logout';
                     logoutButton.style.display = 'block';
-                    if (!state.isGuest) {
+                    if (!state.isGuest && !state.onboardingToken) { // MODIFIED v103.0
                         navButton.textContent = state.lang.dashboard_link || 'Dashboard';
                         navButton.style.display = 'block';
                     }
@@ -193,7 +193,7 @@
     function postRenderSetup() {
         if (state.currentView === 'chat') {
             const chatLog = state.targetElement.querySelector('.tyra-chat-log');
-            if (chatLog && chatLog.children.length === 0) {
+            if (chatLog && chatLog.children.length === 0 && !state.onboardingToken) { // MODIFIED v103.0
                 const welcomeMessage = state.userName 
                     ? (state.lang.welcome_message_return || 'Welcome back, {name}!').replace('{name}', state.userName)
                     : (state.lang.welcome_message_guest || 'Welcome!');
@@ -207,19 +207,46 @@
         }
     }
     
-    // FIX v101.7: Modified function to support targeted scrolling
-    function addMessage(htmlContent, sender, type = 'text', doAutoScroll = true) {
+    // MODIFIED in v103.1 to handle special reply types like language_picker
+    function addMessage(htmlContent, sender, replyType = 'text', doAutoScroll = true) {
         const chatLog = state.targetElement.querySelector('.tyra-chat-log');
         if (!chatLog) return;
         const messageDiv = document.createElement('div');
         messageDiv.classList.add('tyra-message', `tyra-${sender}-message`);
 
-        if (['bar', 'line'].includes(type)) {
+        if (replyType === 'language_picker') {
+            messageDiv.innerHTML = htmlContent;
+            const pickerContainer = document.createElement('div');
+            pickerContainer.className = 'tyra-language-picker-container';
+            
+            const select = document.createElement('select');
+            
+            const languages = { "en": "English", "hi": "हिन्दी (Hindi)", "bn": "বাংলা (Bengali)", "te": "తెలుగు (Telugu)", "mr": "मराठी (Marathi)", "ta": "தமிழ் (Tamil)", "gu": "ગુજરાતી (Gujarati)", "ur": "اردو (Urdu)", "kn": "ಕನ್ನಡ (Kannada)", "or": "ଓଡ଼ିଆ (Odia)", "ml": "മലയാളം (Malayalam)", "pa": "ਪੰਜਾਬੀ (Punjabi)", "ar": "العربية (Arabic)" };
+            
+            let optionsHtml = `<option value="">${state.lang.onboarding_language_select_placeholder || 'Select your language...'}</option>`;
+            for (const [code, name] of Object.entries(languages)) {
+                optionsHtml += `<option value="${code}">${name}</option>`;
+            }
+            select.innerHTML = optionsHtml;
+
+            select.addEventListener('change', (e) => {
+                if (e.target.value) {
+                    // Simulate a chat submission with the language code
+                    const fakeForm = { querySelector: () => ({ value: e.target.value }) };
+                    onChatSubmit({ preventDefault: () => {}, target: fakeForm });
+                    e.target.disabled = true; // Disable after selection
+                }
+            });
+            
+            pickerContainer.appendChild(select);
+            messageDiv.appendChild(pickerContainer);
+        }
+        else if (['bar', 'line'].includes(replyType)) {
             messageDiv.classList.add('tyra-chart-container');
             const canvas = document.createElement('canvas');
             messageDiv.appendChild(canvas);
             new Chart(canvas.getContext('2d'), htmlContent);
-        } else if (type === 'calendar') {
+        } else if (replyType === 'calendar') {
              messageDiv.classList.add('tyra-calendar-container');
              messageDiv.innerHTML = templates.calendar(htmlContent.data);
         }
@@ -229,12 +256,10 @@
         
         chatLog.appendChild(messageDiv);
         
-        // Only scroll to the bottom if requested (default is true)
         if (doAutoScroll) {
             chatLog.scrollTop = chatLog.scrollHeight;
         }
 
-        // Return the created element so it can be targeted
         return messageDiv;
     }
 
@@ -255,7 +280,9 @@
             return isBlob ? response.blob() : response.json();
         },
         async post(endpoint, body, isFormData = false) {
-            const headers = { 'Authorization': `Bearer ${state.jwtToken}` };
+            // MODIFIED in v103.0: Use the correct token for the request
+            const token = endpoint.startsWith('auth/onboard') ? state.onboardingToken : state.jwtToken;
+            const headers = { 'Authorization': `Bearer ${token}` };
             if (!isFormData) headers['Content-Type'] = 'application/json';
             
             const response = await fetch(`${state.apiUrl}/api/v1/${endpoint}`, {
@@ -284,9 +311,10 @@
             return { ok, data };
         },
         async createProfile(payload) {
+            // DEPRECATED in v103.0 for conversational onboarding
             const headers = {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${state.verificationToken}`
+                'Authorization': `Bearer ${state.verificationToken}` // This token no longer exists in new flow
             };
             const response = await fetch(`${state.apiUrl}/api/v1/auth/create_profile`, {
                 method: 'POST', headers, body: JSON.stringify(payload)
@@ -344,6 +372,7 @@
     
     function onLogout() {
         state.jwtToken = null;
+        state.onboardingToken = null; // NEW in v103.0
         state.userName = '';
         state.isGuest = false;
         state.dashboardData = null;
@@ -405,49 +434,26 @@
                 state.jwtToken = data.token;
                 state.userName = data.name.split(' ')[0];
                 state.currentView = 'chat';
-            } else if (data.status === 'new_user_needed') {
+                await initializeAuthenticatedSession();
+            } else if (data.status === 'onboarding_started') { // NEW in v103.0
+                state.onboardingToken = data.onboarding_token;
+                state.currentView = 'chat';
+                render(); // Render the chat view
+                addMessage(data.reply, 'ai'); // Display the first onboarding question
+            } else if (data.status === 'new_user_needed') { // Fallback for v102.1
                 state.verificationToken = data.verification_token;
                 state.currentView = 'profile_creation';
+                render();
             }
-            await initializeAuthenticatedSession();
         } else {
             setFormError('tyra-otp-form', data.message || 'Verification failed.');
             button.disabled = false;
         }
     }
     
-    async function onProfileSubmit(e) {
+    async function onProfileSubmit(e) { // Only used if conversational onboarding is OFF
         e.preventDefault();
-        const form = e.target;
-        const button = form.querySelector('button');
-        button.disabled = true;
-        setFormError('tyra-profile-form', '');
-        
-        const details = {};
-        form.querySelectorAll('input[type="checkbox"]:checked').forEach(cb => { details[cb.value] = true; });
-        if (details.is_trying_to_conceive) details.months_trying = form.querySelector('#months_trying').value;
-        if (details.is_pregnant) details.lmp_date = form.querySelector('#lmp_date').value;
-        if (details.is_parent) { details.child_dobs = state.childDobs; details.num_children = state.childDobs.length; }
-
-        const payload = { 
-            name: form.querySelector('#tyra-name-input').value,
-            age: form.querySelector('#tyra-age-input').value,
-            language: form.querySelector('#tyra-language-select').value,
-            details: details
-        };
-        
-        const { ok, data } = await api.createProfile(payload);
-        
-        if (ok && data.status === 'created') {
-            state.jwtToken = data.token;
-            state.isGuest = data.is_guest;
-            state.userName = data.name.split(' ')[0];
-            state.currentView = 'chat';
-            await initializeAuthenticatedSession();
-        } else {
-            setFormError('tyra-profile-form', data.message || 'Could not create profile.');
-            button.disabled = false;
-        }
+        // ... (This function is now legacy and will not be triggered in the v103.0 default flow)
     }
     
     async function onChatSubmit(e) {
@@ -457,32 +463,54 @@
         const messageText = input.value.trim();
         if (!messageText) return;
         
-        // FIX v101.7: Add user message but disable auto-scrolling for now.
         const userMessageDiv = addMessage(messageText, 'user', 'text', false);
         input.value = '';
-        
-        state.isDashboardStale = true;
+        input.disabled = true; // Disable input while waiting for response
 
-        const { ok, data } = await api.post('chat', { message: messageText });
-        if (ok) {
-            // FIX v101.7: Add AI message, also with auto-scrolling disabled.
-            addMessage(data.reply, 'ai', 'text', false);
-            if(data.chart_type) {
-                renderChartInChat(data.chart_type, data.target_date);
+        // --- NEW in v103.0: Onboarding vs. Regular Chat ---
+        if (state.onboardingToken) {
+            const { ok, data } = await api.post('auth/onboard/step', { message: messageText });
+            if (ok) {
+                if (data.status === 'onboarding_inprogress') {
+                    state.onboardingToken = data.onboarding_token; // Get the new token for the next step
+                    addMessage(data.reply, 'ai', data.reply_type || 'text', false); // Use reply_type
+                } else if (data.status === 'created') {
+                    // Onboarding is complete!
+                    state.onboardingToken = null; // Clear the onboarding token
+                    state.jwtToken = data.token; // Store the final, long-lived token
+                    state.userName = data.name.split(' ')[0];
+                    state.isGuest = false;
+                    addMessage(data.reply, 'ai', 'text', false);
+                    await initializeAuthenticatedSession(); // Re-render header with dashboard button etc.
+                }
+            } else {
+                addMessage(data.error || 'Sorry, an error occurred during setup.', 'ai');
             }
         } else {
-            addMessage(data.error || 'Sorry, an error occurred.', 'ai');
+            // Regular chat logic from v102.1
+            state.isDashboardStale = true;
+            const { ok, data } = await api.post('chat', { message: messageText });
+            if (ok) {
+                addMessage(data.reply, 'ai', 'text', false);
+                if(data.chart_type) {
+                    renderChartInChat(data.chart_type, data.target_date);
+                }
+            } else {
+                addMessage(data.error || 'Sorry, an error occurred.', 'ai');
+            }
         }
 
-        // FIX v101.7: After both messages are added, scroll the user's question into view.
+        input.disabled = false;
+        input.focus();
+
         if (userMessageDiv) {
             userMessageDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
     }
 
     async function onFileSelect(e) {
-        if (state.isGuest) {
-            addMessage("This feature requires an account. Please log out and sign up to upload files.", "ai");
+        if (state.isGuest || state.onboardingToken) { // MODIFIED in v103.0
+            addMessage("This feature is available after setup is complete. Please finish creating your profile first.", "ai");
             return;
         }
         const file = e.target.files[0];
@@ -501,8 +529,8 @@
     }
 
     function onVoiceButtonClick(e) {
-        if (state.isGuest) {
-             addMessage("This feature requires an account. Please log out and sign up to use voice input.", "ai");
+        if (state.isGuest || state.onboardingToken) { // MODIFIED in v103.0
+             addMessage("This feature is available after setup is complete. Please finish creating your profile first.", "ai");
             return;
         }
         const btn = e.target.closest('button');
@@ -533,6 +561,7 @@
     async function onQuickLogClick(e) {
         const button = e.target.closest('.tyra-quick-log-btn');
         if (!button) return;
+        if (state.onboardingToken) return; // Don't allow during onboarding
         const { logCategory, logValue, logLabel } = button.dataset;
 
         state.isDashboardStale = true;
@@ -584,7 +613,7 @@
     }
 
     function populateQuickLogButtons() {
-        if (state.isGuest) return;
+        if (state.isGuest || state.onboardingToken) return; // MODIFIED in v103.0
         const container = state.targetElement.querySelector('.tyra-quick-log-buttons');
         if (!container || !state.lang.quick_log_buttons) return;
         container.innerHTML = (state.lang.quick_log_buttons || []).map(item =>
@@ -593,7 +622,7 @@
     }
 
     async function renderChartInChat(chartType, targetDate) {
-        if (state.isGuest) return;
+        if (state.isGuest || state.onboardingToken) return; // MODIFIED in v103.0
         const params = { type: chartType };
         if (targetDate) params.target_date = targetDate;
         try {

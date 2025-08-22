@@ -1,4 +1,4 @@
-/* static/css/tyra_widget.css (v101.6 - Dashboard Layout Fix) */
+/* static/css/tyra_widget.css (v103.1 - Language Picker Style) */
 :root {
     --primary-color: #8B4A9C; /* Deep Purple */
     --secondary-color: #A855A8; /* Lighter Purple */
@@ -286,6 +286,19 @@
     align-self: flex-start;
     border-bottom-left-radius: 3px;
 }
+
+/* NEW in v103.1: Language Picker styles */
+.tyra-language-picker-container {
+    margin-top: 10px;
+}
+.tyra-language-picker-container select {
+    width: 100%;
+    padding: 8px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    font-size: 1em;
+}
+
 
 .tyra-chat-form-container {
     padding: 10px;
