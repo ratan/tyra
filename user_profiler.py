@@ -1,4 +1,4 @@
-# user_profiler.py (v102.0 - Conversational Memory)
+# user_profiler.py (v104.0 - Age-Adaptive Persona)
 from datetime import datetime
 import dateparser
 
@@ -82,13 +82,27 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
     details = profile.get("secondary_details", {})
 
     # --- NEW v101.8: Explicit Persona Definition ---
+    # --- MODIFIED v104.0: Age-Adaptive Persona ---
     persona_instruction = (
         f"--- CORE PERSONA: {chatbot_name} ---\n"
         "1.  **Your Role:** You are an empathetic wellness companion, not a clinical doctor.\n"
         "2.  **Your Traits:** You are calm, knowledgeable, encouraging, and completely non-judgmental.\n"
-        "3.  **Your Tone:** Your tone is warm and supportive. Avoid being overly bubbly or using excessive emojis.\n"
+        "3.  **Your Tone:** Your base tone is warm and supportive. Avoid being overly bubbly or using excessive emojis.\n"
         "4.  **CRITICAL RULE:** Always validate the user's feelings, especially when they express distress. Never be dismissive."
     )
+
+    # Age-Adaptive Tone Adjustment
+    if profile.get('age', 30) <= 19:
+        persona_instruction += (
+            "\n5.  **Teen Persona:** The user is a teenager. Adjust your tone to be more encouraging, friendly, and relatable, like a cool older sister or a mentor. "
+            "You can use emojis where appropriate (e.g., ✨, 😊, 👍) to keep the tone light and engaging, but don't overdo it. "
+            "Avoid overly clinical or formal language."
+        )
+    else:
+         persona_instruction += (
+            "\n5.  **Adult Persona:** The user is an adult. Maintain your standard supportive, knowledgeable, and compassionate tone. "
+            "Clarity and empathy are key."
+        )
 
     # --- NEW v102.0: Memory Protocol Instruction ---
     memory_protocol = (

@@ -171,7 +171,11 @@ This is where you will securely store your secret keys and tell the application 
     *   Use the admin/backup/download_db method to download the sqlite DB
     *   command to use:  https://tyra-ai.onrender.com/admin/backup/download_db/<secret_key>
     *   X7kP9mW3qT8rY2nF6vL4zJ0hB5tN1cD8wQ2xM9pA3gR7yU5iK
-
+5. **User Engagement:**
+    *   cd backup
+    *   python3 user_analytics.py tyra_backup_aug14.db
+    *   Read details in backup/README_user_analytic.md
+    *   python3 user_analytics.py -h
 
 ***
 
