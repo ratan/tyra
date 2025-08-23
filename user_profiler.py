@@ -1,4 +1,4 @@
-# user_profiler.py (v104.0 - Age-Adaptive Persona)
+# user_profiler.py (v104.1 - Dynamic Quick Log Confirmations)
 from datetime import datetime
 import dateparser
 
@@ -216,23 +216,37 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
             entry_parts = [f"{summary_map.get(k, 'Mentioned')}: {', '.join(v)}" for k, v in insights.items() if v]
             if entry_parts: context_lines.append(f"- On {entry.get('timestamp', 'an unknown time').split('T')[0]}: " + "; ".join(entry_parts))
     
-    if special_context and special_context.get("type") == "explain_and_offer_program":
+    # --- MODIFIED v104.1: Added handler for dynamic_confirmation
+    if special_context:
         context_lines.append("\n--- CRITICAL INSTRUCTION FOR THIS TURN ---")
-        context_lines.append(
-            "The user's question is a direct inquiry about a topic for which you have a relevant program suggestion. Your response MUST follow this two-part structure:\n"
-            "1. **Explain:** First, directly and helpfully answer the user's question (e.g., 'what is postnatal yoga').\n"
-            "2. **Offer:** Immediately after, on a new line, seamlessly transition to an offer. Example: 'Since this is something you're asking about, you might be interested to know that Tribher offers a specialized [Program Name] designed to help with exactly these goals. Would you like to know more about it?'\n"
-            "This is your primary directive for this conversational turn."
-        )
-    elif special_context and special_context.get("type") == "empathetic_follow_up":
-        context_lines.append("\n--- CRITICAL INSTRUCTION FOR THIS TURN ---")
-        confirmation = special_context.get("confirmation_message", "Okay, I've noted that.")
-        context_lines.append(
-            "The user just logged a negative health event. Your response MUST follow this two-part structure:\n"
-            f"1. **Acknowledge:** Start by stating this confirmation message verbatim: \"{confirmation}\"\n"
-            "2. **Follow-up:** Immediately after, on a new line, ask a gentle, caring, and open-ended follow-up question. Examples: 'I'm sorry to hear that. Is there anything on your mind you'd like to talk about?' or 'That sounds tough. If you'd like to vent or explore what might be causing it, I'm here to listen.'\n"
-            "Do not add any other text. The user's message below is the log itself, so your entire response is just the acknowledgement and the follow-up question."
-        )
+        
+        if special_context.get("type") == "explain_and_offer_program":
+            context_lines.append(
+                "The user's question is a direct inquiry about a topic for which you have a relevant program suggestion. Your response MUST follow this two-part structure:\n"
+                "1. **Explain:** First, directly and helpfully answer the user's question (e.g., 'what is postnatal yoga').\n"
+                "2. **Offer:** Immediately after, on a new line, seamlessly transition to an offer. Example: 'Since this is something you're asking about, you might be interested to know that Tribher offers a specialized [Program Name] designed to help with exactly these goals. Would you like to know more about it?'\n"
+                "This is your primary directive for this conversational turn."
+            )
+        elif special_context.get("type") == "dynamic_confirmation":
+            log_details = special_context.get("log_details", {})
+            log_value = log_details.get("value", "an event")
+            log_category = log_details.get("category", "health")
+            
+            instruction = (
+                f"The user just used a 'Quick Log' button to record '{log_value}' for their '{log_category}'. "
+                f"Your entire response MUST be a simple, natural, non-robotic confirmation of this action. Do not ask a question unless specified below."
+            )
+            
+            if special_context.get("is_negative"):
+                instruction += (
+                    " Since this is a negative log, you MUST ALSO ask a gentle, caring, open-ended follow-up question after the confirmation. "
+                    "Example: 'Got it, I've noted that you had poor sleep. Is there anything on your mind you'd like to talk about?'"
+                )
+            else:
+                 instruction += " Example: 'Okay, I've made a note of your good sleep!'"
+            
+            context_lines.append(instruction)
+
     elif proactive_context:
         context_lines.append("\n--- Special Note for Conversation ---")
         context_type = proactive_context.get("type")

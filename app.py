@@ -1,4 +1,4 @@
-# app.py (v103.1 - Conversational Onboarding Language Fix)
+# app.py (v104.1 - Dynamic Quick Log Confirmations)
 import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets
 from datetime import datetime, timedelta, timezone
 from flask import Flask, Response, render_template, request, jsonify, session, redirect, url_for, send_from_directory, g
@@ -1055,12 +1055,49 @@ def _handle_transcription_logic(file):
             try: genai.delete_file(uploaded_file.name)
             except exceptions.NotFound: pass
 
-def _handle_quick_log_logic(profile, category, value):
+# --- NEW v104.1: Centralized Quick Log Processing with AI ---
+def _process_quick_log_response(profile, category, value):
+    """
+    Handles logging, context generation, and AI call for quick log buttons.
+    """
+    # 1. Save the log to the profile immediately.
     profile.setdefault('health_logs', []).insert(0, {"timestamp": datetime.now().isoformat(), "category": category, "value": value})
-    lang_data = load_language_data(profile.get('language', 'en'))
-    confirmation_key = f"quick_log_confirm_{value.replace(' ', '_')}_{category}"
-    response_message = lang_data.get(confirmation_key, lang_data.get("quick_log_confirm_fallback"))
-    return {"reply": md.render(response_message)}
+    
+    # 2. Determine if a special follow-up is needed.
+    # We use the same negative triggers as the main chat logic.
+    negative_log_values = [
+        'high', 'poor', 'terrible', 'anxious', 'sad', 'stressed', 
+        'overwhelmed', 'exhausted', 'headache', 'cramps', 'painful'
+    ]
+    is_negative = value in negative_log_values
+
+    # 3. Create the special context for the prompt.
+    special_context = {
+        "type": "dynamic_confirmation",
+        "log_details": {"category": category, "value": value},
+        "is_negative": is_negative
+    }
+    
+    # 4. Format the full prompt and make the AI call.
+    context_prompt = format_profile_for_prompt(
+        profile,
+        chatbot_name=CHATBOT_NAME,
+        special_context=special_context
+    )
+    
+    try:
+        # We pass a simple placeholder message as the user input is implicit (the button click)
+        response = gemini_model.generate_content(f"{context_prompt}\n(User just clicked a quick log button)")
+        reply = response.text.strip()
+    except Exception as e:
+        # Fallback to a static message on AI error
+        lang_data = load_language_data(profile.get('language', 'en'))
+        reply = lang_data.get("quick_log_confirm_fallback", "Okay, I've logged that for you.")
+        print(f"!!! AI Error during quick log processing: {e}")
+
+    # The profile was already modified, so it's ready to be saved by the calling route.
+    return {"reply": md.render(reply)}
+
 
 def _get_dashboard_data(profile):
     lang_code = profile.get('language', 'en') if ENABLE_MULTI_LANGUAGE else 'en'
@@ -1231,6 +1268,7 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
         action_response = f"I noticed you mentioned your '{potential_reminder_data.get('text')}'. Would you like me to set a reminder for that?"
 
     # --- RESTORED v98.8 & ENHANCED v101.9: AI Follow-up Questions for Negative Logs ---
+    # --- REFACTORED in v104.1: This logic now uses the dynamic_confirmation context ---
     if not action_response and ENABLE_EXPANDED_LOGGING and insights.get('health_log'):
         log_data = insights['health_log']
         profile.setdefault('health_logs', []).insert(0, {"timestamp": datetime.now().isoformat(), **log_data})
@@ -1238,26 +1276,21 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
         category, value = log_data.get('category'), log_data.get('value')
         
         # --- BUG FIX v102.1: Add a guard clause ---
-        # Check if both category and value were successfully extracted by the AI.
-        # If not, skip this block and fall through to the general AI response.
         if category and value:
-            lang_data = load_language_data(profile.get('language', 'en'))
-            confirmation_key = f"quick_log_confirm_{value.replace(' ', '_')}_{category}"
-            confirmation_message = lang_data.get(confirmation_key, lang_data.get("quick_log_confirm_fallback"))
-            
-            # --- NEW v101.9: Expanded list of empathetic triggers ---
+            # --- NEW v101.9 & Modified v104.1 ---
             negative_log_values = [
                 'high', 'poor', 'terrible', 'anxious', 'sad', 'stressed', 
                 'overwhelmed', 'exhausted', 'headache', 'cramps', 'painful'
             ]
-            if ENABLE_AI_FOLLOW_UP_QUESTIONS and value in negative_log_values:
-                special_context = {
-                    "type": "empathetic_follow_up",
-                    "confirmation_message": confirmation_message,
-                    "log_details": log_data
-                }
-            else:
-                action_response = confirmation_message
+            is_negative = value in negative_log_values
+            
+            # We now always generate the confirmation via AI for a more natural feel.
+            special_context = {
+                "type": "dynamic_confirmation",
+                "log_details": log_data,
+                "is_negative": is_negative
+            }
+        # If we fall through, the main AI call will handle the response.
 
     if new_pending_question:
         session['pending_question'] = new_pending_question
@@ -1620,6 +1653,7 @@ if app.config['ENABLE_WIDGET_MODE']:
         response, status_code = _handle_transcription_logic(file)
         return jsonify(response), status_code
 
+    # MODIFIED in v104.1 to use the new AI-powered response generator
     @app.route('/api/v1/quick_log', methods=['POST'])
     @token_required
     def api_quick_log():
@@ -1628,7 +1662,7 @@ if app.config['ENABLE_WIDGET_MODE']:
         category, value = data.get('category'), data.get('value')
         if not category or not value: return jsonify({"error": "Invalid log data."}), 400
         
-        response = _handle_quick_log_logic(g.profile, category, value)
+        response = _process_quick_log_response(g.profile, category, value)
         save_profile(g.profile_hash, g.profile)
         return jsonify(response)
         
@@ -2104,6 +2138,7 @@ if not app.config['ENABLE_WIDGET_MODE']:
         session['is_guest'] = True
         return jsonify({"status": "success"})
 
+    # MODIFIED in v104.1 to use the new AI-powered response generator
     @app.route('/quick_log', methods=['POST'])
     def quick_log():
         if 'profile_hash' not in session: return jsonify({"error": "Authentication required."}), 403
@@ -2114,7 +2149,7 @@ if not app.config['ENABLE_WIDGET_MODE']:
         category, value = data.get('category'), data.get('value')
         if not category or not value: return jsonify({"error": "Invalid log data."}), 400
         
-        response = _handle_quick_log_logic(profile, category, value)
+        response = _process_quick_log_response(profile, category, value)
         save_profile(profile_hash, profile)
         return jsonify(response)
 
