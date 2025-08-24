@@ -1,4 +1,4 @@
-# user_profiler.py (v104.1 - Dynamic Quick Log Confirmations)
+# user_profiler.py (v104.5 - Education Tidbit Logic & Prompt Fix)
 from datetime import datetime
 import dateparser
 
@@ -43,7 +43,8 @@ def create_user_profile(name, email, phone, age, details, lang_code='en'):
         "medication_log": [],
         "goals": [],
         "interaction_log": [],
-        "key_memories": [] # NEW in v102.0
+        "key_memories": [], # NEW in v102.0
+        "shown_education_tidbits": [] # NEW in v104.2
     }
     if age <= 19: profile["primary_category"] = "Adolescence/Teen"
     elif 20 <= age <= 39: profile["primary_category"] = "Young Adulthood"
@@ -70,7 +71,7 @@ def format_program_for_prompt(program_object):
     return "\n".join(lines)
 
 
-def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of_day=False, suggested_program_object=None, is_follow_up=False, proactive_context=None, special_context=None, enable_realtime_log_context=False, enable_ovulation_tracker=False, last_discussed_program_context=None, is_summary_request=False):
+def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of_day=False, suggested_program_object=None, is_follow_up=False, proactive_context=None, special_context=None, enable_realtime_log_context=False, enable_ovulation_tracker=False, last_discussed_program_context=None, is_summary_request=False, education_tidbit=None):
     if not profile: return f"You are a helpful AI assistant named {chatbot_name}."
     
     lang_code = profile.get("language", "en")
@@ -263,6 +264,15 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
             context_lines.append("After answering the user's question, casually ask if they'd like you to help track their periods.")
         elif context_type == "prompt_for_update":
             context_lines.append("After answering the user's question, politely add a check-in like, 'By the way, I noticed your period might be due soon. If it has started, just let me know.'")
+
+    # NEW in v104.2, MODIFIED in v104.5 for forceful instruction
+    if education_tidbit:
+        context_lines.append("\n--- EDUCATIONAL INSIGHT (MANDATORY ACTION) ---")
+        context_lines.append(
+            "The system has provided a relevant educational fact. This is NOT optional. After you have fully answered the user's primary question, you MUST seamlessly weave this fact into your response. "
+            "Introduce it naturally. Example: 'By the way, here's something you might find interesting...' or 'Did you know that...?'"
+        )
+        context_lines.append(f"Educational Tidbit to Share: \"{education_tidbit}\"")
 
     final_program_context = suggested_program_object or last_discussed_program_context
     if final_program_context:

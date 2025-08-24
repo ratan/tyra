@@ -1,0 +1,60 @@
+{
+  "period_cramps": {
+    "teen": [
+      {
+        "id": "cramp_teen_1",
+        "text": "Did you know that regular exercise, even just walking, can help reduce the severity of period cramps by releasing natural painkillers called endorphins?"
+      },
+      {
+        "id": "cramp_teen_2",
+        "text": "Staying hydrated is super important! Drinking enough water can help reduce bloating, which sometimes makes cramps feel worse."
+      }
+    ],
+    "adult": [
+      {
+        "id": "cramp_adult_1",
+        "text": "Certain foods can influence period pain. For instance, foods rich in magnesium, like dark chocolate, nuts, and seeds, may help relax the uterine muscles and ease cramps."
+      },
+      {
+        "id": "cramp_adult_2",
+        "text": "For some people, reducing salt and caffeine intake a few days before their period is expected can help lessen bloating and discomfort associated with cramps."
+      }
+    ]
+  },
+  "sleep": {
+    "teen": [
+      {
+        "id": "sleep_teen_1",
+        "text": "It's a cool fact that your body temperature naturally drops to help you fall asleep. A warm bath before bed can help kickstart that process, making it easier to drift off."
+      },
+      {
+        "id": "sleep_teen_2",
+        "text": "The blue light from screens (like phones and tablets) can trick your brain into thinking it's still daytime, making it harder to fall asleep. Try putting screens away an hour before bed."
+      }
+    ],
+    "adult": [
+      {
+        "id": "sleep_adult_1",
+        "text": "A consistent sleep schedule, even on weekends, is one of the most effective ways to improve sleep quality. It helps regulate your body's internal clock, or circadian rhythm."
+      },
+      {
+        "id": "sleep_adult_2",
+        "text": "While a glass of wine might make you feel sleepy initially, alcohol can disrupt your sleep cycle later in the night, leading to less restful sleep."
+      }
+    ]
+  },
+  "stress": {
+    "teen": [
+      {
+        "id": "stress_teen_1",
+        "text": "Did you know that deep breathing is one of the fastest ways to lower stress? Taking a few slow, deep breaths sends a signal to your brain to calm down and relax."
+      }
+    ],
+    "adult": [
+      {
+        "id": "stress_adult_1",
+        "text": "Chronic stress can sometimes deplete your body's magnesium levels. Including magnesium-rich foods like leafy greens, almonds, and avocados in your diet can be supportive."
+      }
+    ]
+  }
+}

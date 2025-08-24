@@ -1,5 +1,5 @@
-# app.py (v104.1 - Dynamic Quick Log Confirmations)
-import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets
+# app.py (v104.7 - Restore Calendar Visualization Fix)
+import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets, random
 from datetime import datetime, timedelta, timezone
 from flask import Flask, Response, render_template, request, jsonify, session, redirect, url_for, send_from_directory, g
 from dotenv import load_dotenv, dotenv_values
@@ -134,6 +134,7 @@ UPLOADS_DIR = os.path.join(DATA_BASE_PATH, "temp_uploads")
 SHARED_REPORTS_DIR = os.path.join(DATA_BASE_PATH, "shared_reports")
 TRIBHER_DATA_FILE = os.path.join(DATA_BASE_PATH, "tribher_data_final.json")
 MILESTONES_DATA_FILE = os.path.join(DATA_BASE_PATH, "milestones_data.json")
+EDUCATION_DATA_FILE = os.path.join(DATA_BASE_PATH, "education_tidbits.json") # FIX in v104.4
 
 # Define static directories separately as they are part of the app package
 STATIC_CSS_DIR = os.path.join('static', 'css')
@@ -151,6 +152,7 @@ os.makedirs(LOCALES_DIR, exist_ok=True)
 
 TRIBHER_DATA = None
 MILESTONES_DATA = None
+EDUCATION_DATA = None # NEW in v104.2
 gemini_model = None
 llm_response_cache = {}
 ip_request_timestamps = {}
@@ -339,8 +341,17 @@ def load_milestones_data():
         with open(MILESTONES_DATA_FILE, 'r') as f: MILESTONES_DATA = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError): MILESTONES_DATA = None
 
+# NEW in v104.2
+def load_education_data():
+    global EDUCATION_DATA
+    try:
+        with open(EDUCATION_DATA_FILE, 'r') as f: EDUCATION_DATA = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError): EDUCATION_DATA = None
+
+
 load_tribher_data()
 load_milestones_data()
+load_education_data() # NEW in v104.2
 configure_ai()
 md = MarkdownIt()
 
@@ -362,8 +373,7 @@ def normalize_date_string(date_str: str) -> str:
 
 def get_conversation_summary(user_message):
     today_date = datetime.now().strftime('%Y-%m-%d')
-    # FIX v95.8: Added new example to handle "period length" synonym for "cycle length"
-    # FIX v98.7: Restored contextual reminder logic
+    # MODIFIED v104.7: Restored calendar visualization example to fix regression.
     summary_prompt = f"""
 You are an expert tool for converting natural language into a structured JSON object.
 Your output MUST be a single, raw, valid JSON object.
@@ -376,7 +386,7 @@ Today's date is {today_date}. Resolve all relative dates to 'YYYY-MM-DD' format.
 4.  **REMINDERS (EXPLICIT):** For command-like phrases ("remind me to", "set a reminder"), return `reminder_action` with the `text` and `due_date`.
 5.  **REMINDERS (CONTEXTUAL):** For future events mentioned conversationally (e.g., "I have an appointment on Friday"), return `potential_reminder` with `text` and `date`.
 6.  **OTHER ACTIONS:** Process `health_log`, `period_action`, or `ambiguous_log` as normal.
-7.  **GENERAL CHAT:** For anything else, return an empty JSON object `{{}}`.
+7.  **GENERAL CHAT / QUESTIONS:** For anything else, especially questions asking for information (e.g., "what should I do for..."), return an empty JSON object `{{}}`.
 
 --- EXAMPLES ---
 User: 'my period started on july 1st'
@@ -388,8 +398,14 @@ User: 'visualize my cycle length'
 User: 'graph my period length over the last few months'
 {{"query_chart": {{"type": "cycle_length"}}}}
 
+User: 'I have a headache'
+{{"health_log": {{"category": "physical_symptom", "value": "headache"}}}}
+
 User: 'show my period calendar for june month'
 {{"query_chart": {{"type": "cycle_calendar", "target_date": "{datetime.now().year}-06-01"}}}}
+
+User: 'what should I do for period cramps?'
+{{}}
 
 User: 'Remind me to call the doctor tomorrow.'
 {{"reminder_action": {{"text": "call the doctor", "due_date": "{(datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')}"}}}}
@@ -1253,6 +1269,7 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
     action_response = None
     new_pending_question = None
     special_context = None # RESTORED v98.8
+    education_tidbit = None # NEW in v104.2
     action_handlers = {'medication_log': handle_medication_log, 'period_action': handle_period_action, 'set_goal': handle_set_goal, 'reminder_action': handle_reminder_action}
     
     for action_type, handler in action_handlers.items():
@@ -1324,8 +1341,15 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
                     "type": "explain_and_offer_program",
                     "program_name": new_suggestion['name']
                 }
-
     
+    # --- NEW in v104.2: Get Educational Tidbit ---
+    if not special_context: # Don't show a tidbit if a more specific context is already active
+        tidbit_text, tidbit_id = _get_relevant_education_tidbit(profile, user_message)
+        if tidbit_text:
+            education_tidbit = tidbit_text
+            # Use setdefault to ensure the key exists, crucial for old profiles
+            profile.setdefault("shown_education_tidbits", []).append(tidbit_id)
+
     proactive_context = get_proactive_context(profile)
     context_prompt = format_profile_for_prompt(
         profile, 
@@ -1337,7 +1361,8 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
         enable_ovulation_tracker=ENABLE_OVULATION_TRACKER,
         enable_realtime_log_context=ENABLE_REALTIME_LOG_CONTEXT,
         is_summary_request=is_summary_request,
-        special_context=special_context
+        special_context=special_context,
+        education_tidbit=education_tidbit # NEW in v104.2
     )
     
     try:
@@ -2417,6 +2442,52 @@ def _handle_onboarding_step(profile_hash, user_message, onboarding_data, is_api_
         response_payload['status'] = "onboarding_inprogress"
         response_payload['onboarding_state'] = onboarding_data
         return jsonify(response_payload)
+
+# --- MODIFIED in v104.6: Educational Tidbit Logic with Robust Regex ---
+def _get_relevant_education_tidbit(profile, user_message):
+    if not EDUCATION_DATA:
+        return None, None
+
+    KEYWORD_MAP = {
+        "period_cramps": ["cramp", "cramps", "period pain", "menstrual pain"],
+        "sleep": ["sleep", "insomnia", "couldn't sleep", "woke up"],
+        "stress": ["stress", "anxiety", "anxious", "overwhelmed"]
+    }
+
+    user_message_lower = user_message.lower()
+    found_topic = None
+    for topic, keywords in KEYWORD_MAP.items():
+        # Build a regex pattern that looks for any of the keywords as whole words
+        pattern = r'\b(' + '|'.join(re.escape(k) for k in keywords) + r')\b'
+        if re.search(pattern, user_message_lower):
+            found_topic = topic
+            break
+    
+    if not found_topic:
+        return None, None
+    
+    age = profile.get("age", 30)
+    age_group = "teen" if age <= 19 else "adult"
+    
+    tidbits_for_topic = EDUCATION_DATA.get(found_topic, {}).get(age_group, [])
+    if not tidbits_for_topic:
+        return None, None
+    
+    # Robustly handle old profiles that lack the key
+    if "shown_education_tidbits" not in profile:
+        profile["shown_education_tidbits"] = []
+        
+    shown_tidbits = profile["shown_education_tidbits"]
+    available_tidbits = [t for t in tidbits_for_topic if t.get("id") not in shown_tidbits]
+    
+    if not available_tidbits:
+        # If all tidbits for this topic have been shown, reset the list for this topic
+        profile["shown_education_tidbits"] = [tid for tid in shown_tidbits if tid not in [t['id'] for t in tidbits_for_topic]]
+        available_tidbits = tidbits_for_topic
+    
+    selected_tidbit = random.choice(available_tidbits)
+    
+    return selected_tidbit.get("text"), selected_tidbit.get("id")
 
 
 if __name__ == '__main__':

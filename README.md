@@ -129,7 +129,7 @@ This is the most critical step for ensuring your data is not lost on restarts.
 1.  Scroll down to the **"Disks"** section.
 2.  Click **"Add Disk"**.
 3.  Fill in the details:
-    *   **Name:** `tyra-data` (or any name you prefer)
+    *   **Name:** `tyra-data` (or any name you prefer) PERSISTENT_DATA_PATH
     *   **Mount Path:** `/data/tyra`
     *   **Size:** Start with `1 GB`.
 4.  Click **"Add Disk"** to save.
