@@ -1,4 +1,4 @@
-# user_profiler.py (v104.5 - Education Tidbit Logic & Prompt Fix)
+# user_profiler.py (v105.0 - Gamification and Streaks)
 from datetime import datetime
 import dateparser
 
@@ -44,7 +44,8 @@ def create_user_profile(name, email, phone, age, details, lang_code='en'):
         "goals": [],
         "interaction_log": [],
         "key_memories": [], # NEW in v102.0
-        "shown_education_tidbits": [] # NEW in v104.2
+        "shown_education_tidbits": [], # NEW in v104.2
+        "achievements": { "unlocked_badges": {} } # NEW in v105.0
     }
     if age <= 19: profile["primary_category"] = "Adolescence/Teen"
     elif 20 <= age <= 39: profile["primary_category"] = "Young Adulthood"
@@ -217,7 +218,7 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
             entry_parts = [f"{summary_map.get(k, 'Mentioned')}: {', '.join(v)}" for k, v in insights.items() if v]
             if entry_parts: context_lines.append(f"- On {entry.get('timestamp', 'an unknown time').split('T')[0]}: " + "; ".join(entry_parts))
     
-    # --- MODIFIED v104.1: Added handler for dynamic_confirmation
+    # MODIFIED in v104.1: Added handler for dynamic_confirmation
     if special_context:
         context_lines.append("\n--- CRITICAL INSTRUCTION FOR THIS TURN ---")
         
@@ -247,6 +248,20 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
                  instruction += " Example: 'Okay, I've made a note of your good sleep!'"
             
             context_lines.append(instruction)
+        
+        # NEW in v105.0
+        elif special_context.get("type") == "achievement_unlocked":
+            badge_names = [badge['name'] for badge in special_context.get("badges", [])]
+            badge_text = f"the '{badge_names[0]}'" if len(badge_names) == 1 else f"the following badges: {', '.join(badge_names)}"
+            instruction = (
+                f"The user has just unlocked {badge_text} badge! This is an important milestone. "
+                "Your response MUST follow this two-part structure:\n"
+                "1. **Celebrate:** Start with an enthusiastic, celebratory message congratulating them. Example: 'Wow, congratulations!' or 'This is awesome! You've just unlocked...'\n"
+                "2. **Answer:** Immediately after, on a new line, answer their original question as you normally would.\n"
+                "This is your primary directive for this turn."
+            )
+            context_lines.append(instruction)
+
 
     elif proactive_context:
         context_lines.append("\n--- Special Note for Conversation ---")

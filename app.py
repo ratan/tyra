@@ -1,4 +1,4 @@
-# app.py (v104.7 - Restore Calendar Visualization Fix)
+# app.py (v104.8 - Fix Period Length Visualization Synonym)
 import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets, random
 from datetime import datetime, timedelta, timezone
 from flask import Flask, Response, render_template, request, jsonify, session, redirect, url_for, send_from_directory, g
@@ -38,6 +38,19 @@ BEHAVIORAL_SYNOPSIS_MIN_INTERACTIONS = 15
 PROGRAM_SUGGESTION_COOLDOWN_DAYS = 3
 MAX_CYCLE_HISTORY = 120
 MAX_KEY_MEMORIES = 15 # NEW in v102.0
+
+# NEW in v105.0: Badge Definitions
+BADGE_DEFINITIONS = [
+    {"id": "usage_3_day", "name": "3-Day Explorer", "days": 3},
+    {"id": "usage_7_day", "name": "7-Day Consistent", "days": 7},
+    {"id": "usage_15_day", "name": "15-Day Habit", "days": 15},
+    {"id": "usage_30_day", "name": "30-Day Milestone", "days": 30},
+    {"id": "usage_60_day", "name": "60-Day Pro", "days": 60},
+    {"id": "usage_90_day", "name": "90-Day Master", "days": 90},
+    {"id": "usage_6_month", "name": "6-Month Companion", "days": 180},
+    {"id": "usage_1_year", "name": "1-Year Anniversary", "days": 365}
+]
+
 
 # Secure CORS allow-list for production
 ALLOWED_ORIGINS = [
@@ -373,7 +386,7 @@ def normalize_date_string(date_str: str) -> str:
 
 def get_conversation_summary(user_message):
     today_date = datetime.now().strftime('%Y-%m-%d')
-    # MODIFIED v104.7: Restored calendar visualization example to fix regression.
+    # MODIFIED v104.8: Restored period length example to fix regression.
     summary_prompt = f"""
 You are an expert tool for converting natural language into a structured JSON object.
 Your output MUST be a single, raw, valid JSON object.
@@ -395,7 +408,7 @@ User: 'my period started on july 1st'
 User: 'visualize my cycle length'
 {{"query_chart": {{"type": "cycle_length"}}}}
 
-User: 'graph my period length over the last few months'
+User: 'graph or show my period length over the last few months'
 {{"query_chart": {{"type": "cycle_length"}}}}
 
 User: 'I have a headache'
@@ -1349,6 +1362,16 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
             education_tidbit = tidbit_text
             # Use setdefault to ensure the key exists, crucial for old profiles
             profile.setdefault("shown_education_tidbits", []).append(tidbit_id)
+            
+    # NEW in v105.0: Check for new achievements before generating the main response
+    if not special_context:
+        newly_unlocked_badges = _check_for_new_achievements(profile)
+        if newly_unlocked_badges:
+            special_context = {
+                "type": "achievement_unlocked",
+                "badges": newly_unlocked_badges
+            }
+
 
     proactive_context = get_proactive_context(profile)
     context_prompt = format_profile_for_prompt(
@@ -2488,6 +2511,38 @@ def _get_relevant_education_tidbit(profile, user_message):
     selected_tidbit = random.choice(available_tidbits)
     
     return selected_tidbit.get("text"), selected_tidbit.get("id")
+
+# NEW in v105.0
+def _check_for_new_achievements(profile):
+    """
+    Checks the user's interaction history to unlock new usage-based badges.
+    Returns a list of newly unlocked badge objects, or an empty list.
+    """
+    # Use setdefault to handle old profiles gracefully
+    achievements = profile.setdefault("achievements", {"unlocked_badges": {}})
+    unlocked_ids = achievements["unlocked_badges"].keys()
+
+    interaction_log = profile.get("interaction_log", [])
+    if not interaction_log:
+        return []
+
+    # Calculate the number of unique days the user has interacted
+    unique_interaction_days = set(
+        datetime.fromisoformat(entry["timestamp"]).date() for entry in interaction_log
+    )
+    num_unique_days = len(unique_interaction_days)
+
+    newly_unlocked = []
+    for badge in BADGE_DEFINITIONS:
+        if badge["id"] not in unlocked_ids and num_unique_days >= badge["days"]:
+            # Unlock the badge
+            achievements["unlocked_badges"][badge["id"]] = {
+                "name": badge["name"],
+                "unlocked_at": datetime.now(timezone.utc).isoformat()
+            }
+            newly_unlocked.append(badge)
+            
+    return newly_unlocked
 
 
 if __name__ == '__main__':

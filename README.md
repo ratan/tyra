@@ -45,15 +45,15 @@ This creates an isolated environment for the project's dependencies.
 
 **2. Create the virtual environment:**
 ```bash
-python3 -m venv .venv
+python3 -m venv venv
 python3.12 -m venv venv
 ```
 
 **3. Activate the environment:**
 ```bash
-source .venv/bin/activate
+source venv/bin/activate
 ```
-Your terminal prompt will now start with `(.venv)`.
+Your terminal prompt will now start with `(venv)`.
 
 **4. Install the required libraries:**
 ```bash
@@ -176,7 +176,18 @@ This is where you will securely store your secret keys and tell the application 
     *   python3 user_analytics.py tyra_backup_aug14.db
     *   Read details in backup/README_user_analytic.md
     *   python3 user_analytics.py -h
-
+6. **Persistent Disk Data:**
+    *   Files and folders present in /data/tyra
+    *   ls -lrt
+    *   total 96
+    *   File: tribher_data_final.json
+    *   Folder: user_profiles
+    *   Folder: shared_reports
+    *   Folder: temp_uploads
+    *   File: milestones_data.json
+    *   File: tyra_prod.db
+    *   Folder: flask_session
+    *   File: education_tidbits.json
 ***
 
 ### **Miscelleneous Points (v101.4)**
