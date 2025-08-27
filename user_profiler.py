@@ -1,4 +1,4 @@
-# user_profiler.py (v105.0 - Gamification and Streaks)
+# user_profiler.py (v105.1 - AI-Generated Monthly Summaries)
 from datetime import datetime
 import dateparser
 
@@ -36,7 +36,8 @@ def create_user_profile(name, email, phone, age, details, lang_code='en'):
             "last_symptom_analysis_date": None,
             "last_general_analysis_date": None,
             "last_program_suggestion_ts": None,
-            "pending_program_offer": None
+            "pending_program_offer": None,
+            "last_summary_date": None # NEW in v105.1
         },
         "behavioral_synopsis": {},
         "health_logs": [],
@@ -218,7 +219,7 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
             entry_parts = [f"{summary_map.get(k, 'Mentioned')}: {', '.join(v)}" for k, v in insights.items() if v]
             if entry_parts: context_lines.append(f"- On {entry.get('timestamp', 'an unknown time').split('T')[0]}: " + "; ".join(entry_parts))
     
-    # MODIFIED in v104.1: Added handler for dynamic_confirmation
+    # --- MODIFIED v104.1: Added handler for dynamic_confirmation
     if special_context:
         context_lines.append("\n--- CRITICAL INSTRUCTION FOR THIS TURN ---")
         

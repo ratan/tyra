@@ -568,9 +568,15 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // MODIFIED in v105.1 to handle proactive summaries
     async function handleChatSubmit(e) {
         e.preventDefault();
-        const messageText = inputs.userInput.value.trim();
+        const form = e.target;
+        const userInput = form.querySelector('#user-input');
+        
+        // This handles both text input and the language picker select
+        const messageText = (userInput) ? userInput.value.trim() : form.querySelector('select').value;
+        
         if (!messageText && !selectedFile) return;
 
         let userMessageDiv = null;
@@ -580,9 +586,11 @@ document.addEventListener('DOMContentLoaded', function() {
             userMessageDiv = appendMessage(`(File: ${selectedFile.name})`, 'user', 'text', false); 
         }
         
-        inputs.userInput.value = '';
-        inputs.userInput.disabled = true;
-
+        if (userInput) {
+            userInput.value = '';
+            userInput.disabled = true;
+        }
+        
         let endpoint = '/chat';
         let body;
         const headers = {'Content-Type': 'application/json'};
@@ -593,7 +601,7 @@ document.addEventListener('DOMContentLoaded', function() {
             formData.append('file', selectedFile);
             formData.append('message', messageText || "Can you tell me about this file?");
             body = formData;
-            delete headers['Content-Type']; // Let browser set it for FormData
+            delete headers['Content-Type']; 
         } else {
             body = JSON.stringify({ message: messageText });
         }
@@ -603,25 +611,28 @@ document.addEventListener('DOMContentLoaded', function() {
         const response = await fetch(endpoint, { method: 'POST', headers: headers, body: body });
         const data = await response.json();
         
-        inputs.userInput.disabled = false;
-        inputs.userInput.focus();
+        if (userInput) {
+            userInput.disabled = false;
+            userInput.focus();
+        }
         
         if (!response.ok) { 
             appendMessage(`Sorry, something went wrong: ${data.error || 'A server error occurred.'}`, 'ai');
             return;
         }
 
-        // NEW in v103.0: Handle onboarding completion
+        // NEW in v105.1: Handle proactive summary
+        if (data.proactive_summary) {
+            appendMessage(data.proactive_summary, 'ai', 'text', false);
+        }
+
         if (data.status === 'created') {
             onboardingMode = false;
-            // The final reply is in the payload, so we just append it and then reload
-            // to establish the final authenticated session correctly.
             appendMessage(data.reply, 'ai', 'text', false);
-            setTimeout(() => window.location.reload(), 1000); // Reload to get full session
+            setTimeout(() => window.location.reload(), 1000); 
             return;
         }
         
-        // This handles both regular chat and in-progress onboarding steps
         appendMessage(data.reply, 'ai', data.reply_type || 'text', false);
         
         if(!onboardingMode) {

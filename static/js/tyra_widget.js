@@ -1,4 +1,4 @@
-// static/js/tyra_widget.js (v103.1 - Conversational Onboarding Language Fix)
+// static/js/tyra_widget.js (v105.1 - AI-Generated Monthly Summaries)
 (function() {
     'use strict';
 
@@ -456,57 +456,74 @@
         // ... (This function is now legacy and will not be triggered in the v103.0 default flow)
     }
     
+    // MODIFIED in v105.1 to handle proactive summaries
     async function onChatSubmit(e) {
         e.preventDefault();
         const form = e.target;
         const input = form.querySelector('.tyra-chat-input');
-        const messageText = input.value.trim();
+        const messageText = input ? input.value.trim() : form.querySelector('select').value; // Handle text input and language picker
         if (!messageText) return;
         
         const userMessageDiv = addMessage(messageText, 'user', 'text', false);
-        input.value = '';
-        input.disabled = true; // Disable input while waiting for response
+        if (input) {
+            input.value = '';
+            input.disabled = true; // Disable input while waiting for response
+        }
 
-        // --- NEW in v103.0: Onboarding vs. Regular Chat ---
+        let responseData;
+        
+        // --- Onboarding vs. Regular Chat ---
         if (state.onboardingToken) {
             const { ok, data } = await api.post('auth/onboard/step', { message: messageText });
             if (ok) {
+                responseData = data;
                 if (data.status === 'onboarding_inprogress') {
-                    state.onboardingToken = data.onboarding_token; // Get the new token for the next step
-                    addMessage(data.reply, 'ai', data.reply_type || 'text', false); // Use reply_type
+                    state.onboardingToken = data.onboarding_token;
                 } else if (data.status === 'created') {
-                    // Onboarding is complete!
-                    state.onboardingToken = null; // Clear the onboarding token
-                    state.jwtToken = data.token; // Store the final, long-lived token
+                    state.onboardingToken = null;
+                    state.jwtToken = data.token;
                     state.userName = data.name.split(' ')[0];
                     state.isGuest = false;
-                    addMessage(data.reply, 'ai', 'text', false);
-                    await initializeAuthenticatedSession(); // Re-render header with dashboard button etc.
+                    await initializeAuthenticatedSession();
                 }
             } else {
-                addMessage(data.error || 'Sorry, an error occurred during setup.', 'ai');
+                responseData = { reply: data.error || 'Sorry, an error occurred during setup.' };
             }
         } else {
-            // Regular chat logic from v102.1
+            // Regular chat logic
             state.isDashboardStale = true;
             const { ok, data } = await api.post('chat', { message: messageText });
             if (ok) {
-                addMessage(data.reply, 'ai', 'text', false);
-                if(data.chart_type) {
-                    renderChartInChat(data.chart_type, data.target_date);
-                }
+                responseData = data;
             } else {
-                addMessage(data.error || 'Sorry, an error occurred.', 'ai');
+                responseData = { reply: data.error || 'Sorry, an error occurred.' };
             }
         }
 
-        input.disabled = false;
-        input.focus();
+        // --- Handle Response Display ---
+        if (responseData) {
+            // NEW in v105.1: Check for a proactive summary and display it first
+            if (responseData.proactive_summary) {
+                addMessage(responseData.proactive_summary, 'ai', 'text', false);
+            }
+            // Display the main reply
+            addMessage(responseData.reply, 'ai', responseData.reply_type || 'text', false);
+
+            if (responseData.chart_type) {
+                renderChartInChat(responseData.chart_type, responseData.target_date);
+            }
+        }
+
+        if (input) {
+            input.disabled = false;
+            input.focus();
+        }
 
         if (userMessageDiv) {
             userMessageDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
     }
+
 
     async function onFileSelect(e) {
         if (state.isGuest || state.onboardingToken) { // MODIFIED in v103.0

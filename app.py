@@ -1,4 +1,4 @@
-# app.py (v104.8 - Fix Period Length Visualization Synonym)
+# app.py (v105.3 - Robust Monthly Summary Fix)
 import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets, random
 from datetime import datetime, timedelta, timezone
 from flask import Flask, Response, render_template, request, jsonify, session, redirect, url_for, send_from_directory, g
@@ -408,7 +408,7 @@ User: 'my period started on july 1st'
 User: 'visualize my cycle length'
 {{"query_chart": {{"type": "cycle_length"}}}}
 
-User: 'graph or show my period length over the last few months'
+User: 'graph my period length over the last few months'
 {{"query_chart": {{"type": "cycle_length"}}}}
 
 User: 'I have a headache'
@@ -1229,6 +1229,9 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
     calculate_child_ages(profile)
     calculate_trimester(profile)
     profile = _update_synopsis_if_needed(profile)
+    
+    # NEW in v105.1: Check for and generate monthly summary before anything else
+    proactive_summary = _check_and_generate_monthly_summary(profile)
 
     insights = get_conversation_summary(user_message)
     
@@ -1251,6 +1254,8 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
         json_response = {"reply": md.render("Of course, here is the visualization you requested."), "chart_type": chart_query.get('type')}
         if chart_query.get('target_date'):
             json_response["target_date"] = chart_query.get('target_date')
+        if proactive_summary:
+            json_response["proactive_summary"] = proactive_summary
         save_profile(profile_hash, profile)
         return jsonify(json_response)
         
@@ -1275,8 +1280,11 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
         
         # If a response was generated, save and return it.
         if action_response:
+            response_payload = {"reply": md.render(action_response)}
+            if proactive_summary:
+                response_payload["proactive_summary"] = proactive_summary
             save_profile(profile_hash, profile)
-            return jsonify({"reply": md.render(action_response)})
+            return jsonify(response_payload)
     # --- End of Restore ---
 
     action_response = None
@@ -1326,8 +1334,11 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
         session['pending_question'] = new_pending_question
         
     if action_response:
+        response_payload = {"reply": md.render(action_response)}
+        if proactive_summary:
+            response_payload["proactive_summary"] = proactive_summary
         save_profile(profile_hash, profile)
-        return jsonify({"reply": md.render(action_response)})
+        return jsonify(response_payload)
     
     # --- BUG FIX v97.1 & v97.4: Overhauled Suggestion/Follow-up Logic ---
     is_follow_up = False
@@ -1416,7 +1427,11 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
         reply = f"Sorry, an error occurred: {e}"
     
     save_profile(profile_hash, profile)
-    return jsonify({"reply": md.render(reply)})
+    response_payload = {"reply": md.render(reply)}
+    if proactive_summary:
+        response_payload["proactive_summary"] = proactive_summary
+        
+    return jsonify(response_payload)
 
 
 # --- ROUTES ---
@@ -2543,6 +2558,90 @@ def _check_for_new_achievements(profile):
             newly_unlocked.append(badge)
             
     return newly_unlocked
+
+# NEW in v105.1, MODIFIED in v105.2
+def _generate_monthly_summary(profile):
+    """
+    Uses AI to generate a personalized wellness summary for the previous month.
+    """
+    if not gemini_model: return None
+    
+    name = profile.get("name", "User").split(" ")[0]
+    today = datetime.now(timezone.utc)
+    first_day_of_current_month = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    last_day_of_previous_month = first_day_of_current_month - timedelta(days=1)
+    first_day_of_previous_month = last_day_of_previous_month.replace(day=1)
+    previous_month_name = first_day_of_previous_month.strftime("%B")
+    current_month_name = first_day_of_current_month.strftime("%B")
+
+
+    # Gather data from the previous month
+    health_logs = [log for log in profile.get("health_logs", []) if first_day_of_previous_month <= dateparser.parse(log['timestamp']).replace(tzinfo=timezone.utc) <= first_day_of_current_month]
+    goals = profile.get("goals", [])
+
+    if not health_logs: return None # Don't generate a summary if there's no activity
+
+    # Format the data for the prompt
+    summary_data = [f"Summary for {name} for the month of {previous_month_name}:"]
+    moods = defaultdict(int)
+    symptoms = defaultdict(int)
+    for log in health_logs:
+        if log.get('category') == 'mood':
+            moods[log.get('value')] += 1
+        elif log.get('category') == 'physical_symptom':
+            symptoms[log.get('value')] += 1
+    
+    if moods:
+        summary_data.append(f"- Moods Logged: {', '.join([f'{k} ({v} times)' for k, v in moods.items()])}")
+    if symptoms:
+        summary_data.append(f"- Symptoms Logged: {', '.join([f'{k} ({v} times)' for k, v in symptoms.items()])}")
+    if goals:
+        summary_data.append(f"- Current Goals: {', '.join([g['text'] for g in goals])}")
+
+    # MODIFIED in v105.3: Made the prompt more explicit
+    summary_prompt = (
+        f"You are Tyra, an empathetic wellness companion. It is the first day of {current_month_name}. "
+        f"Based on the following data points from last month ({previous_month_name}), "
+        f"write a short (2-3 sentences), warm, and encouraging proactive summary for {name}. "
+        f"Your response MUST start with 'Happy {current_month_name}!' and explicitly mention it's a look back at {previous_month_name}. "
+        "Highlight a positive trend or their consistency if possible. Conclude by asking an open-ended question about their goals or feelings for the month ahead.\n\n"
+        "Data:\n" + "\n".join(summary_data)
+    )
+
+    try:
+        response = gemini_model.generate_content(summary_prompt)
+        return md.render(response.text.strip())
+    except Exception as e:
+        print(f"!!! Could not generate monthly summary: {e}")
+        return None
+
+# NEW in v105.1, MODIFIED in v105.2
+def _check_and_generate_monthly_summary(profile):
+    """
+    Checks if a monthly summary is due and generates it if needed.
+    """
+    # Use setdefault to gracefully handle old profiles that don't have this structure
+    proactive_data = profile.setdefault("proactive_assistance", {})
+    last_summary_str = proactive_data.get("last_summary_date")
+    today = datetime.now().date()
+    
+    # Check if this is the first interaction of a new month
+    if last_summary_str:
+        try:
+            last_summary_date = dateparser.parse(last_summary_str).date()
+            if last_summary_date.month == today.month and last_summary_date.year == today.year:
+                return None # Summary already generated for this month
+        except (ValueError, TypeError):
+             # If the date is invalid for some reason, we can proceed to generate a new one
+             pass
+
+    # If no summary this month, generate one
+    summary = _generate_monthly_summary(profile)
+    if summary:
+        proactive_data["last_summary_date"] = today.isoformat()
+        return summary
+        
+    return None
 
 
 if __name__ == '__main__':
