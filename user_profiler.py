@@ -1,6 +1,5 @@
-# user_profiler.py (v105.1 - AI-Generated Monthly Summaries)
-from datetime import datetime
-import dateparser
+# user_profiler.py (v105.5 - Dynamic & Adaptive User Profile)
+from datetime import datetime, timedelta
 
 PROMPT_HISTORY_LIMIT = 5
 RECENT_LOG_LIMIT = 7
@@ -13,9 +12,16 @@ LANG_MAP = {
     "or": "Odia", "ml": "Malayalam", "pa": "Punjabi", "ar": "Arabic"
 }
 
+# MODIFIED in v105.5: Switched to storing DOB for dynamic age calculation
 def create_user_profile(name, email, phone, age, details, lang_code='en'):
+    # Calculate an approximate date of birth from the provided age
+    # This makes the profile dynamic over time
+    dob = datetime.now() - timedelta(days=age * 365.25)
+
     profile = {
-        "name": name, "email": email, "phone": phone, "age": age,
+        "name": name, "email": email, "phone": phone, 
+        "dob": dob.date().isoformat(), # Store DOB instead of static age
+        "age": age, # Store initial age for immediate use
         "language": lang_code,
         "primary_category": None, "secondary_details": details,
         "conversation_history": [],

@@ -1,6 +1,6 @@
-# app.py (v105.4 - Resilient LLM Fallback Mechanism)
+# app.py (v105.6 - Conversational Life Stage Updates)
 import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets, random
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, date
 from flask import Flask, Response, render_template, request, jsonify, session, redirect, url_for, send_from_directory, g
 from dotenv import load_dotenv, dotenv_values
 from markdown_it import MarkdownIt
@@ -36,7 +36,7 @@ BEHAVIORAL_SYNOPSIS_INTERVAL_DAYS = 3
 BEHAVIORAL_SYNOPSIS_MIN_INTERACTIONS = 15
 PROGRAM_SUGGESTION_COOLDOWN_DAYS = 3
 MAX_CYCLE_HISTORY = 120
-MAX_KEY_MEMORIES = 15
+MAX_KEY_MEMORIES = 15 # NEW in v102.0
 
 # NEW in v105.4: Define an ordered list of models for fallback on rate limiting.
 GEMINI_MODEL_CASCADE_LIST = [
@@ -422,22 +422,32 @@ def normalize_date_string(date_str: str) -> str:
 # MODIFIED in v105.4: Replaced direct LLM call with fallback function
 def get_conversation_summary(user_message):
     today_date = datetime.now().strftime('%Y-%m-%d')
-    # MODIFIED v104.8: Restored period length example to fix regression.
+    # MODIFIED v105.6: Expanded life_event_update intent
     summary_prompt = f"""
 You are an expert tool for converting natural language into a structured JSON object.
 Your output MUST be a single, raw, valid JSON object.
 Today's date is {today_date}. Resolve all relative dates to 'YYYY-MM-DD' format.
 
 **CRITICAL RULES & INTENTS:**
-1.  **CHARTING OVERRIDE:** This is your highest priority. If the message contains 'chart', 'calendar', 'graph', or 'visualize', you MUST return a `query_chart` intent.
-2.  **SET GOAL:** For phrases like "my goal is..." or "I want to start...", return a `set_goal` intent with the full goal text.
-3.  **MEDICATION LOG:** For phrases about taking or logging medicine, return `medication_log` with `name`, `dosage`, and `frequency`.
-4.  **REMINDERS (EXPLICIT):** For command-like phrases ("remind me to", "set a reminder"), return `reminder_action` with the `text` and `due_date`.
-5.  **REMINDERS (CONTEXTUAL):** For future events mentioned conversationally (e.g., "I have an appointment on Friday"), return `potential_reminder` with `text` and `date`.
-6.  **OTHER ACTIONS:** Process `health_log`, `period_action`, or `ambiguous_log` as normal.
-7.  **GENERAL CHAT / QUESTIONS:** For anything else, especially questions asking for information (e.g., "what should I do for..."), return an empty JSON object `{{}}`.
+1.  **LIFE EVENT UPDATE (Highest Priority):** If the user announces a new life stage like pregnancy or perimenopause, or the end of one (giving birth), you MUST return a `life_event_update` intent with the correct `type`.
+2.  **CHARTING OVERRIDE:** This is your next highest priority. If the message contains 'chart', 'calendar', 'graph', or 'visualize', you MUST return a `query_chart` intent.
+3.  **SET GOAL:** For phrases like "my goal is..." or "I want to start...", return a `set_goal` intent with the full goal text.
+4.  **MEDICATION LOG:** For phrases about taking or logging medicine, return `medication_log` with `name`, `dosage`, and `frequency`.
+5.  **REMINDERS (EXPLICIT):** For command-like phrases ("remind me to", "set a reminder"), return `reminder_action` with the `text` and `due_date`.
+6.  **REMINDERS (CONTEXTUAL):** For future events mentioned conversationally (e.g., "I have an appointment on Friday"), return `potential_reminder` with `text` and `date`.
+7.  **OTHER ACTIONS:** Process `health_log`, `period_action`, or `ambiguous_log` as normal.
+8.  **GENERAL CHAT / QUESTIONS:** For anything else, especially questions asking for information (e.g., "what should I do for..."), return an empty JSON object `{{}}`.
 
 --- EXAMPLES ---
+User: 'I had my baby on Tuesday!'
+{{"life_event_update": {{"type": "pregnancy_to_parenting", "date": "{(datetime.now() - timedelta(days=(datetime.now().weekday() - 1) % 7)).strftime('%Y-%m-%d')}"}}}}
+
+User: 'Good news, I am pregnant!'
+{{"life_event_update": {{"type": "start_pregnancy"}}}}
+
+User: 'I think I am starting perimenopause.'
+{{"life_event_update": {{"type": "start_perimenopause"}}}}
+
 User: 'my period started on july 1st'
 {{"period_action": {{"type": "log_period_start", "date": "{datetime.now().year}-07-01"}}}}
 
@@ -1281,9 +1291,44 @@ def _handle_profile_check_or_creation(data, is_api_call=False):
         # This function no longer handles it directly, just signals the frontend.
         return jsonify({"status": "new_user_needed"})
 
+# NEW in v105.5: Automatically update age-based profile data
+def _recalculate_age_dependent_categories(profile):
+    """
+    Recalculates user's age and primary category based on their DOB.
+    This ensures the profile evolves as the user gets older.
+    """
+    dob_str = profile.get("dob")
+    if not dob_str:
+        return profile # Cannot proceed without DOB, handles legacy profiles
+
+    try:
+        dob = date.fromisoformat(dob_str)
+        today = date.today()
+        # Calculate current age
+        current_age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+        
+        # Determine the correct primary category based on current age
+        if current_age <= 19: correct_category = "Adolescence/Teen"
+        elif 20 <= current_age <= 39: correct_category = "Young Adulthood"
+        elif 40 <= current_age <= 59: correct_category = "Middle Adulthood"
+        else: correct_category = "Senior/Postmenopausal Life"
+
+        # Update profile only if there's a change
+        if profile.get("age") != current_age or profile.get("primary_category") != correct_category:
+            print(f"--- Updating user age from {profile.get('age')} to {current_age} and category from '{profile.get('primary_category')}' to '{correct_category}' ---")
+            profile["age"] = current_age
+            profile["primary_category"] = correct_category
+    except (ValueError, TypeError):
+        # Handles cases where DOB might be improperly formatted
+        pass
+        
+    return profile
+
+
 # MODIFIED in v105.4: Replaced direct LLM call with fallback function
 def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
     # Recalculate dynamic and analytical data on every interaction.
+    profile = _recalculate_age_dependent_categories(profile) # NEW in v105.5
     calculate_child_ages(profile)
     calculate_trimester(profile)
     profile = _update_synopsis_if_needed(profile)
@@ -1317,33 +1362,79 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
         save_profile(profile_hash, profile)
         return jsonify(json_response)
         
-    # --- RESTORED v98.7: Contextual Reminder & Pending Question Logic ---
-    # This logic is session-dependent and primarily for the monolith experience.
+    # --- MODIFIED v105.5: Expanded session-based conversational flows ---
     pending_question = session.get('pending_question')
     if pending_question:
-        session.pop('pending_question', None) # Consume the pending question
+        affirmative_keywords = ['yes', 'sure', 'ok', 'okay', 'please', 'do it']
+        is_affirmative = any(keyword in user_message.lower() for keyword in affirmative_keywords)
+        action_response = None
         
         if pending_question == 'clarify_reminder_creation':
             potential_reminder_context = session.pop('pending_action_context', None)
-            affirmative_keywords = ['yes', 'sure', 'ok', 'okay', 'please', 'do it']
-            if any(keyword in user_message.lower() for keyword in affirmative_keywords) and potential_reminder_context:
-                # Create a standard reminder action from the context
-                action_to_create = {
-                    "text": potential_reminder_context.get('text'),
-                    "due_date": potential_reminder_context.get('date')
-                }
+            if is_affirmative and potential_reminder_context:
+                action_to_create = {"text": potential_reminder_context.get('text'), "due_date": potential_reminder_context.get('date')}
                 profile, action_response, _ = handle_reminder_action(action_to_create, profile)
             else:
                 action_response = "Okay, no problem. I won't set a reminder this time."
         
-        # If a response was generated, save and return it.
+        elif pending_question == 'confirm_life_event_update': # NEW in v105.5
+            life_event_context = session.pop('pending_action_context', None)
+            if is_affirmative and life_event_context:
+                profile['secondary_details']['is_pregnant'] = False
+                profile['secondary_details']['is_parent'] = True
+                
+                provided_date = life_event_context.get('date')
+                if provided_date:
+                    dob_str = normalize_date_string(provided_date)
+                    profile['secondary_details'].setdefault('child_dobs', []).append(dob_str)
+                    profile['secondary_details']['num_children'] = len(profile['secondary_details']['child_dobs'])
+                    action_response = "Thank you! I've updated your profile to reflect your new parenthood journey and noted the date. Congratulations again!"
+                else:
+                    session['pending_question'] = 'get_newborn_dob'
+                    action_response = "That's wonderful! I've updated your profile. To help keep track, could you share your baby's date of birth?"
+            else:
+                 action_response = "Okay, I won't make any changes to your profile for now."
+                 
+        elif pending_question == 'get_newborn_dob': # NEW in v105.5
+            dob_str = normalize_date_string(user_message)
+            profile['secondary_details'].setdefault('child_dobs', []).append(dob_str)
+            profile['secondary_details']['num_children'] = len(profile['secondary_details']['child_dobs'])
+            action_response = f"Got it, I've added {dob_str} to your profile. Thank you for sharing!"
+
+        elif pending_question == 'confirm_start_pregnancy': # NEW in v105.6
+            if is_affirmative:
+                profile['secondary_details']['is_pregnant'] = True
+                # Now, ask the crucial follow-up question
+                session['pending_question'] = 'get_lmp_date'
+                action_response = "Okay, I've updated your profile. To help calculate your gestation and provide timely milestones, could you please share the first day of your last menstrual period (LMP)?"
+            else:
+                action_response = "No problem. I won't update your profile. How else can I help?"
+
+        elif pending_question == 'get_lmp_date': # NEW in v105.6
+            lmp_date_str = normalize_date_string(user_message)
+            profile['secondary_details']['lmp_date'] = lmp_date_str
+            # After getting the final piece of info, the conversation is done.
+            action_response = f"Thank you! I've saved that date. Based on that, I'll keep you updated on your pregnancy journey."
+
+        elif pending_question == 'confirm_start_perimenopause': # NEW in v105.6
+            if is_affirmative:
+                profile['secondary_details']['is_perimenopausal'] = True
+                action_response = "Thank you. I've updated your profile. Please know you can always talk to me about any symptoms or feelings you're experiencing."
+            else:
+                action_response = "Understood. I will not update your profile. What's on your mind?"
+
+        # Clear session state if we're not asking another question
+        if 'pending_question' not in session:
+            session.pop('pending_question', None)
+            session.pop('pending_action_context', None)
+            
         if action_response:
             response_payload = {"reply": md.render(action_response)}
             if proactive_summary:
                 response_payload["proactive_summary"] = proactive_summary
             save_profile(profile_hash, profile)
             return jsonify(response_payload)
-    # --- End of Restore ---
+    # --- End of conversational flow handling ---
 
     action_response = None
     new_pending_question = None
@@ -1356,6 +1447,29 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
             profile, action_response, new_pending_question = handler(insights[action_type], profile)
             break
             
+    # --- NEW in v105.5 & MODIFIED in 105.6: Life Event Update Trigger ---
+    if not action_response and insights.get('life_event_update'):
+        event_data = insights.pop('life_event_update')
+        event_type = event_data.get('type')
+
+        # Handle START of pregnancy
+        if event_type == 'start_pregnancy' and not profile.get('secondary_details', {}).get('is_pregnant'):
+            session['pending_question'] = 'confirm_start_pregnancy'
+            action_response = "That's wonderful news! To help me provide the most relevant information, may I update your profile to reflect that you are pregnant?"
+        
+        # Handle START of perimenopause
+        elif event_type == 'start_perimenopause' and not profile.get('secondary_details', {}).get('is_perimenopausal'):
+            session['pending_question'] = 'confirm_start_perimenopause'
+            action_response = "Thank you for sharing that. It can be a confusing time. To help me offer more relevant support, would you like me to update your profile to note that you are navigating perimenopause?"
+
+        # Handle END of pregnancy (existing logic)
+        elif event_type == 'pregnancy_to_parenting' and profile.get('secondary_details', {}).get('is_pregnant'):
+            session['pending_question'] = 'confirm_life_event_update'
+            session['pending_action_context'] = event_data
+            action_response = "That's wonderful news! It sounds like you've welcomed your baby. Shall I update your profile to reflect that you are now parenting?"
+        else: # User is not pregnant, or event is not applicable, so treat as general chat
+             action_response = None
+
     # --- RESTORED v98.7: Check for new potential reminders ---
     if not action_response and ENABLE_CONTEXTUAL_REMINDERS and insights.get('potential_reminder'):
         potential_reminder_data = insights.pop('potential_reminder')
@@ -1374,19 +1488,10 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
         # --- BUG FIX v102.1: Add a guard clause ---
         if category and value:
             # --- NEW v101.9 & Modified v104.1 ---
-            negative_log_values = [
-                'high', 'poor', 'terrible', 'anxious', 'sad', 'stressed', 
-                'overwhelmed', 'exhausted', 'headache', 'cramps', 'painful'
-            ]
+            negative_log_values = ['high', 'poor', 'terrible', 'anxious', 'sad', 'stressed', 'overwhelmed', 'exhausted', 'headache', 'cramps', 'painful']
             is_negative = value in negative_log_values
             
-            # We now always generate the confirmation via AI for a more natural feel.
-            special_context = {
-                "type": "dynamic_confirmation",
-                "log_details": log_data,
-                "is_negative": is_negative
-            }
-        # If we fall through, the main AI call will handle the response.
+            special_context = {"type": "dynamic_confirmation", "log_details": log_data, "is_negative": is_negative}
 
     if new_pending_question:
         session['pending_question'] = new_pending_question
@@ -1416,45 +1521,28 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
             profile.setdefault("proactive_assistance", {})["pending_program_offer"] = new_suggestion['name']
             profile["proactive_assistance"]["last_program_suggestion_ts"] = datetime.now(timezone.utc).isoformat()
             
-            # 3. Check if the user is asking directly about the topic we just found
             question_is_about_suggestion = any(keyword in user_message.lower() for keyword in ["what is", "tell me about", "explain"])
             if question_is_about_suggestion:
-                 special_context = {
-                    "type": "explain_and_offer_program",
-                    "program_name": new_suggestion['name']
-                }
+                 special_context = { "type": "explain_and_offer_program", "program_name": new_suggestion['name']}
     
     # --- NEW in v104.2: Get Educational Tidbit ---
     if not special_context: # Don't show a tidbit if a more specific context is already active
         tidbit_text, tidbit_id = _get_relevant_education_tidbit(profile, user_message)
         if tidbit_text:
             education_tidbit = tidbit_text
-            # Use setdefault to ensure the key exists, crucial for old profiles
             profile.setdefault("shown_education_tidbits", []).append(tidbit_id)
             
-    # NEW in v105.0: Check for new achievements before generating the main response
     if not special_context:
         newly_unlocked_badges = _check_for_new_achievements(profile)
         if newly_unlocked_badges:
-            special_context = {
-                "type": "achievement_unlocked",
-                "badges": newly_unlocked_badges
-            }
+            special_context = {"type": "achievement_unlocked", "badges": newly_unlocked_badges}
 
 
     proactive_context = get_proactive_context(profile)
     context_prompt = format_profile_for_prompt(
-        profile, 
-        chatbot_name=CHATBOT_NAME, 
-        proactive_context=proactive_context, 
-        suggested_program_object=suggested_program_object, 
-        is_follow_up=is_follow_up,
-        last_discussed_program_context=last_discussed_program_context,
-        enable_ovulation_tracker=ENABLE_OVULATION_TRACKER,
-        enable_realtime_log_context=ENABLE_REALTIME_LOG_CONTEXT,
-        is_summary_request=is_summary_request,
-        special_context=special_context,
-        education_tidbit=education_tidbit # NEW in v104.2
+        profile, chatbot_name=CHATBOT_NAME, proactive_context=proactive_context, suggested_program_object=suggested_program_object, is_follow_up=is_follow_up,
+        last_discussed_program_context=last_discussed_program_context, enable_ovulation_tracker=ENABLE_OVULATION_TRACKER, enable_realtime_log_context=ENABLE_REALTIME_LOG_CONTEXT,
+        is_summary_request=is_summary_request, special_context=special_context, education_tidbit=education_tidbit
     )
     
     response = _call_llm_with_fallback(f"{context_prompt}\n{user_message}")
@@ -1463,22 +1551,15 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
         reply = "I'm sorry, but I'm currently unable to process your request due to high demand. Please try again in a moment."
     else:
         raw_reply = response.text
-        # --- NEW in v102.0: Conversational Memory Processing ---
         memory_match = re.search(r"\[SUGGEST_MEMORY:\s*(.*?)\]", raw_reply)
         if memory_match:
             memory_text = memory_match.group(1).strip()
             if memory_text:
                 profile.setdefault("key_memories", [])
-                new_memory = {
-                    "memory": memory_text,
-                    "timestamp": datetime.now(timezone.utc).strftime('%Y-%m-%d')
-                }
-                # Avoid duplicate memories
+                new_memory = {"memory": memory_text, "timestamp": datetime.now(timezone.utc).strftime('%Y-%m-%d')}
                 if not any(mem['memory'] == new_memory['memory'] for mem in profile["key_memories"]):
                     profile["key_memories"].insert(0, new_memory)
-                    # Prune old memories if list is too long
                     profile["key_memories"] = profile["key_memories"][:MAX_KEY_MEMORIES]
-            # Clean the tag from the reply that will be sent to the user
             reply = re.sub(r"\[SUGGEST_MEMORY:\s*(.*?)\]", "", raw_reply).strip()
         else:
             reply = raw_reply
