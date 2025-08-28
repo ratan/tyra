@@ -1,4 +1,4 @@
-# app.py (v105.3 - Robust Monthly Summary Fix)
+# app.py (v105.4 - Resilient LLM Fallback Mechanism)
 import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets, random
 from datetime import datetime, timedelta, timezone
 from flask import Flask, Response, render_template, request, jsonify, session, redirect, url_for, send_from_directory, g
@@ -25,7 +25,6 @@ load_dotenv()
 
 # --- Configuration Constants ---
 MAX_HISTORY_ENTRIES = 50
-GEMINI_MODEL_NAME = 'gemini-2.5-flash-lite-preview-06-17'
 CHATBOT_NAME = "Tyra"
 REPORT_LIFETIME_HOURS = 36
 GOAL_CHECK_IN_DAYS = 7
@@ -37,7 +36,15 @@ BEHAVIORAL_SYNOPSIS_INTERVAL_DAYS = 3
 BEHAVIORAL_SYNOPSIS_MIN_INTERACTIONS = 15
 PROGRAM_SUGGESTION_COOLDOWN_DAYS = 3
 MAX_CYCLE_HISTORY = 120
-MAX_KEY_MEMORIES = 15 # NEW in v102.0
+MAX_KEY_MEMORIES = 15
+
+# NEW in v105.4: Define an ordered list of models for fallback on rate limiting.
+GEMINI_MODEL_CASCADE_LIST = [
+    'gemini-2.5-flash-lite',    # Primary model
+    'gemini-2.0-flash-lite',    # First fallback
+    'gemini-2.0-flash',         # Second fallback (text-only)
+    'gemini-2.5-flash'          # Third fallback (text-only)
+]
 
 # NEW in v105.0: Badge Definitions
 BADGE_DEFINITIONS = [
@@ -166,7 +173,6 @@ os.makedirs(LOCALES_DIR, exist_ok=True)
 TRIBHER_DATA = None
 MILESTONES_DATA = None
 EDUCATION_DATA = None # NEW in v104.2
-gemini_model = None
 llm_response_cache = {}
 ip_request_timestamps = {}
 api_otp_store = {}
@@ -329,18 +335,18 @@ def load_language_data(lang_code='en'):
         with open(file_to_load, 'r', encoding='utf-8') as f: return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError): return {}
 
+# MODIFIED in v105.4: Simplified to only configure the API key.
 def configure_ai():
-    global gemini_model
+    """Configures the Google AI API key. Models are now instantiated on demand."""
     try:
-        # BUG FIX v94.5: Use app.config which is now the reliable source
         gemini_api_key = app.config.get("GEMINI_API_KEY")
         if not gemini_api_key:
             raise ValueError("GEMINI_API_KEY not found in configuration.")
         genai.configure(api_key=gemini_api_key)
-        gemini_model = genai.GenerativeModel(GEMINI_MODEL_NAME)
+        print("--- Google AI configured successfully. ---")
     except Exception as e:
-        gemini_model = None
         print(f"!!! CRITICAL ERROR: Failed to configure Google AI. Error: {e}")
+
 
 def load_tribher_data():
     global TRIBHER_DATA
@@ -368,6 +374,35 @@ load_education_data() # NEW in v104.2
 configure_ai()
 md = MarkdownIt()
 
+# NEW in v105.4: Centralized LLM call function with cascading fallback
+def _call_llm_with_fallback(*prompt_parts):
+    """
+    Calls the Gemini API with a prompt, trying models from the cascade list.
+    Falls back to the next model ONLY on ResourceExhausted (rate limit) errors.
+    Accepts one or more arguments to be passed to generate_content.
+    """
+    for model_name in GEMINI_MODEL_CASCADE_LIST:
+        try:
+            print(f"--- Attempting LLM call with model: {model_name} ---")
+            # Instantiate the model for this attempt
+            model = genai.GenerativeModel(model_name)
+            # Make the API call
+            response = model.generate_content(prompt_parts)
+            print(f"--- Call with {model_name} successful. ---")
+            return response
+        except exceptions.ResourceExhausted as e:
+            print(f"!!! WARNING: Model {model_name} is rate-limited. Trying next model. Error: {e}")
+            time.sleep(1) # Add a small delay before retrying
+            continue # Go to the next model in the list
+        except Exception as e:
+            # For any other error (safety, invalid args, etc.), fail immediately.
+            print(f"!!! CRITICAL: Non-recoverable API error with {model_name}. Halting fallback. Error: {e}")
+            return None
+    
+    # If the loop completes without returning, all models failed.
+    print("!!! CRITICAL: All models in the cascade list failed due to rate limiting.")
+    return None
+
 def wait_for_file_to_be_active(file_name, timeout_seconds=120):
     start_time = time.time()
     while time.time() - start_time < timeout_seconds:
@@ -384,6 +419,7 @@ def normalize_date_string(date_str: str) -> str:
     parsed_date = dateparser.parse(date_str, settings={'PREFER_DATES_FROM': 'past'})
     return parsed_date.strftime("%Y-%m-%d") if parsed_date else datetime.now().strftime("%Y-%m-%d")
 
+# MODIFIED in v105.4: Replaced direct LLM call with fallback function
 def get_conversation_summary(user_message):
     today_date = datetime.now().strftime('%Y-%m-%d')
     # MODIFIED v104.8: Restored period length example to fix regression.
@@ -436,19 +472,22 @@ User: 'My goal is to exercise 3 times a week.'
 Now, process this user message:
 '{user_message}'
 """
-    response = None
+    response = _call_llm_with_fallback(summary_prompt)
+    if response is None:
+        print("!!! LLM call failed in get_conversation_summary after all fallbacks.")
+        return {"error": "llm_call_failed"}
+
     try:
-        if not gemini_model: raise Exception("Gemini model is not configured.")
-        response = gemini_model.generate_content(summary_prompt)
         cleaned_response = response.text.strip().lstrip("```json").rstrip("```").strip()
         return json.loads(cleaned_response)
     except json.JSONDecodeError as e:
         print(f"!!! JSONDecodeError during summarization: {e}")
-        if response: print(f"Faulty AI response from model: {response.text}")
+        print(f"Faulty AI response from model: {response.text}")
         return {"error": "json_parse_failed"}
     except Exception as e:
         print(f"Error during summarization: {e}")
         return {"error": "unknown_summarization_error"}
+
 
 def get_holistic_report_summary_prompt(user_query, extracted_text):
     return (
@@ -924,9 +963,8 @@ def load_profile(profile_hash):
         return None
 
 # --- NEW: BEHAVIORAL SYNOPSIS LOGIC ---
+# MODIFIED in v105.4: Replaced direct LLM call with fallback function
 def _generate_behavioral_synopsis(profile):
-    if not gemini_model: return None
-    
     log = profile.get("interaction_log", [])[:100] # Analyze last 100 interactions
     if not log: return None
 
@@ -984,14 +1022,19 @@ def _generate_behavioral_synopsis(profile):
     {analysis_text}
     """
     
+    response = _call_llm_with_fallback(synopsis_prompt)
+    if response is None:
+        print("!!! LLM call failed in _generate_behavioral_synopsis after all fallbacks.")
+        return None
+
     try:
-        response = gemini_model.generate_content(synopsis_prompt)
         cleaned_response = response.text.strip().lstrip("```json").rstrip("```").strip()
         synopsis = json.loads(cleaned_response)
         return synopsis if isinstance(synopsis, list) else None
     except Exception as e:
         print(f"!!! Could not generate behavioral synopsis: {e}")
         return None
+
 
 def _update_synopsis_if_needed(profile):
     if not ENABLE_BEHAVIORAL_SYNOPSIS: return profile
@@ -1030,15 +1073,17 @@ def _update_synopsis_if_needed(profile):
 
 # --- SHARED BUSINESS LOGIC HELPERS ---
 
-# Refactored logic to be callable by both monolith and API
+# MODIFIED in v105.4: Replaced direct LLM call with fallback function
 def _handle_upload_logic(file, user_query):
-    if not file or not gemini_model:
-        return {'error': 'Server not configured for uploads'}, 500
+    if not file:
+        return {'error': 'No file provided'}, 400
     
     temp_path, uploaded_file = None, None
     try:
         temp_path = os.path.join(UPLOADS_DIR, secure_filename(file.filename))
         file.save(temp_path)
+        
+        # This part of the GenAI API does not use the fallback logic, it's a file service.
         uploaded_file = genai.upload_file(path=temp_path, mime_type=file.mimetype)
         if not wait_for_file_to_be_active(uploaded_file.name):
             raise Exception("File processing timeout")
@@ -1047,12 +1092,19 @@ def _handle_upload_logic(file, user_query):
         if file.mimetype.startswith('image/') and ENABLE_VISUAL_TRIAGE:
             final_prompt = get_visual_triage_prompt(user_query, uploaded_file)
         elif ENABLE_DOCUMENT_UPLOAD:
-            ocr_response = gemini_model.generate_content(["Extract all text from this document.", uploaded_file])
+            # The OCR call is an LLM call, so it needs the fallback
+            ocr_response = _call_llm_with_fallback("Extract all text from this document.", uploaded_file)
+            if ocr_response is None:
+                return {'error': 'Failed to extract text from document.'}, 500
             final_prompt = get_holistic_report_summary_prompt(user_query, ocr_response.text)
         else:
             return {'error': 'Unsupported file type or feature disabled'}, 400
         
-        final_response = gemini_model.generate_content(final_prompt)
+        # The final summarization call also needs the fallback
+        final_response = _call_llm_with_fallback(*final_prompt if isinstance(final_prompt, list) else [final_prompt])
+        if final_response is None:
+            return {'error': 'Failed to analyze the document after text extraction.'}, 500
+        
         return {"reply": md.render(final_response.text)}, 200
     except Exception as e:
         return {'error': str(e)}, 500
@@ -1060,21 +1112,29 @@ def _handle_upload_logic(file, user_query):
         if temp_path and os.path.exists(temp_path): os.remove(temp_path)
         if uploaded_file:
             try: genai.delete_file(uploaded_file.name)
-            except exceptions.NotFound: pass # File might already be gone
+            except exceptions.NotFound: pass
 
 
+# MODIFIED in v105.4: Replaced direct LLM call with fallback function
 def _handle_transcription_logic(file):
-    if not file or not gemini_model:
-        return {'error': 'Server not configured for transcription'}, 500
+    if not file:
+        return {'error': 'No file provided'}, 400
 
     temp_path, uploaded_file = None, None
     try:
         temp_path = os.path.join(UPLOADS_DIR, "voice_note.webm")
         file.save(temp_path)
+        
+        # File upload is not an LLM call
         uploaded_file = genai.upload_file(path=temp_path, mime_type="audio/webm")
         if not wait_for_file_to_be_active(uploaded_file.name):
             raise Exception("File processing timeout")
-        response = gemini_model.generate_content(["Transcribe this audio.", uploaded_file])
+        
+        # Transcription is an LLM call
+        response = _call_llm_with_fallback("Transcribe this audio.", uploaded_file)
+        if response is None:
+            return {'error': 'Transcription failed after all fallbacks.'}, 500
+            
         return {"transcribed_text": response.text.strip()}, 200
     except Exception as e:
         return {'error': str(e)}, 500
@@ -1084,7 +1144,8 @@ def _handle_transcription_logic(file):
             try: genai.delete_file(uploaded_file.name)
             except exceptions.NotFound: pass
 
-# --- NEW v104.1: Centralized Quick Log Processing with AI ---
+
+# MODIFIED in v105.4: Replaced direct LLM call with fallback function
 def _process_quick_log_response(profile, category, value):
     """
     Handles logging, context generation, and AI call for quick log buttons.
@@ -1093,7 +1154,6 @@ def _process_quick_log_response(profile, category, value):
     profile.setdefault('health_logs', []).insert(0, {"timestamp": datetime.now().isoformat(), "category": category, "value": value})
     
     # 2. Determine if a special follow-up is needed.
-    # We use the same negative triggers as the main chat logic.
     negative_log_values = [
         'high', 'poor', 'terrible', 'anxious', 'sad', 'stressed', 
         'overwhelmed', 'exhausted', 'headache', 'cramps', 'painful'
@@ -1114,17 +1174,15 @@ def _process_quick_log_response(profile, category, value):
         special_context=special_context
     )
     
-    try:
-        # We pass a simple placeholder message as the user input is implicit (the button click)
-        response = gemini_model.generate_content(f"{context_prompt}\n(User just clicked a quick log button)")
-        reply = response.text.strip()
-    except Exception as e:
-        # Fallback to a static message on AI error
+    # We pass a simple placeholder message as the user input is implicit (the button click)
+    response = _call_llm_with_fallback(f"{context_prompt}\n(User just clicked a quick log button)")
+
+    if response is None:
         lang_data = load_language_data(profile.get('language', 'en'))
         reply = lang_data.get("quick_log_confirm_fallback", "Okay, I've logged that for you.")
-        print(f"!!! AI Error during quick log processing: {e}")
-
-    # The profile was already modified, so it's ready to be saved by the calling route.
+    else:
+        reply = response.text.strip()
+    
     return {"reply": md.render(reply)}
 
 
@@ -1223,7 +1281,7 @@ def _handle_profile_check_or_creation(data, is_api_call=False):
         # This function no longer handles it directly, just signals the frontend.
         return jsonify({"status": "new_user_needed"})
 
-
+# MODIFIED in v105.4: Replaced direct LLM call with fallback function
 def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
     # Recalculate dynamic and analytical data on every interaction.
     calculate_child_ages(profile)
@@ -1399,10 +1457,12 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
         education_tidbit=education_tidbit # NEW in v104.2
     )
     
-    try:
-        response = gemini_model.generate_content(f"{context_prompt}\n{user_message}")
+    response = _call_llm_with_fallback(f"{context_prompt}\n{user_message}")
+
+    if response is None:
+        reply = "I'm sorry, but I'm currently unable to process your request due to high demand. Please try again in a moment."
+    else:
         raw_reply = response.text
-        
         # --- NEW in v102.0: Conversational Memory Processing ---
         memory_match = re.search(r"\[SUGGEST_MEMORY:\s*(.*?)\]", raw_reply)
         if memory_match:
@@ -1423,9 +1483,6 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
         else:
             reply = raw_reply
 
-    except Exception as e:
-        reply = f"Sorry, an error occurred: {e}"
-    
     save_profile(profile_hash, profile)
     response_payload = {"reply": md.render(reply)}
     if proactive_summary:
@@ -1687,7 +1744,9 @@ if app.config['ENABLE_WIDGET_MODE']:
         
         # In non-OTP guest mode, we allow the chat to proceed
         if g.is_guest:
-             response = gemini_model.generate_content(f"You are a helpful assistant. Answer the user's question: {request.json['message']}")
+             response = _call_llm_with_fallback(f"You are a helpful assistant. Answer the user's question: {request.json['message']}")
+             if response is None:
+                 return jsonify({"reply": "Sorry, I'm unable to process your request right now."})
              return jsonify({"reply": md.render(response.text)})
 
         return _process_chat_message_for_auth_user(request.json['message'], g.profile, g.profile_hash)
@@ -2178,7 +2237,10 @@ if not app.config['ENABLE_WIDGET_MODE']:
             if insights.get('period_action') or insights.get('reminder_action'):
                 return jsonify({"reply": "To use this feature, please create an account.", "action": "prompt_signup"})
             
-            response = gemini_model.generate_content(f"You are a helpful assistant. Answer the user's question: {user_message}")
+            response = _call_llm_with_fallback(f"You are a helpful assistant. Answer the user's question: {user_message}")
+            if response is None:
+                return jsonify({"reply": "Sorry, I'm unable to process your request right now."})
+
             reply_text = response.text
 
             if ENABLE_LLM_CACHING:
@@ -2326,10 +2388,9 @@ if ENABLE_SQLITE_DATABASE:
             return "Database file not found on the server.", 404
 
 # --- NEW in v103.0: Conversational Onboarding Logic ---
+# MODIFIED in v105.4: Replaced direct LLM call with fallback function
 def _parse_life_events_from_text(user_text, age):
     """Uses AI to parse natural language into structured secondary_details."""
-    if not gemini_model: return {}
-
     prompt = f"""
     You are an expert data extraction tool. Your task is to analyze a user's free-text description of their life stage and convert it into a structured JSON object.
 
@@ -2366,12 +2427,15 @@ def _parse_life_events_from_text(user_text, age):
     ---
     Now, process this user's text: "{user_text}"
     """
+    response = _call_llm_with_fallback(prompt)
+    if response is None:
+        return {} # Return empty on LLM failure
+        
     try:
-        response = gemini_model.generate_content(prompt)
         cleaned_response = response.text.strip().lstrip("```json").rstrip("```").strip()
         return json.loads(cleaned_response)
     except Exception:
-        return {} # Return empty on any failure
+        return {} # Return empty on any parsing failure
 
 def _handle_onboarding_step(profile_hash, user_message, onboarding_data, is_api_call=False):
     """
@@ -2559,13 +2623,11 @@ def _check_for_new_achievements(profile):
             
     return newly_unlocked
 
-# NEW in v105.1, MODIFIED in v105.2
+# MODIFIED in v105.4: Replaced direct LLM call with fallback function
 def _generate_monthly_summary(profile):
     """
     Uses AI to generate a personalized wellness summary for the previous month.
     """
-    if not gemini_model: return None
-    
     name = profile.get("name", "User").split(" ")[0]
     today = datetime.now(timezone.utc)
     first_day_of_current_month = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -2598,7 +2660,6 @@ def _generate_monthly_summary(profile):
     if goals:
         summary_data.append(f"- Current Goals: {', '.join([g['text'] for g in goals])}")
 
-    # MODIFIED in v105.3: Made the prompt more explicit
     summary_prompt = (
         f"You are Tyra, an empathetic wellness companion. It is the first day of {current_month_name}. "
         f"Based on the following data points from last month ({previous_month_name}), "
@@ -2608,12 +2669,13 @@ def _generate_monthly_summary(profile):
         "Data:\n" + "\n".join(summary_data)
     )
 
-    try:
-        response = gemini_model.generate_content(summary_prompt)
-        return md.render(response.text.strip())
-    except Exception as e:
-        print(f"!!! Could not generate monthly summary: {e}")
+    response = _call_llm_with_fallback(summary_prompt)
+    if response is None:
+        print(f"!!! Could not generate monthly summary after all fallbacks.")
         return None
+        
+    return md.render(response.text.strip())
+
 
 # NEW in v105.1, MODIFIED in v105.2
 def _check_and_generate_monthly_summary(profile):
