@@ -1,0 +1,268 @@
+[
+  {
+    "id": "pre_yoga_TR1_01",
+    "primary_category": "yoga",
+    "category": "prenatal_yoga",
+    "title": "Surya Namaskar Series",
+    "youtube_video_id": "FAg0At6PK0U",
+    "youtube_thumbnail_url": "https://i.ytimg.com/vi/FAg0At6PK0U/mqdefault.jpg",
+    "description": "Surya Namaskar Series, Prenatal Yoga TR1, Episode 1",
+    "keywords": ["yoga", "first trimester", "energy", "flow", "active"],
+    "suitability": {
+      "min_weeks_gestation": 1,
+      "max_weeks_gestation": 12
+    }
+  },
+  {
+    "id": "pre_yoga_TR1_02",
+    "primary_category": "yoga",
+    "category": "prenatal_yoga",
+    "title": "Breathing and Relaxation",
+    "youtube_video_id": "YK885f1BiXI",
+    "youtube_thumbnail_url": "https://i.ytimg.com/vi/YK885f1BiXI/mqdefault.jpg",
+    "description": "Breathing and Relaxation, Prenatal Yoga TR1, Episode 2",
+    "keywords": ["yoga", "first trimester", "energy", "flow", "active"],
+    "suitability": {
+      "min_weeks_gestation": 1,
+      "max_weeks_gestation": 12
+    }
+  },
+  {
+    "id": "pre_yoga_TR2_06",
+    "primary_category": "yoga",
+    "category": "prenatal_yoga",
+    "title": "Loosening and Simple Movements",
+    "youtube_video_id": "XDd2zqsDFIg",
+    "youtube_thumbnail_url": "https://i.ytimg.com/vi/XDd2zqsDFIg/mqdefault.jpg",
+    "description": "Loosening and Simple Movements, Prenatal Yoga TR2, Episode 6",
+    "keywords": ["yoga", "second trimester", "energy", "flow", "active"],
+    "suitability": {
+      "min_weeks_gestation": 13,
+      "max_weeks_gestation": 26
+    }
+  },
+  {
+    "id": "pre_yoga_TR2_07",
+    "primary_category": "yoga",
+    "category": "prenatal_yoga",
+    "title": "Floor Yoga Flow",
+    "youtube_video_id": "PrbVtWme-A4",
+    "youtube_thumbnail_url": "https://i.ytimg.com/vi/PrbVtWme-A4/mqdefault.jpg",
+    "description": "Floor Yoga Flow, Prenatal Yoga TR2, Episode 7",
+    "keywords": ["yoga", "second trimester", "energy", "flow", "active"],
+    "suitability": {
+      "min_weeks_gestation": 13,
+      "max_weeks_gestation": 26
+    }
+  },
+  {
+    "id": "pre_yoga_TR3_11",
+    "primary_category": "yoga",
+    "category": "prenatal_yoga",
+    "title": "Asana Flow 1",
+    "youtube_video_id": "SjGNkSHrthM",
+    "youtube_thumbnail_url": "https://i.ytimg.com/vi/SjGNkSHrthM/mqdefault.jpg",
+    "description": "Asana Flow 1, Prenatal Yoga TR3, Episode 11",
+    "keywords": ["yoga", "third trimester", "energy", "flow", "active"],
+    "suitability": {
+      "min_weeks_gestation": 27,
+      "max_weeks_gestation": 41
+    }
+  },
+  {
+    "id": "pre_yoga_TR3_12",
+    "primary_category": "yoga",
+    "category": "prenatal_yoga",
+    "title": "Asana Flow 2",
+    "youtube_video_id": "Ntb6qYHZv8o",
+    "youtube_thumbnail_url": "https://i.ytimg.com/vi/Ntb6qYHZv8o/mqdefault.jpg",
+    "description": "Asana Flow 2, Prenatal Yoga TR3, Episode 12",
+    "keywords": ["yoga", "third trimester", "energy", "flow", "active"],
+    "suitability": {
+      "min_weeks_gestation": 27,
+      "max_weeks_gestation": 41
+    }
+  },
+  {
+    "id": "pre_ex_TR1_01",
+    "primary_category": "exercise",
+    "category": "prenatal_exercise",
+    "title": "Activation Exercise",
+    "youtube_video_id": "4E-TX9hWWv0",
+    "youtube_thumbnail_url": "https://i.ytimg.com/vi/4E-TX9hWWv0/mqdefault.jpg",
+    "description": "Activation Exercise. Prenatal Exercise TR1, Episode 1.",
+    "keywords": ["exercise", "first trimester", "gentle", "mobility", "stretch"],
+    "suitability": {
+      "min_weeks_gestation": 1,
+      "max_weeks_gestation": 12
+    }
+  },
+  {
+    "id": "pre_ex_TR1_02",
+    "primary_category": "exercise",
+    "category": "prenatal_exercise",
+    "title": "Full Body Strength 1",
+    "youtube_video_id": "_WmcOzO-yDI",
+    "youtube_thumbnail_url": "https://i.ytimg.com/vi/_WmcOzO-yDI/mqdefault.jpg",
+    "description": "Full Body Strength 1. Prenatal Exercise TR1, Episode 2.",
+    "keywords": ["exercise", "first trimester", "gentle", "mobility", "stretch"],
+    "suitability": {
+      "min_weeks_gestation": 1,
+      "max_weeks_gestation": 12
+    }
+  },
+  {
+    "id": "pre_ex_TR2_05",
+    "primary_category": "exercise",
+    "category": "prenatal_exercise",
+    "title": "Core Breathing 2",
+    "youtube_video_id": "czIshRSCqWo",
+    "youtube_thumbnail_url": "https://i.ytimg.com/vi/czIshRSCqWo/mqdefault.jpg",
+    "description": "Core Breathing 2. Prenatal Exercise TR2, Episode 5.",
+    "keywords": ["exercise", "second trimester", "gentle", "mobility", "stretch"],
+    "suitability": {
+      "min_weeks_gestation": 13,
+      "max_weeks_gestation": 26
+    }
+  },
+  {
+    "id": "pre_ex_TR2_07",
+    "primary_category": "exercise",
+    "category": "prenatal_exercise",
+    "title": "Spinal Mobility",
+    "youtube_video_id": "9V8Bw-ta4DE",
+    "youtube_thumbnail_url": "https://i.ytimg.com/vi/9V8Bw-ta4DE/mqdefault.jpg",
+    "description": "Spinal Mobility. Prenatal Exercise TR2, Episode 7.",
+    "keywords": ["exercise", "second trimester", "gentle", "mobility", "stretch"],
+    "suitability": {
+      "min_weeks_gestation": 13,
+      "max_weeks_gestation": 26
+    }
+  },
+  {
+    "id": "pre_ex_TR3_11",
+    "primary_category": "exercise",
+    "category": "prenatal_exercise",
+    "title": "Low Impact Cardio",
+    "youtube_video_id": "d5nwueZO5qU",
+    "youtube_thumbnail_url": "https://i.ytimg.com/vi/d5nwueZO5qU/mqdefault.jpg",
+    "description": "Low Impact Cardio. Prenatal Exercise TR3, Episode 11.",
+    "keywords": ["exercise", "third trimester", "gentle", "mobility", "stretch"],
+    "suitability": {
+      "min_weeks_gestation": 27,
+      "max_weeks_gestation": 41
+    }
+  },
+  {
+    "id": "pre_ex_TR3_12",
+    "primary_category": "exercise",
+    "category": "prenatal_exercise",
+    "title": "Circuit Training",
+    "youtube_video_id": "8Knd6Ofbpz8",
+    "youtube_thumbnail_url": "https://i.ytimg.com/vi/8Knd6Ofbpz8/mqdefault.jpg",
+    "description": "Circuit Training. Prenatal Exercise TR3, Episode 12.",
+    "keywords": ["exercise", "third trimester", "gentle", "mobility", "stretch"],
+    "suitability": {
+      "min_weeks_gestation": 27,
+      "max_weeks_gestation": 41
+    }
+  },
+  {
+    "id": "post_yoga_01",
+    "primary_category": "yoga",
+    "category": "postnatal_yoga",
+    "title": "Yoga For Neck, Shoulder & Back",
+    "youtube_video_id": "yc0R95fjp6k",
+    "youtube_thumbnail_url": "https://i.ytimg.com/vi/yc0R95fjp6k/mqdefault.jpg",
+    "description": "Yoga For Neck, Shoulder & Back. Postnatal Yoga, Episode 01",
+    "keywords": ["yoga", "postnatal", "postpartum", "recovery", "gentle"],
+    "suitability": {
+      "min_weeks_postpartum": 6,
+      "max_weeks_postpartum": 156
+    }
+  },
+  {
+    "id": "post_yoga_02",
+    "primary_category": "yoga",
+    "category": "postnatal_yoga",
+    "title": "Yoga For Flat Tummy",
+    "youtube_video_id": "tRF01MQuo4k",
+    "youtube_thumbnail_url": "https://i.ytimg.com/vi/tRF01MQuo4k/mqdefault.jpg",
+    "description": "Yoga For Flat Tummy. Postnatal Yoga, Episode 02",
+    "keywords": ["yoga", "postnatal", "postpartum", "recovery", "gentle"],
+    "suitability": {
+      "min_weeks_postpartum": 6,
+      "max_weeks_postpartum": 156
+    }
+  },
+  {
+    "id": "post_yoga_04",
+    "primary_category": "yoga",
+    "category": "postnatal_yoga",
+    "title": "Yoga For Depression",
+    "youtube_video_id": "jCC62u4y0zw",
+    "youtube_thumbnail_url": "https://i.ytimg.com/vi/jCC62u4y0zw/mqdefault.jpg",
+    "description": "Yoga For Depression. Postnatal Yoga, Episode 4",
+    "keywords": ["yoga", "postnatal", "postpartum", "recovery", "gentle"],
+    "suitability": {
+      "min_weeks_postpartum": 6,
+      "max_weeks_postpartum": 156
+    }
+  },
+  {
+    "id": "post_yoga_11",
+    "primary_category": "yoga",
+    "category": "postnatal_yoga",
+    "title": "Yoga For Breastfeeding Mothers",
+    "youtube_video_id": "0Yqhoon1Fb4",
+    "youtube_thumbnail_url": "https://i.ytimg.com/vi/0Yqhoon1Fb4/mqdefault.jpg",
+    "description": "Yoga For Breastfeeding Mothers. Postnatal Yoga, Episode 11",
+    "keywords": ["yoga", "postnatal", "postpartum", "recovery", "gentle"],
+    "suitability": {
+      "min_weeks_postpartum": 6,
+      "max_weeks_postpartum": 156
+    }
+  },
+  {
+    "id": "post_ex_01",
+    "primary_category": "exercise",
+    "category": "postnatal_exercise",
+    "title": "Introduction to Tribher",
+    "youtube_video_id": "DAsK89Am-rw",
+    "youtube_thumbnail_url": "https://i.ytimg.com/vi/DAsK89Am-rw/mqdefault.jpg",
+    "description": "Introduction to Tribher. Postnatal Strength, Episode 1",
+    "keywords": ["exercise", "core", "postnatal", "diastasis", "strength"],
+    "suitability": {
+      "min_weeks_postpartum": 8,
+      "max_weeks_postpartum": 156
+    }
+  },
+  {
+    "id": "post_ex_02",
+    "primary_category": "exercise",
+    "category": "postnatal_exercise",
+    "title": "Breathing and Stretching",
+    "youtube_video_id": "mOwI4yp89Vg",
+    "youtube_thumbnail_url": "https://i.ytimg.com/vi/mOwI4yp89Vg/mqdefault.jpg",
+    "description": "Breathing and Stretching. Postnatal Strength, Episode 2",
+    "keywords": ["exercise", "core", "postnatal", "diastasis", "strength"],
+    "suitability": {
+      "min_weeks_postpartum": 8,
+      "max_weeks_postpartum": 156
+    }
+  },
+  {
+    "id": "post_ex_03",
+    "primary_category": "exercise",
+    "category": "postnatal_exercise",
+    "title": "Core and Pelvic Floor",
+    "youtube_video_id": "Htrk17TeW-k",
+    "youtube_thumbnail_url": "https://i.ytimg.com/vi/Htrk17TeW-k/mqdefault.jpg",
+    "description": "Core and Pelvic Floor. Postnatal Strength, Episode 3",
+    "keywords": ["exercise", "core", "postnatal", "diastasis", "strength"],
+    "suitability": {
+      "min_weeks_postpartum": 8,
+      "max_weeks_postpartum": 156
+    }
+  }
+]

@@ -113,7 +113,9 @@
   "onboarding_ask_details_adult": "Thanks! Just one last question to help me personalize your experience. Is there anything specific on your mind right now? For example, are you trying to conceive, currently pregnant, a new mom, or perhaps navigating perimenopause or menopause?",
   "onboarding_ask_details_teen": "Got it. To help me be more useful, are you interested in things like understanding your cycle better, managing stress, or something else?",
   "onboarding_ask_details_senior": "Thank you. Are there any particular wellness topics you'd like to focus on, such as managing menopause symptoms or maintaining energy levels?",
+  "onboarding_ask_child_dob": "That's wonderful! To help tailor my advice for your postpartum journey, could you share your baby's date of birth?",
   "onboarding_complete": "Perfect, we're all set up, {name}! Your profile is ready. How can I help you today?",
+  "onboarding_complete_parent": "Perfect, we're all set up, {name}! I've noted your baby's details. How can I help you on your journey today?",
   "onboarding_invalid_name": "That name seems a bit short. Could you please provide a valid name?",
   "onboarding_invalid_age": "Please enter a valid age between 13 and 100."
 }

@@ -14,7 +14,6 @@
         :root {
             --primary-gradient: linear-gradient(135deg, #8B4A9C 0%, #A855A8 100%);
             --primary-color-solid: #8B4A9C;
-            --user-message-bg: var(--primary-gradient);
             --ai-message-bg: #f3eef7;
             --background-color: #fcfaff;
             --text-color: #333;
@@ -69,7 +68,14 @@
         .btn-secondary:hover { background-color: #f3eef7; }
         #chat-log { flex-grow: 1; overflow-y: auto; padding: 15px; margin-bottom: 15px; display: flex; flex-direction: column; gap: 15px; }
         .message { padding: 12px 20px; border-radius: 22px; max-width: 85%; line-height: 1.6; word-wrap: break-word; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-        .user-message { background-image: var(--user-message-bg); color: white; align-self: flex-end; border-bottom-right-radius: 8px; }
+        
+        /* v106.2 UI Change: Soft & Warm Hue for User Bubble */
+        .user-message {
+            background-color: #E6B0AA; /* Dusty Rose */
+            color: #343434; /* Charcoal text for readability */
+            align-self: flex-end;
+            border-bottom-right-radius: 8px;
+        }
         .ai-message { background-color: var(--ai-message-bg); color: var(--text-color); align-self: flex-start; border-bottom-left-radius: 8px; }
         .ai-message.chart-container { width: 100%; max-width: 100%; padding: 15px; box-sizing: border-box; height: 250px; }
         .ai-message.chart-container-horizontal { height: 180px; }
@@ -89,7 +95,89 @@
         .ai-message ul, .ai-message ol { padding-left: 20px; }
         .ai-message li { margin-bottom: 8px; }
         
-        /* NEW in v103.1: Language Picker styles */
+        .ai-message .video-container {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 aspect ratio */
+            height: 0;
+            overflow: hidden;
+            max-width: 100%;
+            background: #000;
+            border-radius: 12px; /* Match message bubble */
+            margin-top: 10px;
+        }
+        .ai-message .video-container iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* NEW in v107.0: Video Carousel & Category Picker Styles */
+        .ai-message .category-picker {
+            margin-top: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .ai-message .category-picker button {
+            background-color: white;
+            border: 1px solid var(--primary-color-solid);
+            color: var(--primary-color-solid);
+            border-radius: 15px;
+            padding: 6px 12px;
+            font-size: 0.9em;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s, color 0.2s;
+        }
+        .ai-message .category-picker button:hover {
+            background-color: var(--primary-color-solid);
+            color: white;
+        }
+        .ai-message .video-carousel-container {
+            margin-top: 12px;
+            display: flex;
+            overflow-x: auto;
+            gap: 12px;
+            padding-bottom: 10px; /* For scrollbar */
+            -webkit-overflow-scrolling: touch; /* Smooth scrolling on mobile */
+            scrollbar-width: thin; /* Firefox */
+        }
+        .ai-message .video-carousel-container::-webkit-scrollbar { height: 6px; }
+        .ai-message .video-carousel-container::-webkit-scrollbar-thumb { background-color: #ccc; border-radius: 3px; }
+
+        .ai-message .video-card {
+            flex: 0 0 180px; /* Don't grow, don't shrink, base width 180px */
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+            background: white;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .ai-message .video-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        .ai-message .video-card img {
+            width: 100%;
+            height: 100px;
+            object-fit: cover;
+            display: block;
+        }
+        .ai-message .video-card-title {
+            padding: 8px;
+            font-size: 0.9em;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        /* End of v107.0 Styles */
+
+
         .language-picker-container {
             margin-top: 10px;
         }
@@ -506,7 +594,7 @@ document.addEventListener('DOMContentLoaded', function() {
             } else if (data.status === 'onboarding_started') { // NEW in v103.0
                 onboardingMode = true;
                 showSection('chat');
-                appendMessage(data.reply, 'ai', data.reply_type);
+                appendMessage(data.reply, 'ai', data);
             } else if (data.status === 'new_user_needed') { // Fallback for v102.1
                 showSection('newUser');
             }
@@ -568,24 +656,29 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // MODIFIED in v105.1 to handle proactive summaries
-    async function handleChatSubmit(e) {
+    // MODIFIED in v107.0 to handle internal actions
+    async function handleChatSubmit(e, internalAction = null) {
         e.preventDefault();
-        const form = e.target;
-        const userInput = form.querySelector('#user-input');
         
-        // This handles both text input and the language picker select
-        const messageText = (userInput) ? userInput.value.trim() : form.querySelector('select').value;
-        
-        if (!messageText && !selectedFile) return;
+        let messagePayload = {};
+        let userMessageToDisplay = '';
+        const userInput = inputs.userInput;
 
-        let userMessageDiv = null;
-        if (messageText) { 
-            userMessageDiv = appendMessage(messageText, 'user', 'text', false); 
-        } else if (selectedFile) { 
-            userMessageDiv = appendMessage(`(File: ${selectedFile.name})`, 'user', 'text', false); 
+        if (internalAction) {
+            messagePayload = internalAction;
+        } else {
+            const messageText = userInput.value.trim();
+            if (!messageText && !selectedFile) return;
+            messagePayload = { message: messageText };
+            userMessageToDisplay = messageText;
+            if (selectedFile) {
+                userMessageToDisplay = `(File: ${selectedFile.name})`;
+            }
         }
         
+        if (userMessageToDisplay) {
+            appendMessage(userMessageToDisplay, 'user');
+        }
         if (userInput) {
             userInput.value = '';
             userInput.disabled = true;
@@ -599,11 +692,11 @@ document.addEventListener('DOMContentLoaded', function() {
             endpoint = '/upload';
             const formData = new FormData();
             formData.append('file', selectedFile);
-            formData.append('message', messageText || "Can you tell me about this file?");
+            formData.append('message', messagePayload.message || "Can you tell me about this file?");
             body = formData;
             delete headers['Content-Type']; 
         } else {
-            body = JSON.stringify({ message: messageText });
+            body = JSON.stringify(messagePayload);
         }
         
         clearFileInput();
@@ -621,19 +714,18 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        // NEW in v105.1: Handle proactive summary
         if (data.proactive_summary) {
-            appendMessage(data.proactive_summary, 'ai', 'text', false);
+            appendMessage(data.proactive_summary, 'ai', { reply: data.proactive_summary });
         }
 
         if (data.status === 'created') {
             onboardingMode = false;
-            appendMessage(data.reply, 'ai', 'text', false);
+            appendMessage(data.reply, 'ai', data);
             setTimeout(() => window.location.reload(), 1000); 
             return;
         }
         
-        appendMessage(data.reply, 'ai', data.reply_type || 'text', false);
+        appendMessage(data.reply, 'ai', data);
         
         if(!onboardingMode) {
              localStorage.setItem('dashboardNeedsRefresh', 'true');
@@ -648,10 +740,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         if (data.chart_type) {
             renderVisualization(data.chart_type, data.target_date);
-        }
-
-        if (userMessageDiv) {
-            userMessageDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
     }
 
@@ -698,42 +786,80 @@ document.addEventListener('DOMContentLoaded', function() {
         inputs.chatLog.innerHTML = `<div class="message ai-message"><p>${message}</p></div>`;
     }
 
-    // MODIFIED in v103.1 to handle special reply types
-    function appendMessage(content, sender, replyType = 'text', doAutoScroll = true) {
+    // MODIFIED in v107.2 to standardize on ui_component
+    function appendMessage(content, sender, responseData = {}, doAutoScroll = true) {
         const div = document.createElement('div');
         div.classList.add('message', sender === 'user' ? 'user-message' : 'ai-message');
+        
+        const uiComponent = responseData.ui_component;
         
         if (sender === 'user') {
             const p = document.createElement('p');
             p.textContent = content;
             div.appendChild(p);
-        } else if (replyType === 'language_picker') {
-            div.innerHTML = content;
-            const pickerContainer = document.createElement('div');
-            pickerContainer.className = 'language-picker-container';
-            const select = document.createElement('select');
-            
-            const languages = { "en": "English", "hi": "हिन्दी (Hindi)", "bn": "বাংলা (Bengali)", "te": "తెలుగు (Telugu)", "mr": "मराठी (Marathi)", "ta": "தமிழ் (Tamil)", "gu": "ગુજરાતી (Gujarati)", "ur": "اردو (Urdu)", "kn": "ಕನ್ನಡ (Kannada)", "or": "ଓଡ଼ିଆ (Odia)", "ml": "മലയാളം (Malayalam)", "pa": "ਪੰਜਾਬੀ (Punjabi)", "ar": "العربية (Arabic)" };
-            
-            let optionsHtml = `<option value="">${LANG_STRINGS.onboarding_language_select_placeholder || 'Select your language...'}</option>`;
-            for (const [code, name] of Object.entries(languages)) {
-                optionsHtml += `<option value="${code}">${name}</option>`;
+        } else {
+            const mainText = document.createElement('div');
+            mainText.innerHTML = content;
+            div.appendChild(mainText);
+
+            if (uiComponent === 'language_picker') {
+                const pickerContainer = document.createElement('div');
+                pickerContainer.className = 'language-picker-container';
+                const select = document.createElement('select');
+                const languages = { "en": "English", "hi": "हिन्दी (Hindi)", "bn": "বাংলা (Bengali)", "te": "తెలుగు (Telugu)", "mr": "मराठी (Marathi)", "ta": "தமிழ் (Tamil)", "gu": "ગુજરાતી (Gujarati)", "ur": "اردو (Urdu)", "kn": "ಕನ್ನಡ (Kannada)", "or": "ଓଡ଼ିଆ (Odia)", "ml": "മലയാളം (Malayalam)", "pa": "ਪੰਜਾਬੀ (Punjabi)", "ar": "العربية (Arabic)" };
+                let optionsHtml = `<option value="">${LANG_STRINGS.onboarding_language_select_placeholder || 'Select your language...'}</option>`;
+                for (const [code, name] of Object.entries(languages)) { optionsHtml += `<option value="${code}">${name}</option>`; }
+                select.innerHTML = optionsHtml;
+                select.addEventListener('change', (e) => {
+                    if (e.target.value) { handleChatSubmit({ preventDefault: () => {} }, {message: e.target.value}); e.target.disabled = true; }
+                });
+                pickerContainer.appendChild(select);
+                div.appendChild(pickerContainer);
             }
-            select.innerHTML = optionsHtml;
-
-            select.addEventListener('change', (e) => {
-                if (e.target.value) {
-                    inputs.userInput.value = e.target.value;
-                    handleChatSubmit({ preventDefault: () => {} });
-                    e.target.disabled = true;
-                }
-            });
-
-            pickerContainer.appendChild(select);
-            div.appendChild(pickerContainer);
-        }
-        else {
-            div.innerHTML = content;
+            // --- NEW IN v107.0: Handle Video Components ---
+            else if (uiComponent === 'category_picker') {
+                const pickerContainer = document.createElement('div');
+                pickerContainer.className = 'category-picker';
+                responseData.data.categories.forEach(cat => {
+                    const button = document.createElement('button');
+                    button.textContent = `${cat.name} (${cat.count} videos)`;
+                    button.dataset.category = cat.name.toLowerCase();
+                    button.addEventListener('click', () => {
+                        handleChatSubmit({ preventDefault: () => {} }, { action: 'select_video_category', category: cat.name.toLowerCase() });
+                        pickerContainer.style.display = 'none'; // Hide buttons after click
+                    });
+                    pickerContainer.appendChild(button);
+                });
+                div.appendChild(pickerContainer);
+            } else if (uiComponent === 'video_carousel') {
+                const carousel = document.createElement('div');
+                carousel.className = 'video-carousel-container';
+                responseData.data.videos.forEach(video => {
+                    const card = document.createElement('div');
+                    card.className = 'video-card';
+                    card.innerHTML = `<img src="${video.youtube_thumbnail_url}" alt="Thumbnail for ${video.title}"><div class="video-card-title">${video.title}</div>`;
+                    card.addEventListener('click', () => {
+                        const safetyDisclaimer = "Of course! Here is a video that might be helpful. **Please remember to consult with your doctor before starting any new exercise routine.**";
+                        const videoReply = `${safetyDisclaimer}\n\n**${video.title}**: ${video.description}`;
+                        appendMessage(videoReply, 'ai', { video_embed: { type: 'youtube', video_id: video.youtube_video_id }});
+                    });
+                    carousel.appendChild(card);
+                });
+                div.appendChild(carousel);
+            }
+            // --- End v107.0 Video Component Handling ---
+            
+            else if (responseData.video_embed && responseData.video_embed.type === 'youtube') {
+                const videoContainer = document.createElement('div');
+                videoContainer.className = 'video-container';
+                const iframe = document.createElement('iframe');
+                iframe.src = `https://www.youtube.com/embed/${responseData.video_embed.video_id}`;
+                iframe.frameBorder = '0';
+                iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
+                iframe.allowFullscreen = true;
+                videoContainer.appendChild(iframe);
+                div.appendChild(videoContainer);
+            }
         }
 
         inputs.chatLog.appendChild(div);
@@ -749,7 +875,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const response = await fetch(url);
         if (!response.ok) {
             const error = await response.json();
-            appendMessage(error.error || "Could not fetch visualization data.", 'ai');
+            appendMessage(error.error || "Could not fetch visualization data.", 'ai', { reply: error.error });
             return;
         }
         const config = await response.json();
@@ -909,13 +1035,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 const data = await response.json();
                 if (response.ok) {
-                    appendMessage(data.reply, 'ai');
+                    appendMessage(data.reply, 'ai', data);
                 } else {
-                    appendMessage(data.error || 'Sorry, there was an error.', 'ai');
+                    appendMessage(data.error || 'Sorry, there was an error.', 'ai', { reply: data.error });
                 }
             } catch (error) {
                 console.error('Quick log error:', error);
-                appendMessage('Sorry, there was a network error logging that.', 'ai');
+                appendMessage('Sorry, there was a network error logging that.', 'ai', { reply: 'Network error.'});
             }
         });
     }

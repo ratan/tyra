@@ -1,4 +1,4 @@
-# user_profiler.py (v105.5 - Dynamic & Adaptive User Profile)
+# user_profiler.py (v107.6 - DOB Provenance Tracking)
 from datetime import datetime, timedelta
 
 PROMPT_HISTORY_LIMIT = 5
@@ -12,7 +12,7 @@ LANG_MAP = {
     "or": "Odia", "ml": "Malayalam", "pa": "Punjabi", "ar": "Arabic"
 }
 
-# MODIFIED in v105.5: Switched to storing DOB for dynamic age calculation
+# MODIFIED in v107.6: Added dob_source field
 def create_user_profile(name, email, phone, age, details, lang_code='en'):
     # Calculate an approximate date of birth from the provided age
     # This makes the profile dynamic over time
@@ -21,6 +21,7 @@ def create_user_profile(name, email, phone, age, details, lang_code='en'):
     profile = {
         "name": name, "email": email, "phone": phone, 
         "dob": dob.date().isoformat(), # Store DOB instead of static age
+        "dob_source": "tool_provided", # NEW in v107.6
         "age": age, # Store initial age for immediate use
         "language": lang_code,
         "primary_category": None, "secondary_details": details,
@@ -52,7 +53,8 @@ def create_user_profile(name, email, phone, age, details, lang_code='en'):
         "interaction_log": [],
         "key_memories": [], # NEW in v102.0
         "shown_education_tidbits": [], # NEW in v104.2
-        "achievements": { "unlocked_badges": {} } # NEW in v105.0
+        "achievements": { "unlocked_badges": {} }, # NEW in v105.0
+        "shown_video_ids": [] # NEW in v106.0
     }
     if age <= 19: profile["primary_category"] = "Adolescence/Teen"
     elif 20 <= age <= 39: profile["primary_category"] = "Young Adulthood"

@@ -1,4 +1,4 @@
-// static/js/tyra_widget.js (v105.1 - AI-Generated Monthly Summaries)
+// static/js/tyra_widget.js (v107.2 - Onboarding Regression Fix)
 (function() {
     'use strict';
 
@@ -197,7 +197,7 @@
                 const welcomeMessage = state.userName 
                     ? (state.lang.welcome_message_return || 'Welcome back, {name}!').replace('{name}', state.userName)
                     : (state.lang.welcome_message_guest || 'Welcome!');
-                addMessage(welcomeMessage, 'ai');
+                addMessage(welcomeMessage, 'ai', {});
             }
             populateQuickLogButtons();
         } else if (state.currentView === 'dashboard') {
@@ -207,59 +207,105 @@
         }
     }
     
-    // MODIFIED in v103.1 to handle special reply types like language_picker
-    function addMessage(htmlContent, sender, replyType = 'text', doAutoScroll = true) {
+    // MODIFIED in v107.2 to standardize on ui_component
+    function addMessage(htmlContent, sender, responseData = {}, doAutoScroll = true) {
         const chatLog = state.targetElement.querySelector('.tyra-chat-log');
         if (!chatLog) return;
         const messageDiv = document.createElement('div');
         messageDiv.classList.add('tyra-message', `tyra-${sender}-message`);
-
-        if (replyType === 'language_picker') {
-            messageDiv.innerHTML = htmlContent;
-            const pickerContainer = document.createElement('div');
-            pickerContainer.className = 'tyra-language-picker-container';
+        
+        const uiComponent = responseData.ui_component;
+        
+        if (sender === 'user') {
+            // User messages are always simple text
+            const p = document.createElement('p');
+            p.textContent = htmlContent;
+            messageDiv.appendChild(p);
+        } else {
+            // AI messages can be complex
+            const mainText = document.createElement('div');
+            mainText.innerHTML = htmlContent;
+            messageDiv.appendChild(mainText);
             
-            const select = document.createElement('select');
-            
-            const languages = { "en": "English", "hi": "हिन्दी (Hindi)", "bn": "বাংলা (Bengali)", "te": "తెలుగు (Telugu)", "mr": "मराठी (Marathi)", "ta": "தமிழ் (Tamil)", "gu": "ગુજરાતી (Gujarati)", "ur": "اردو (Urdu)", "kn": "ಕನ್ನಡ (Kannada)", "or": "ଓଡ଼ିଆ (Odia)", "ml": "മലയാളം (Malayalam)", "pa": "ਪੰਜਾਬੀ (Punjabi)", "ar": "العربية (Arabic)" };
-            
-            let optionsHtml = `<option value="">${state.lang.onboarding_language_select_placeholder || 'Select your language...'}</option>`;
-            for (const [code, name] of Object.entries(languages)) {
-                optionsHtml += `<option value="${code}">${name}</option>`;
-            }
-            select.innerHTML = optionsHtml;
-
-            select.addEventListener('change', (e) => {
-                if (e.target.value) {
-                    // Simulate a chat submission with the language code
-                    const fakeForm = { querySelector: () => ({ value: e.target.value }) };
-                    onChatSubmit({ preventDefault: () => {}, target: fakeForm });
-                    e.target.disabled = true; // Disable after selection
+            if (uiComponent === 'language_picker') {
+                const pickerContainer = document.createElement('div');
+                pickerContainer.className = 'tyra-language-picker-container';
+                const select = document.createElement('select');
+                const languages = { "en": "English", "hi": "हिन्दी (Hindi)", "bn": "বাংলা (Bengali)", "te": "తెలుగు (Telugu)", "mr": "मराठी (Marathi)", "ta": "தமிழ் (Tamil)", "gu": "ગુજરાતી (Gujarati)", "ur": "اردو (Urdu)", "kn": "ಕನ್ನಡ (Kannada)", "or": "ଓଡ଼ିଆ (Odia)", "ml": "മലയാളം (Malayalam)", "pa": "ਪੰਜਾਬੀ (Punjabi)", "ar": "العربية (Arabic)" };
+                let optionsHtml = `<option value="">${state.lang.onboarding_language_select_placeholder || 'Select your language...'}</option>`;
+                for (const [code, name] of Object.entries(languages)) {
+                    optionsHtml += `<option value="${code}">${name}</option>`;
                 }
-            });
-            
-            pickerContainer.appendChild(select);
-            messageDiv.appendChild(pickerContainer);
-        }
-        else if (['bar', 'line'].includes(replyType)) {
-            messageDiv.classList.add('tyra-chart-container');
-            const canvas = document.createElement('canvas');
-            messageDiv.appendChild(canvas);
-            new Chart(canvas.getContext('2d'), htmlContent);
-        } else if (replyType === 'calendar') {
-             messageDiv.classList.add('tyra-calendar-container');
-             messageDiv.innerHTML = templates.calendar(htmlContent.data);
-        }
-        else {
-             messageDiv.innerHTML = htmlContent;
+                select.innerHTML = optionsHtml;
+                select.addEventListener('change', (e) => {
+                    if (e.target.value) {
+                         onChatSubmit({ preventDefault: () => {} }, { message: e.target.value });
+                        e.target.disabled = true;
+                    }
+                });
+                pickerContainer.appendChild(select);
+                messageDiv.appendChild(pickerContainer);
+            }
+            else if (['bar', 'line'].includes(responseData.chart_type)) {
+                messageDiv.classList.add('tyra-chart-container');
+                const canvas = document.createElement('canvas');
+                messageDiv.innerHTML = ''; // Clear the text content
+                messageDiv.appendChild(canvas);
+                new Chart(canvas.getContext('2d'), responseData);
+            } else if (responseData.chart_type === 'calendar') {
+                 messageDiv.classList.add('tyra-calendar-container');
+                 messageDiv.innerHTML = templates.calendar(responseData.data);
+            }
+            // --- NEW IN v107.0: Handle Video Components ---
+            else if (uiComponent === 'category_picker') {
+                const pickerContainer = document.createElement('div');
+                pickerContainer.className = 'tyra-category-picker';
+                responseData.data.categories.forEach(cat => {
+                    const button = document.createElement('button');
+                    button.textContent = `${cat.name} (${cat.count} videos)`;
+                    button.dataset.category = cat.name.toLowerCase();
+                    button.addEventListener('click', () => {
+                        onChatSubmit({ preventDefault: () => {} }, { action: 'select_video_category', category: cat.name.toLowerCase() });
+                        pickerContainer.innerHTML = ''; // Hide buttons after click
+                    });
+                    pickerContainer.appendChild(button);
+                });
+                messageDiv.appendChild(pickerContainer);
+            } else if (uiComponent === 'video_carousel') {
+                const carousel = document.createElement('div');
+                carousel.className = 'tyra-video-carousel-container';
+                responseData.data.videos.forEach(video => {
+                    const card = document.createElement('div');
+                    card.className = 'tyra-video-card';
+                    card.innerHTML = `<img src="${video.youtube_thumbnail_url}" alt="Thumbnail for ${video.title}"><div class="tyra-video-card-title">${video.title}</div>`;
+                    card.addEventListener('click', () => {
+                        const safetyDisclaimer = "Of course! Here is a video that might be helpful. **Please remember to consult with your doctor before starting any new exercise routine.**";
+                        const videoReply = `${safetyDisclaimer}\n\n**${video.title}**: ${video.description}`;
+                        addMessage(videoReply, 'ai', { video_embed: { type: 'youtube', video_id: video.youtube_video_id }});
+                    });
+                    carousel.appendChild(card);
+                });
+                messageDiv.appendChild(carousel);
+            }
+            // --- End v107.0 Video Component Handling ---
+
+            else if (responseData.video_embed && responseData.video_embed.type === 'youtube') {
+                const videoContainer = document.createElement('div');
+                videoContainer.className = 'tyra-video-container';
+                const iframe = document.createElement('iframe');
+                iframe.src = `https://www.youtube.com/embed/${responseData.video_embed.video_id}`;
+                iframe.frameBorder = '0';
+                iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
+                iframe.allowFullscreen = true;
+                videoContainer.appendChild(iframe);
+                messageDiv.appendChild(videoContainer);
+            }
         }
         
         chatLog.appendChild(messageDiv);
-        
         if (doAutoScroll) {
             chatLog.scrollTop = chatLog.scrollHeight;
         }
-
         return messageDiv;
     }
 
@@ -439,7 +485,7 @@
                 state.onboardingToken = data.onboarding_token;
                 state.currentView = 'chat';
                 render(); // Render the chat view
-                addMessage(data.reply, 'ai'); // Display the first onboarding question
+                addMessage(data.reply, 'ai', data); // Display the first onboarding question
             } else if (data.status === 'new_user_needed') { // Fallback for v102.1
                 state.verificationToken = data.verification_token;
                 state.currentView = 'profile_creation';
@@ -456,98 +502,89 @@
         // ... (This function is now legacy and will not be triggered in the v103.0 default flow)
     }
     
-    // MODIFIED in v105.1 to handle proactive summaries
-    async function onChatSubmit(e) {
+    // MODIFIED in v107.0 to handle internal actions
+    async function onChatSubmit(e, internalAction = null) {
         e.preventDefault();
-        const form = e.target;
-        const input = form.querySelector('.tyra-chat-input');
-        const messageText = input ? input.value.trim() : form.querySelector('select').value; // Handle text input and language picker
-        if (!messageText) return;
         
-        const userMessageDiv = addMessage(messageText, 'user', 'text', false);
+        let messagePayload = {};
+        let userMessageToDisplay = '';
+        const input = state.targetElement.querySelector('.tyra-chat-input');
+
+        if (internalAction) {
+            messagePayload = internalAction;
+        } else {
+            const messageText = input.value.trim();
+            if (!messageText) return;
+            messagePayload = { message: messageText };
+            userMessageToDisplay = messageText;
+        }
+        
+        if (userMessageToDisplay) {
+            addMessage(userMessageToDisplay, 'user');
+        }
         if (input) {
             input.value = '';
-            input.disabled = true; // Disable input while waiting for response
+            input.disabled = true;
         }
 
         let responseData;
-        
-        // --- Onboarding vs. Regular Chat ---
-        if (state.onboardingToken) {
-            const { ok, data } = await api.post('auth/onboard/step', { message: messageText });
-            if (ok) {
-                responseData = data;
-                if (data.status === 'onboarding_inprogress') {
-                    state.onboardingToken = data.onboarding_token;
-                } else if (data.status === 'created') {
-                    state.onboardingToken = null;
-                    state.jwtToken = data.token;
-                    state.userName = data.name.split(' ')[0];
-                    state.isGuest = false;
-                    await initializeAuthenticatedSession();
-                }
-            } else {
-                responseData = { reply: data.error || 'Sorry, an error occurred during setup.' };
+        const endpoint = state.onboardingToken ? 'auth/onboard/step' : 'chat';
+        const { ok, data } = await api.post(endpoint, messagePayload);
+
+        if (ok) {
+            responseData = data;
+            if (data.status === 'onboarding_inprogress') {
+                state.onboardingToken = data.onboarding_token;
+            } else if (data.status === 'created') {
+                state.onboardingToken = null;
+                state.jwtToken = data.token;
+                state.userName = data.name.split(' ')[0];
+                state.isGuest = false;
+                await initializeAuthenticatedSession();
+            } else if (!state.onboardingToken) {
+                state.isDashboardStale = true;
             }
         } else {
-            // Regular chat logic
-            state.isDashboardStale = true;
-            const { ok, data } = await api.post('chat', { message: messageText });
-            if (ok) {
-                responseData = data;
-            } else {
-                responseData = { reply: data.error || 'Sorry, an error occurred.' };
-            }
+            responseData = { reply: data.error || 'Sorry, an error occurred.' };
         }
 
-        // --- Handle Response Display ---
         if (responseData) {
-            // NEW in v105.1: Check for a proactive summary and display it first
             if (responseData.proactive_summary) {
-                addMessage(responseData.proactive_summary, 'ai', 'text', false);
+                addMessage(responseData.proactive_summary, 'ai');
             }
-            // Display the main reply
-            addMessage(responseData.reply, 'ai', responseData.reply_type || 'text', false);
-
-            if (responseData.chart_type) {
-                renderChartInChat(responseData.chart_type, responseData.target_date);
-            }
+            addMessage(responseData.reply || '', 'ai', responseData);
         }
 
         if (input) {
             input.disabled = false;
             input.focus();
         }
-
-        if (userMessageDiv) {
-            userMessageDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
     }
 
 
     async function onFileSelect(e) {
-        if (state.isGuest || state.onboardingToken) { // MODIFIED in v103.0
-            addMessage("This feature is available after setup is complete. Please finish creating your profile first.", "ai");
+        if (state.isGuest || state.onboardingToken) { // MODIFIED v103.0
+            addMessage("This feature is available after setup is complete. Please finish creating your profile first.", "ai", {});
             return;
         }
         const file = e.target.files[0];
         if (!file) return;
 
-        addMessage(`Uploading ${file.name}...`, 'user');
+        addMessage(`Uploading ${file.name}...`, 'user', {});
         const formData = new FormData();
         formData.append('file', file);
         
         const { ok, data } = await api.post('upload', formData, true);
         if (ok) {
-            addMessage(data.reply, 'ai');
+            addMessage(data.reply, 'ai', data);
         } else {
-            addMessage(data.error || 'File processing failed.', 'ai');
+            addMessage(data.error || 'File processing failed.', 'ai', data);
         }
     }
 
     function onVoiceButtonClick(e) {
-        if (state.isGuest || state.onboardingToken) { // MODIFIED in v103.0
-             addMessage("This feature is available after setup is complete. Please finish creating your profile first.", "ai");
+        if (state.isGuest || state.onboardingToken) { // MODIFIED v103.0
+             addMessage("This feature is available after setup is complete. Please finish creating your profile first.", "ai", {});
             return;
         }
         const btn = e.target.closest('button');
@@ -583,9 +620,9 @@
 
         state.isDashboardStale = true;
 
-        addMessage(logLabel, 'user');
+        addMessage(logLabel, 'user', {});
         const { ok, data } = await api.post('quick_log', { category: logCategory, value: logValue });
-        if (ok) addMessage(data.reply, 'ai');
+        if (ok) addMessage(data.reply, 'ai', data);
     }
 
     async function initializeAuthenticatedSession() {
@@ -630,7 +667,7 @@
     }
 
     function populateQuickLogButtons() {
-        if (state.isGuest || state.onboardingToken) return; // MODIFIED in v103.0
+        if (state.isGuest || state.onboardingToken) return; // MODIFIED v103.0
         const container = state.targetElement.querySelector('.tyra-quick-log-buttons');
         if (!container || !state.lang.quick_log_buttons) return;
         container.innerHTML = (state.lang.quick_log_buttons || []).map(item =>
@@ -639,13 +676,13 @@
     }
 
     async function renderChartInChat(chartType, targetDate) {
-        if (state.isGuest || state.onboardingToken) return; // MODIFIED in v103.0
+        if (state.isGuest || state.onboardingToken) return; // MODIFIED v103.0
         const params = { type: chartType };
         if (targetDate) params.target_date = targetDate;
         try {
             const config = await api.get('chart_data', params);
             if(config.type) {
-                addMessage(config, 'ai', config.type);
+                addMessage('', 'ai', { ...config, chart_type: config.type });
             }
         } catch (e) {
             addMessage('Could not load visualization.', 'ai');

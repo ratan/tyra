@@ -1,4 +1,4 @@
-# app.py (v105.6 - Conversational Life Stage Updates)
+# app.py (v107.6 - DOB Provenance Tracking)
 import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets, random
 from datetime import datetime, timedelta, timezone, date
 from flask import Flask, Response, render_template, request, jsonify, session, redirect, url_for, send_from_directory, g
@@ -67,6 +67,7 @@ ALLOWED_ORIGINS = [
 ]
 
 # --- Feature Flags ---
+ENABLE_VIDEO_SUGGESTIONS = True # NEW in v106.0: Enables in-chat YouTube video suggestions for wellness.
 ENABLE_CONVERSATIONAL_ONBOARDING = True # NEW in v103.0: Toggles between chat-based and form-based new user setup.
 ENABLE_SQLITE_DATABASE = True # NEW in v101.4: Toggles between SQLite and JSON file storage
 ENABLE_MULTI_LANGUAGE = True
@@ -155,6 +156,7 @@ SHARED_REPORTS_DIR = os.path.join(DATA_BASE_PATH, "shared_reports")
 TRIBHER_DATA_FILE = os.path.join(DATA_BASE_PATH, "tribher_data_final.json")
 MILESTONES_DATA_FILE = os.path.join(DATA_BASE_PATH, "milestones_data.json")
 EDUCATION_DATA_FILE = os.path.join(DATA_BASE_PATH, "education_tidbits.json") # FIX in v104.4
+WELLNESS_VIDEOS_FILE = os.path.join(DATA_BASE_PATH, "wellness_videos.json") # NEW in v106.0
 
 # Define static directories separately as they are part of the app package
 STATIC_CSS_DIR = os.path.join('static', 'css')
@@ -173,6 +175,7 @@ os.makedirs(LOCALES_DIR, exist_ok=True)
 TRIBHER_DATA = None
 MILESTONES_DATA = None
 EDUCATION_DATA = None # NEW in v104.2
+WELLNESS_VIDEO_DATA = None # NEW in v106.0
 llm_response_cache = {}
 ip_request_timestamps = {}
 api_otp_store = {}
@@ -367,10 +370,17 @@ def load_education_data():
         with open(EDUCATION_DATA_FILE, 'r') as f: EDUCATION_DATA = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError): EDUCATION_DATA = None
 
+# NEW in v106.0
+def load_wellness_videos():
+    global WELLNESS_VIDEO_DATA
+    try:
+        with open(WELLNESS_VIDEOS_FILE, 'r') as f: WELLNESS_VIDEO_DATA = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError): WELLNESS_VIDEO_DATA = []
 
 load_tribher_data()
 load_milestones_data()
 load_education_data() # NEW in v104.2
+load_wellness_videos() # NEW in v106.0
 configure_ai()
 md = MarkdownIt()
 
@@ -419,24 +429,26 @@ def normalize_date_string(date_str: str) -> str:
     parsed_date = dateparser.parse(date_str, settings={'PREFER_DATES_FROM': 'past'})
     return parsed_date.strftime("%Y-%m-%d") if parsed_date else datetime.now().strftime("%Y-%m-%d")
 
-# MODIFIED in v105.4: Replaced direct LLM call with fallback function
+# MODIFIED in v107.6 to include provide_dob intent
 def get_conversation_summary(user_message):
     today_date = datetime.now().strftime('%Y-%m-%d')
-    # MODIFIED v105.6: Expanded life_event_update intent
     summary_prompt = f"""
 You are an expert tool for converting natural language into a structured JSON object.
 Your output MUST be a single, raw, valid JSON object.
 Today's date is {today_date}. Resolve all relative dates to 'YYYY-MM-DD' format.
 
-**CRITICAL RULES & INTENTS:**
+**CRITICAL RULES & INTENTS (In Order of Priority):**
 1.  **LIFE EVENT UPDATE (Highest Priority):** If the user announces a new life stage like pregnancy or perimenopause, or the end of one (giving birth), you MUST return a `life_event_update` intent with the correct `type`.
-2.  **CHARTING OVERRIDE:** This is your next highest priority. If the message contains 'chart', 'calendar', 'graph', or 'visualize', you MUST return a `query_chart` intent.
-3.  **SET GOAL:** For phrases like "my goal is..." or "I want to start...", return a `set_goal` intent with the full goal text.
-4.  **MEDICATION LOG:** For phrases about taking or logging medicine, return `medication_log` with `name`, `dosage`, and `frequency`.
-5.  **REMINDERS (EXPLICIT):** For command-like phrases ("remind me to", "set a reminder"), return `reminder_action` with the `text` and `due_date`.
-6.  **REMINDERS (CONTEXTUAL):** For future events mentioned conversationally (e.g., "I have an appointment on Friday"), return `potential_reminder` with `text` and `date`.
-7.  **OTHER ACTIONS:** Process `health_log`, `period_action`, or `ambiguous_log` as normal.
-8.  **GENERAL CHAT / QUESTIONS:** For anything else, especially questions asking for information (e.g., "what should I do for..."), return an empty JSON object `{{}}`.
+2.  **PROVIDE DOB:** If the user explicitly states their date of birth ("my dob is", "I was born on"), you MUST return a `provide_dob` intent with the extracted date.
+3.  **WELLNESS VIDEO QUERY:** If the user asks for "yoga", "exercise", "workout", or a "video", you MUST return `query_wellness_video`.
+4.  **CHARTING OVERRIDE:** This is your next highest priority. If the message contains 'chart', 'calendar', 'graph', or 'visualize', you MUST return a `query_chart` intent.
+5.  **SET GOAL:** For phrases like "my goal is..." or "I want to start...", return a `set_goal` intent with the full goal text.
+6.  **MEDICATION LOG:** For phrases about taking or logging medicine, return `medication_log` with `name`, `dosage`, and `frequency`.
+7.  **REMINDERS (EXPLICIT):** For command-like phrases ("remind me to", "set a reminder"), return `reminder_action` with the `text` and `due_date`.
+8.  **REMINDERS (CONTEXTUAL):** For future events mentioned conversationally (e.g., "I have an appointment on Friday"), return `potential_reminder` with `text` and `date`.
+9.  **OTHER ACTIONS:** Process `health_log`, `period_action`, or `ambiguous_log` as normal.
+10. **GENERAL CHAT / QUESTIONS:** For anything else, especially questions asking for information (e.g., "what should I do for..."), return an empty JSON object `{{}}`.
+
 
 --- EXAMPLES ---
 User: 'I had my baby on Tuesday!'
@@ -448,8 +460,17 @@ User: 'Good news, I am pregnant!'
 User: 'I think I am starting perimenopause.'
 {{"life_event_update": {{"type": "start_perimenopause"}}}}
 
+User: 'my date of birth is 1st feb 1992'
+{{"provide_dob": {{"date": "1992-02-01"}}}}
+
+User: 'Do you have any yoga videos for the first trimester?'
+{{"query_wellness_video": {{"keywords": ["yoga", "first trimester"]}}}}
+
 User: 'my period started on july 1st'
 {{"period_action": {{"type": "log_period_start", "date": "{datetime.now().year}-07-01"}}}}
+
+User: 'show me some postnatal exercises'
+{{"query_wellness_video": {{"keywords": ["postnatal", "exercises"]}}}}
 
 User: 'visualize my cycle length'
 {{"query_chart": {{"type": "cycle_length"}}}}
@@ -477,6 +498,9 @@ User: 'Log that I am taking Vitamin D 500mg daily.'
 
 User: 'My goal is to exercise 3 times a week.'
 {{"set_goal": {{"text": "exercise 3 times a week"}}}}
+
+User: 'I was born on March 3rd, 1985'
+{{"provide_dob": {{"date": "1985-03-03"}}}}
 --- END EXAMPLES ---
 
 Now, process this user message:
@@ -744,6 +768,22 @@ def handle_period_action(action, profile):
         else:
             response_message = lang_data.get('period_predict_not_enough_data')
     return profile, response_message, pending_question_state
+
+# NEW in v107.6: Handle DOB updates
+def _handle_dob_update(action, profile):
+    """Updates the user's DOB and recalculates their age."""
+    date_str = action.get("date")
+    if not date_str:
+        return profile, "I'm sorry, I couldn't quite understand that date. Could you try again?", None
+    
+    profile["dob"] = date_str
+    profile["dob_source"] = "user_provided"
+    
+    # Immediately update age based on new, accurate DOB
+    profile = _recalculate_age_dependent_categories(profile)
+    
+    reply = f"Thank you for sharing! I've updated your date of birth to {date_str} and recalculated your age to {profile.get('age')}."
+    return profile, reply, None
 
 def is_reminder_due(reminder, check_date_dt):
     if not ENABLE_CUSTOM_REMINDERS:
@@ -1325,15 +1365,28 @@ def _recalculate_age_dependent_categories(profile):
     return profile
 
 
-# MODIFIED in v105.4: Replaced direct LLM call with fallback function
+# NEW in v107.0 to handle internal actions
+def _handle_internal_action(action_data, profile):
+    """Handles non-chat, UI-driven actions like button clicks."""
+    action_type = action_data.get('action')
+    
+    if action_type == 'select_video_category':
+        selected_category = action_data.get('category')
+        response_data = _handle_video_suggestion(profile, selected_category=selected_category)
+        # No need to save profile here as video suggestion logic doesn't modify it
+        return jsonify(response_data)
+
+    # Fallback for unknown actions
+    return jsonify({"reply": "I'm sorry, I didn't understand that action."})
+
+# MODIFIED in v107.0 to handle multi-video logic
 def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
     # Recalculate dynamic and analytical data on every interaction.
-    profile = _recalculate_age_dependent_categories(profile) # NEW in v105.5
+    profile = _recalculate_age_dependent_categories(profile)
     calculate_child_ages(profile)
     calculate_trimester(profile)
     profile = _update_synopsis_if_needed(profile)
     
-    # NEW in v105.1: Check for and generate monthly summary before anything else
     proactive_summary = _check_and_generate_monthly_summary(profile)
 
     insights = get_conversation_summary(user_message)
@@ -1345,12 +1398,19 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
     }
     profile.setdefault("interaction_log", []).insert(0, log_entry)
     
-    # --- BUG FIX v97.3: Detect summary requests ---
     summary_keywords = ["about me", "my profile", "my summary", "what do you know"]
     is_summary_request = any(keyword in user_message.lower() for keyword in summary_keywords)
 
 
     if insights.get('error'): return jsonify({"reply": md.render("I'm having a little trouble understanding. Please rephrase.")})
+
+    # --- MODIFIED in v107.0: Video query now triggers interactive flow ---
+    if insights.get('query_wellness_video'):
+        response_payload = _handle_video_suggestion(profile) # Initial call without a category
+        if proactive_summary:
+            response_payload["proactive_summary"] = proactive_summary
+        save_profile(profile_hash, profile)
+        return jsonify(response_payload)
 
     if ENABLE_CHART_VISUALIZATION and insights.get('query_chart'):
         chart_query = insights.get('query_chart')
@@ -1362,7 +1422,6 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
         save_profile(profile_hash, profile)
         return jsonify(json_response)
         
-    # --- MODIFIED v105.5: Expanded session-based conversational flows ---
     pending_question = session.get('pending_question')
     if pending_question:
         affirmative_keywords = ['yes', 'sure', 'ok', 'okay', 'please', 'do it']
@@ -1377,7 +1436,7 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
             else:
                 action_response = "Okay, no problem. I won't set a reminder this time."
         
-        elif pending_question == 'confirm_life_event_update': # NEW in v105.5
+        elif pending_question == 'confirm_life_event_update': # Handles end of pregnancy
             life_event_context = session.pop('pending_action_context', None)
             if is_affirmative and life_event_context:
                 profile['secondary_details']['is_pregnant'] = False
@@ -1404,7 +1463,6 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
         elif pending_question == 'confirm_start_pregnancy': # NEW in v105.6
             if is_affirmative:
                 profile['secondary_details']['is_pregnant'] = True
-                # Now, ask the crucial follow-up question
                 session['pending_question'] = 'get_lmp_date'
                 action_response = "Okay, I've updated your profile. To help calculate your gestation and provide timely milestones, could you please share the first day of your last menstrual period (LMP)?"
             else:
@@ -1413,7 +1471,6 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
         elif pending_question == 'get_lmp_date': # NEW in v105.6
             lmp_date_str = normalize_date_string(user_message)
             profile['secondary_details']['lmp_date'] = lmp_date_str
-            # After getting the final piece of info, the conversation is done.
             action_response = f"Thank you! I've saved that date. Based on that, I'll keep you updated on your pregnancy journey."
 
         elif pending_question == 'confirm_start_perimenopause': # NEW in v105.6
@@ -1423,7 +1480,6 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
             else:
                 action_response = "Understood. I will not update your profile. What's on your mind?"
 
-        # Clear session state if we're not asking another question
         if 'pending_question' not in session:
             session.pop('pending_question', None)
             session.pop('pending_action_context', None)
@@ -1434,63 +1490,54 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
                 response_payload["proactive_summary"] = proactive_summary
             save_profile(profile_hash, profile)
             return jsonify(response_payload)
-    # --- End of conversational flow handling ---
 
     action_response = None
     new_pending_question = None
-    special_context = None # RESTORED v98.8
-    education_tidbit = None # NEW in v104.2
+    special_context = None 
+    education_tidbit = None 
     action_handlers = {'medication_log': handle_medication_log, 'period_action': handle_period_action, 'set_goal': handle_set_goal, 'reminder_action': handle_reminder_action}
     
     for action_type, handler in action_handlers.items():
         if insights.get(action_type):
             profile, action_response, new_pending_question = handler(insights[action_type], profile)
             break
+
+    # NEW in v107.6: Handle DOB updates
+    if not action_response and insights.get('provide_dob'):
+        profile, action_response, new_pending_question = _handle_dob_update(insights['provide_dob'], profile)
             
-    # --- NEW in v105.5 & MODIFIED in 105.6: Life Event Update Trigger ---
     if not action_response and insights.get('life_event_update'):
         event_data = insights.pop('life_event_update')
         event_type = event_data.get('type')
 
-        # Handle START of pregnancy
         if event_type == 'start_pregnancy' and not profile.get('secondary_details', {}).get('is_pregnant'):
             session['pending_question'] = 'confirm_start_pregnancy'
             action_response = "That's wonderful news! To help me provide the most relevant information, may I update your profile to reflect that you are pregnant?"
-        
-        # Handle START of perimenopause
         elif event_type == 'start_perimenopause' and not profile.get('secondary_details', {}).get('is_perimenopausal'):
             session['pending_question'] = 'confirm_start_perimenopause'
             action_response = "Thank you for sharing that. It can be a confusing time. To help me offer more relevant support, would you like me to update your profile to note that you are navigating perimenopause?"
-
-        # Handle END of pregnancy (existing logic)
         elif event_type == 'pregnancy_to_parenting' and profile.get('secondary_details', {}).get('is_pregnant'):
             session['pending_question'] = 'confirm_life_event_update'
             session['pending_action_context'] = event_data
             action_response = "That's wonderful news! It sounds like you've welcomed your baby. Shall I update your profile to reflect that you are now parenting?"
-        else: # User is not pregnant, or event is not applicable, so treat as general chat
+        else:
              action_response = None
 
-    # --- RESTORED v98.7: Check for new potential reminders ---
     if not action_response and ENABLE_CONTEXTUAL_REMINDERS and insights.get('potential_reminder'):
         potential_reminder_data = insights.pop('potential_reminder')
         session['pending_question'] = 'clarify_reminder_creation'
         session['pending_action_context'] = potential_reminder_data
         action_response = f"I noticed you mentioned your '{potential_reminder_data.get('text')}'. Would you like me to set a reminder for that?"
 
-    # --- RESTORED v98.8 & ENHANCED v101.9: AI Follow-up Questions for Negative Logs ---
-    # --- REFACTORED in v104.1: This logic now uses the dynamic_confirmation context ---
     if not action_response and ENABLE_EXPANDED_LOGGING and insights.get('health_log'):
         log_data = insights['health_log']
         profile.setdefault('health_logs', []).insert(0, {"timestamp": datetime.now().isoformat(), **log_data})
         
         category, value = log_data.get('category'), log_data.get('value')
         
-        # --- BUG FIX v102.1: Add a guard clause ---
         if category and value:
-            # --- NEW v101.9 & Modified v104.1 ---
             negative_log_values = ['high', 'poor', 'terrible', 'anxious', 'sad', 'stressed', 'overwhelmed', 'exhausted', 'headache', 'cramps', 'painful']
             is_negative = value in negative_log_values
-            
             special_context = {"type": "dynamic_confirmation", "log_details": log_data, "is_negative": is_negative}
 
     if new_pending_question:
@@ -1503,18 +1550,15 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
         save_profile(profile_hash, profile)
         return jsonify(response_payload)
     
-    # --- BUG FIX v97.1 & v97.4: Overhauled Suggestion/Follow-up Logic ---
     is_follow_up = False
     last_discussed_program_context = None
     suggested_program_object = None
 
-    # 1. Check if this is a follow-up to a pending offer.
     follow_up_program, profile = handle_follow_up_request(profile, user_message)
     if follow_up_program:
         is_follow_up = True
         suggested_program_object = follow_up_program
     else:
-        # 2. If not a follow-up, check if we should make a new suggestion.
         new_suggestion = get_program_suggestion(profile, user_message)
         if new_suggestion:
             suggested_program_object = new_suggestion
@@ -1525,8 +1569,7 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
             if question_is_about_suggestion:
                  special_context = { "type": "explain_and_offer_program", "program_name": new_suggestion['name']}
     
-    # --- NEW in v104.2: Get Educational Tidbit ---
-    if not special_context: # Don't show a tidbit if a more specific context is already active
+    if not special_context: 
         tidbit_text, tidbit_id = _get_relevant_education_tidbit(profile, user_message)
         if tidbit_text:
             education_tidbit = tidbit_text
@@ -1818,19 +1861,28 @@ if app.config['ENABLE_WIDGET_MODE']:
     @app.route('/api/v1/chat', methods=['POST'])
     @token_required
     def api_chat():
+        request_data = request.get_json()
+        
+        # --- NEW in v107.0: Handle internal UI actions ---
+        if 'action' in request_data:
+            return _handle_internal_action(request_data, g.profile)
+
+        user_message = request_data.get('message', '')
+        if not user_message:
+            return jsonify({"error": "Message cannot be empty."}), 400
+        
         if g.is_guest and app.config.get('ENABLE_EMAIL_OTP_API_VERIFICATION'):
-            insights = get_conversation_summary(request.json['message'])
+            insights = get_conversation_summary(user_message)
             if insights.get('period_action') or insights.get('reminder_action'):
                 return jsonify({"reply": "To use this feature, please create an account.", "action": "prompt_signup"})
         
-        # In non-OTP guest mode, we allow the chat to proceed
         if g.is_guest:
-             response = _call_llm_with_fallback(f"You are a helpful assistant. Answer the user's question: {request.json['message']}")
+             response = _call_llm_with_fallback(f"You are a helpful assistant. Answer the user's question: {user_message}")
              if response is None:
                  return jsonify({"reply": "Sorry, I'm unable to process your request right now."})
              return jsonify({"reply": md.render(response.text)})
 
-        return _process_chat_message_for_auth_user(request.json['message'], g.profile, g.profile_hash)
+        return _process_chat_message_for_auth_user(user_message, g.profile, g.profile_hash)
 
     # --- NEW API ENDPOINTS FOR FULL-FEATURED WIDGET ---
     @app.route('/api/v1/upload', methods=['POST'])
@@ -2282,9 +2334,21 @@ if not app.config['ENABLE_WIDGET_MODE']:
 
     @app.route('/chat', methods=['POST'])
     def chat():
-        # --- NEW in v103.0: Intercept for conversational onboarding ---
+        request_data = request.get_json()
+        
+        # --- NEW in v107.0: Handle internal UI actions ---
+        if 'action' in request_data:
+            profile_hash = session.get('profile_hash')
+            if not profile_hash: return jsonify({"error": "Authentication required."}), 403
+            profile = load_profile(profile_hash)
+            if not profile: return jsonify({"error": "Profile not found."}), 404
+            return _handle_internal_action(request_data, profile)
+
+        user_message = request_data.get('message', '')
+        if not user_message:
+            return jsonify({"error": "Message cannot be empty."}), 400
+        
         if 'onboarding_state' in session:
-            user_message = request.json.get('message', '')
             response = _handle_onboarding_step(
                 profile_hash=session['onboarding_state']['profile_hash'],
                 user_message=user_message,
@@ -2303,10 +2367,9 @@ if not app.config['ENABLE_WIDGET_MODE']:
             profile = load_profile(session['profile_hash'])
             if not profile: return jsonify({"error": "Profile not found"}), 404
             
-            return _process_chat_message_for_auth_user(request.json['message'], profile, session['profile_hash'])
+            return _process_chat_message_for_auth_user(user_message, profile, session['profile_hash'])
         
         elif session.get('is_guest'):
-            user_message = request.json.get('message', '')
             # --- RESTORED v98.8: LLM Caching for Guests ---
             if ENABLE_LLM_CACHING:
                 cache_key = re.sub(r'[^\w\s]', '', user_message).lower().strip()
@@ -2469,7 +2532,7 @@ if ENABLE_SQLITE_DATABASE:
             return "Database file not found on the server.", 404
 
 # --- NEW in v103.0: Conversational Onboarding Logic ---
-# MODIFIED in v105.4: Replaced direct LLM call with fallback function
+# MODIFIED in v107.1 for reliability
 def _parse_life_events_from_text(user_text, age):
     """Uses AI to parse natural language into structured secondary_details."""
     prompt = f"""
@@ -2487,7 +2550,9 @@ def _parse_life_events_from_text(user_text, age):
     **CRITICAL RULES:**
     1.  Your output MUST be a single, raw, valid JSON object and nothing else.
     2.  Only include fields that are strongly implied by the user's text.
-    3.  If the user's text is vague or doesn't match any category, return an empty JSON object `{{}}`.
+    3.  If the user mentions being a parent, a new mom, or having a child, you MUST include `"is_parent": true`.
+    4.  DO NOT attempt to extract the child's age or any other numeric data. Focus only on the boolean life stage.
+    5.  If the user's text is vague or doesn't match any category, return an empty JSON object `{{}}`.
 
     --- EXAMPLES ---
     User Text: "I'm trying to have a baby."
@@ -2495,16 +2560,15 @@ def _parse_life_events_from_text(user_text, age):
 
     User Text: "I'm 14 weeks pregnant and I already have a two year old."
     {{ "is_pregnant": true, "is_parent": true }}
+    
+    User Text: "I am a new mom, my baby is 3 months old."
+    {{ "is_parent": true }}
 
     User Text: "I think I'm starting perimenopause, the symptoms are crazy."
     {{ "is_perimenopausal": true }}
     
     User Text: "I'm not really focused on anything specific right now"
     {{}}
-
-    User Text: "My period is irregular."
-    {{}}
-
     ---
     Now, process this user's text: "{user_text}"
     """
@@ -2518,6 +2582,7 @@ def _parse_life_events_from_text(user_text, age):
     except Exception:
         return {} # Return empty on any parsing failure
 
+# MODIFIED in v107.3 to fix onboarding data flow
 def _handle_onboarding_step(profile_hash, user_message, onboarding_data, is_api_call=False):
     """
     State machine for handling the multi-step conversational onboarding process.
@@ -2539,7 +2604,7 @@ def _handle_onboarding_step(profile_hash, user_message, onboarding_data, is_api_
             profile_data['name'] = user_message
             lang_data = load_language_data(lang_code)
             next_question = lang_data.get('onboarding_ask_language', '').format(name=user_message.split(' ')[0])
-            response_payload['reply_type'] = 'language_picker' # FIX v103.1
+            response_payload['ui_component'] = 'language_picker' # FIX v107.2
             next_step = 'awaiting_language'
 
     elif step == 'awaiting_language': # NEW STEP in v103.1
@@ -2552,7 +2617,7 @@ def _handle_onboarding_step(profile_hash, user_message, onboarding_data, is_api_
         else:
             lang_data = load_language_data(lang_code)
             next_question = "I'm sorry, I didn't recognize that language. Please select one from the list."
-            response_payload['reply_type'] = 'language_picker'
+            response_payload['ui_component'] = 'language_picker' # FIX v107.2
 
     elif step == 'awaiting_age':
         lang_data = load_language_data(lang_code) # Use the chosen language
@@ -2574,39 +2639,24 @@ def _handle_onboarding_step(profile_hash, user_message, onboarding_data, is_api_
         lang_data = load_language_data(lang_code)
         age = profile_data.get('age')
         secondary_details = _parse_life_events_from_text(user_message, age)
-        
-        # Create and save the full profile
-        new_profile = create_user_profile(
-            name=profile_data['name'],
-            email=onboarding_data.get('email', ''),
-            phone='',
-            age=age,
-            details=secondary_details,
-            lang_code=lang_code
-        )
-        save_profile(profile_hash, new_profile)
-        
-        # Prepare final response
-        final_reply = lang_data.get('onboarding_complete', '').format(name=profile_data['name'].split(' ')[0])
-        
-        if is_api_call:
-            final_token = generate_token(profile_hash)
-            return jsonify({
-                "status": "created",
-                "token": final_token,
-                "name": new_profile.get("name"),
-                "is_guest": False,
-                "reply": md.render(final_reply)
-            })
-        else: # Monolith
-            session.clear() # Clear onboarding and OTP data
-            session['profile_hash'] = profile_hash
-            return jsonify({
-                "status": "created", 
-                "profile": new_profile, 
-                "reply": md.render(final_reply)
-            })
+        profile_data['secondary_details'] = secondary_details
+
+        # --- FIX v106.1 & v107.1: Robustly check if we need to ask for a DOB ---
+        if secondary_details.get('is_parent'):
+            next_question = lang_data.get('onboarding_ask_child_dob', '')
+            next_step = 'awaiting_child_dob'
+        else:
+            # If not a parent, finalize profile
+            return _finalize_onboarding(profile_hash, onboarding_data, is_api_call)
     
+    elif step == 'awaiting_child_dob': # NEW state in v106.1
+        dob_str = normalize_date_string(user_message)
+        # --- FIX v107.3: Correctly merge DOB into profile_data before finalizing ---
+        profile_data.setdefault('secondary_details', {}).setdefault('child_dobs', []).append(dob_str)
+        profile_data['secondary_details']['num_children'] = len(profile_data['secondary_details']['child_dobs'])
+        # Now that we have the final piece of info, finalize the profile
+        return _finalize_onboarding(profile_hash, onboarding_data, is_api_call)
+
     # If onboarding is not finished, update the state and prepare the response
     onboarding_data['step'] = next_step
     onboarding_data['profile_data'] = profile_data
@@ -2625,6 +2675,48 @@ def _handle_onboarding_step(profile_hash, user_message, onboarding_data, is_api_
         response_payload['status'] = "onboarding_inprogress"
         response_payload['onboarding_state'] = onboarding_data
         return jsonify(response_payload)
+
+# NEW in v106.1: Centralized function to create the profile at the end of any onboarding path.
+def _finalize_onboarding(profile_hash, onboarding_data, is_api_call=False):
+    """Creates, saves, and returns the final response for a new user profile."""
+    profile_data = onboarding_data.get('profile_data', {})
+    lang_code = onboarding_data.get('lang_code', 'en')
+    lang_data = load_language_data(lang_code)
+
+    new_profile = create_user_profile(
+        name=profile_data['name'],
+        email=onboarding_data.get('email', ''),
+        phone='',
+        age=profile_data.get('age'),
+        details=profile_data.get('secondary_details', {}),
+        lang_code=lang_code
+    )
+    # Perform initial calculations
+    calculate_child_ages(new_profile)
+    calculate_trimester(new_profile)
+    save_profile(profile_hash, new_profile)
+
+    # Choose the correct completion message
+    final_reply_key = 'onboarding_complete_parent' if new_profile.get('secondary_details', {}).get('is_parent') else 'onboarding_complete'
+    final_reply = lang_data.get(final_reply_key, '').format(name=profile_data['name'].split(' ')[0])
+    
+    if is_api_call:
+        final_token = generate_token(profile_hash)
+        return jsonify({
+            "status": "created",
+            "token": final_token,
+            "name": new_profile.get("name"),
+            "is_guest": False,
+            "reply": md.render(final_reply)
+        })
+    else: # Monolith
+        session.clear() # Clear onboarding and OTP data
+        session['profile_hash'] = profile_hash
+        return jsonify({
+            "status": "created", 
+            "profile": new_profile, 
+            "reply": md.render(final_reply)
+        })
 
 # --- MODIFIED in v104.6: Educational Tidbit Logic with Robust Regex ---
 def _get_relevant_education_tidbit(profile, user_message):
@@ -2785,6 +2877,65 @@ def _check_and_generate_monthly_summary(profile):
         return summary
         
     return None
+
+# MODIFIED in v107.4 for robust filtering
+def _handle_video_suggestion(profile, selected_category=None):
+    if not ENABLE_VIDEO_SUGGESTIONS or not WELLNESS_VIDEO_DATA:
+        return {"reply": "Sorry, the video library is currently unavailable."}
+
+    details = profile.get("secondary_details", {})
+    is_pregnant = details.get("is_pregnant", False)
+    is_parent = details.get("is_parent", False)
+    
+    suitable_videos = []
+    
+    if is_pregnant:
+        weeks_gestation = details.get("weeks_gestation", 0)
+        suitable_videos = [v for v in WELLNESS_VIDEO_DATA if v["category"].startswith("prenatal_") and v["suitability"].get("min_weeks_gestation", 0) <= weeks_gestation and v["suitability"].get("max_weeks_gestation", 99) >= weeks_gestation]
+    elif is_parent and details.get("child_dobs"):
+        try:
+            last_dob_str = max(details["child_dobs"])
+            last_dob = datetime.strptime(last_dob_str, "%Y-%m-%d")
+            weeks_postpartum = (datetime.now() - last_dob).days // 7
+            suitable_videos = [v for v in WELLNESS_VIDEO_DATA if v["category"].startswith("postnatal_") and v["suitability"].get("min_weeks_postpartum", 0) <= weeks_postpartum and v["suitability"].get("max_weeks_postpartum", 999) >= weeks_postpartum]
+        except (ValueError, TypeError): pass
+
+    if not suitable_videos:
+        return {"reply": "I don't have a specific video for your current stage, but I can answer questions about general wellness!"}
+
+    if selected_category:
+        # User has selected a category, return the carousel
+        videos_in_category = [v for v in suitable_videos if v.get("primary_category") == selected_category]
+        return {
+            "reply": f"Great choice! Here are the {selected_category} videos. Tap one to play it here.",
+            "ui_component": "video_carousel",
+            "data": { "videos": videos_in_category }
+        }
+    else:
+        # First request: determine categories and counts
+        categories = defaultdict(list)
+        for v in suitable_videos:
+            categories[v.get("primary_category", "general")].append(v)
+        
+        if len(categories) == 1:
+            # Only one category, so just show the carousel directly
+            category_name = list(categories.keys())[0]
+            return {
+                "reply": "Of course! Here are some videos that might be helpful. Tap one to play it here.",
+                "ui_component": "video_carousel",
+                "data": { "videos": categories[category_name] }
+            }
+        elif len(categories) > 1:
+            # Multiple categories, so show the picker
+            category_data = [{"name": name.capitalize(), "count": len(videos)} for name, videos in categories.items()]
+            return {
+                "reply": "I've found a few options for you! What are you in the mood for?",
+                "ui_component": "category_picker",
+                "data": { "categories": category_data }
+            }
+        else:
+            # Should not happen if suitable_videos is not empty, but a safe fallback
+            return {"reply": "I couldn't find any suitable videos for you right now, but I can help with other questions!"}
 
 
 if __name__ == '__main__':

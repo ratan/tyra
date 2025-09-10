@@ -188,6 +188,7 @@ This is where you will securely store your secret keys and tell the application 
     *   File: tyra_prod.db
     *   Folder: flask_session
     *   File: education_tidbits.json
+    *   File: wellness_videos.json
 ***
 
 ### **Miscelleneous Points (v101.4)**
@@ -225,8 +226,8 @@ https://ai.google.dev/gemini-api/docs/rate-limits#free-tier
 
 #### **Point 6: Pending Item**
 1.  ENABLE_SECURE_CORS_POLICY=True (Once Tribher is connected)  
-2.  Redis support
-3.  TBD
+2.  Add video in youtube and make them private (check app too)
+3.  Redis support
 4.  TBD
 
 #### **Point 7: SCP to Render**
