@@ -1,4 +1,4 @@
-# user_profiler.py (v107.6 - DOB Provenance Tracking)
+# user_profiler.py (v108.0 - Chat History Persistence)
 from datetime import datetime, timedelta
 
 PROMPT_HISTORY_LIMIT = 5
@@ -27,6 +27,7 @@ def create_user_profile(name, email, phone, age, details, lang_code='en'):
         "primary_category": None, "secondary_details": details,
         "conversation_history": [],
         "last_seen_timestamp": None,
+        "chat_log": [], # NEW in v108.0: For persisting chat UI state
         "period_data": {
             "tracking_enabled": False,
             "has_been_offered_tracking": False,

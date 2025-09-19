@@ -1,4 +1,4 @@
-# app.py (v107.6 - DOB Provenance Tracking)
+# app.py (v109.0 - Fix Chat History Logging)
 import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets, random
 from datetime import datetime, timedelta, timezone, date
 from flask import Flask, Response, render_template, request, jsonify, session, redirect, url_for, send_from_directory, g
@@ -37,6 +37,7 @@ BEHAVIORAL_SYNOPSIS_MIN_INTERACTIONS = 15
 PROGRAM_SUGGESTION_COOLDOWN_DAYS = 3
 MAX_CYCLE_HISTORY = 120
 MAX_KEY_MEMORIES = 15 # NEW in v102.0
+MAX_CHAT_LOG_ENTRIES = 50 # NEW in v108.0: Limit size of persisted chat log
 
 # NEW in v105.4: Define an ordered list of models for fallback on rate limiting.
 GEMINI_MODEL_CASCADE_LIST = [
@@ -1232,8 +1233,16 @@ def _process_quick_log_response(profile, category, value):
         reply = lang_data.get("quick_log_confirm_fallback", "Okay, I've logged that for you.")
     else:
         reply = response.text.strip()
+
+    # NEW in v108.0: Also log the interaction to the chat_log for UI persistence.
+    rendered_reply = md.render(reply)
+    profile.setdefault("chat_log", []).extend([
+        {'role': 'user', 'content': f"Quick Log: {category.title()} - {value.title()}"},
+        {'role': 'assistant', 'content': rendered_reply}
+    ])
+    profile['chat_log'] = profile['chat_log'][-MAX_CHAT_LOG_ENTRIES:]
     
-    return {"reply": md.render(reply)}
+    return {"reply": rendered_reply}
 
 
 def _get_dashboard_data(profile):
@@ -1379,7 +1388,7 @@ def _handle_internal_action(action_data, profile):
     # Fallback for unknown actions
     return jsonify({"reply": "I'm sorry, I didn't understand that action."})
 
-# MODIFIED in v107.0 to handle multi-video logic
+# MODIFIED in v109.0: Add chat logging to video/chart handlers
 def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
     # Recalculate dynamic and analytical data on every interaction.
     profile = _recalculate_age_dependent_categories(profile)
@@ -1409,6 +1418,15 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
         response_payload = _handle_video_suggestion(profile) # Initial call without a category
         if proactive_summary:
             response_payload["proactive_summary"] = proactive_summary
+        
+        # --- FIX v109.0: Log this interaction to the chat history ---
+        profile.setdefault("chat_log", []).extend([
+            {'role': 'user', 'content': user_message},
+            {'role': 'assistant', 'content': response_payload.get('reply', 'Here are some videos for you.')}
+        ])
+        profile['chat_log'] = profile['chat_log'][-MAX_CHAT_LOG_ENTRIES:]
+        # --- End FIX ---
+            
         save_profile(profile_hash, profile)
         return jsonify(response_payload)
 
@@ -1419,6 +1437,15 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
             json_response["target_date"] = chart_query.get('target_date')
         if proactive_summary:
             json_response["proactive_summary"] = proactive_summary
+            
+        # --- FIX v109.0: Log this interaction to the chat history ---
+        profile.setdefault("chat_log", []).extend([
+            {'role': 'user', 'content': user_message},
+            {'role': 'assistant', 'content': json_response['reply']}
+        ])
+        profile['chat_log'] = profile['chat_log'][-MAX_CHAT_LOG_ENTRIES:]
+        # --- End FIX ---
+
         save_profile(profile_hash, profile)
         return jsonify(json_response)
         
@@ -1488,6 +1515,12 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
             response_payload = {"reply": md.render(action_response)}
             if proactive_summary:
                 response_payload["proactive_summary"] = proactive_summary
+            # NEW in v108.0: Save this interaction to the chat log
+            profile.setdefault("chat_log", []).extend([
+                {'role': 'user', 'content': user_message},
+                {'role': 'assistant', 'content': response_payload['reply']}
+            ])
+            profile['chat_log'] = profile['chat_log'][-MAX_CHAT_LOG_ENTRIES:]
             save_profile(profile_hash, profile)
             return jsonify(response_payload)
 
@@ -1547,6 +1580,12 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
         response_payload = {"reply": md.render(action_response)}
         if proactive_summary:
             response_payload["proactive_summary"] = proactive_summary
+        # NEW in v108.0: Save this interaction to the chat log
+        profile.setdefault("chat_log", []).extend([
+            {'role': 'user', 'content': user_message},
+            {'role': 'assistant', 'content': response_payload['reply']}
+        ])
+        profile['chat_log'] = profile['chat_log'][-MAX_CHAT_LOG_ENTRIES:]
         save_profile(profile_hash, profile)
         return jsonify(response_payload)
     
@@ -1606,9 +1645,19 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
             reply = re.sub(r"\[SUGGEST_MEMORY:\s*(.*?)\]", "", raw_reply).strip()
         else:
             reply = raw_reply
+            
+    rendered_reply = md.render(reply)
+    
+    # NEW in v108.0: Save the final AI response to the chat log for UI persistence.
+    profile.setdefault("chat_log", []).extend([
+        {'role': 'user', 'content': user_message},
+        {'role': 'assistant', 'content': rendered_reply}
+    ])
+    # Trim the log to the max size
+    profile['chat_log'] = profile['chat_log'][-MAX_CHAT_LOG_ENTRIES:]
 
     save_profile(profile_hash, profile)
-    response_payload = {"reply": md.render(reply)}
+    response_payload = {"reply": rendered_reply}
     if proactive_summary:
         response_payload["proactive_summary"] = proactive_summary
         
@@ -1883,6 +1932,15 @@ if app.config['ENABLE_WIDGET_MODE']:
              return jsonify({"reply": md.render(response.text)})
 
         return _process_chat_message_for_auth_user(user_message, g.profile, g.profile_hash)
+
+    # NEW in v108.0: Endpoint to fetch recent chat history for UI persistence.
+    @app.route('/api/v1/chat_history', methods=['GET'])
+    @token_required
+    def api_chat_history():
+        if g.is_guest:
+            return jsonify([]) # Guests have no server-side history
+        chat_log = g.profile.get('chat_log', [])
+        return jsonify(chat_log)
 
     # --- NEW API ENDPOINTS FOR FULL-FEATURED WIDGET ---
     @app.route('/api/v1/upload', methods=['POST'])
@@ -2395,6 +2453,20 @@ if not app.config['ENABLE_WIDGET_MODE']:
             return jsonify({"reply": md.render(reply_text)})
         return jsonify({"error": "No active session"})
     
+    # NEW in v108.0: Endpoint to fetch recent chat history for UI persistence.
+    @app.route('/chat_history', methods=['GET'])
+    def chat_history():
+        profile_hash = session.get('profile_hash')
+        if not profile_hash:
+            return jsonify([]) # No session, no history
+        
+        profile = load_profile(profile_hash)
+        if not profile:
+            return jsonify([])
+        
+        chat_log = profile.get('chat_log', [])
+        return jsonify(chat_log)
+
     @app.route('/logout', methods=['POST'])
     def logout():
         session.clear()

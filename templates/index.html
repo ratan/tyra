@@ -241,6 +241,7 @@
 </head>
 <body class="{{ 'rtl' if is_rtl else '' }}">
     <script>
+        // v108.0 - Chat History Persistence
         const IS_SESSION_ACTIVE = {{ is_session_active | tojson }};
         const USER_NAME = "{{ user_name | default('') | e }}";
         const LANG_STRINGS = {{ lang | tojson }};
@@ -656,13 +657,14 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // MODIFIED in v107.0 to handle internal actions
+    // MODIFIED in v108.0 to handle internal actions and get user message reference
     async function handleChatSubmit(e, internalAction = null) {
         e.preventDefault();
         
         let messagePayload = {};
         let userMessageToDisplay = '';
         const userInput = inputs.userInput;
+        let userMessageElement = null; // NEW in v108.0 for smart scroll
 
         if (internalAction) {
             messagePayload = internalAction;
@@ -677,7 +679,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         if (userMessageToDisplay) {
-            appendMessage(userMessageToDisplay, 'user');
+            userMessageElement = appendMessage(userMessageToDisplay, 'user', {}, false); // Pass false to disable auto-scroll
         }
         if (userInput) {
             userInput.value = '';
@@ -710,7 +712,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         if (!response.ok) { 
-            appendMessage(`Sorry, something went wrong: ${data.error || 'A server error occurred.'}`, 'ai');
+            appendMessage(`Sorry, something went wrong: ${data.error || 'A server error occurred.'}`, 'ai', {});
             return;
         }
 
@@ -725,8 +727,11 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
-        appendMessage(data.reply, 'ai', data);
+        const aiMessageElement = appendMessage(data.reply, 'ai', data, false); // Pass false to disable auto-scroll
         
+        // NEW in v108.0: Smart scroll logic
+        smartScroll(userMessageElement, aiMessageElement);
+
         if(!onboardingMode) {
              localStorage.setItem('dashboardNeedsRefresh', 'true');
         }
@@ -786,7 +791,7 @@ document.addEventListener('DOMContentLoaded', function() {
         inputs.chatLog.innerHTML = `<div class="message ai-message"><p>${message}</p></div>`;
     }
 
-    // MODIFIED in v107.2 to standardize on ui_component
+    // MODIFIED in v108.0 to handle smart scroll flag
     function appendMessage(content, sender, responseData = {}, doAutoScroll = true) {
         const div = document.createElement('div');
         div.classList.add('message', sender === 'user' ? 'user-message' : 'ai-message');
@@ -867,6 +872,28 @@ document.addEventListener('DOMContentLoaded', function() {
             inputs.chatLog.scrollTop = inputs.chatLog.scrollHeight;
         }
         return div; // Return the created element
+    }
+    
+    // NEW in v108.0: Smart scroll function
+    function smartScroll(userMessageElement, aiMessageElement) {
+        const chatLog = inputs.chatLog;
+        if (!chatLog) return;
+        
+        if (!userMessageElement || !aiMessageElement) {
+            chatLog.scrollTop = chatLog.scrollHeight; // Fallback to simple scroll
+            return;
+        }
+
+        const containerHeight = chatLog.clientHeight;
+        const lastTwoMessagesHeight = userMessageElement.offsetHeight + aiMessageElement.offsetHeight + 20; // Add gap
+
+        if (lastTwoMessagesHeight > containerHeight) {
+            // If they don't fit, scroll to the top of the user's message
+            userMessageElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else {
+            // If they fit, scroll to the bottom to ensure everything is visible
+            chatLog.scrollTop = chatLog.scrollHeight;
+        }
     }
     
     async function renderVisualization(visType, targetDate = null) {
@@ -978,6 +1005,28 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (error) { console.error("Transcription error:", error); }
         finally { inputs.userInput.placeholder = LANG_STRINGS.ask_question_placeholder; }
     }
+    
+    // NEW in v108.0: Function to load and render chat history.
+    async function loadChatHistory() {
+        try {
+            const response = await fetch('/chat_history');
+            if (!response.ok) return;
+            const history = await response.json();
+            
+            if (history && history.length > 0) {
+                inputs.chatLog.innerHTML = ''; // Clear any welcome message
+                history.forEach(item => {
+                    appendMessage(item.content, item.role, {}, false); // Append without scrolling each one
+                });
+                inputs.chatLog.scrollTop = inputs.chatLog.scrollHeight; // Scroll to bottom after all are loaded
+            } else {
+                displayWelcomeMessage(); // Show welcome if no history
+            }
+        } catch (error) {
+            console.error("Could not load chat history:", error);
+            displayWelcomeMessage();
+        }
+    }
 
     // --- INITIAL PAGE LOAD LOGIC ---
     if (!CONFIG.ENABLE_CONVERSATIONAL_ONBOARDING && forms.profile) {
@@ -1050,8 +1099,8 @@ document.addEventListener('DOMContentLoaded', function() {
     if (inputs.voiceInputBtn) { inputs.voiceInputBtn.addEventListener('click', () => { if (!mediaRecorder || mediaRecorder.state === 'inactive') { startRecording(); } else { stopRecording(); } }); }
     
     if (IS_SESSION_ACTIVE) {
-        displayWelcomeMessage();
         showSection('chat');
+        loadChatHistory(); // MODIFIED in v108.0
     } else {
         showSection('identifier');
     }

@@ -1,4 +1,4 @@
-// static/js/tyra_widget.js (v107.2 - Onboarding Regression Fix)
+// static/js/tyra_widget.js (v108.0 - Chat History Persistence & Smart Scroll)
 (function() {
     'use strict';
 
@@ -192,13 +192,7 @@
     
     function postRenderSetup() {
         if (state.currentView === 'chat') {
-            const chatLog = state.targetElement.querySelector('.tyra-chat-log');
-            if (chatLog && chatLog.children.length === 0 && !state.onboardingToken) { // MODIFIED v103.0
-                const welcomeMessage = state.userName 
-                    ? (state.lang.welcome_message_return || 'Welcome back, {name}!').replace('{name}', state.userName)
-                    : (state.lang.welcome_message_guest || 'Welcome!');
-                addMessage(welcomeMessage, 'ai', {});
-            }
+            loadChatHistory(); // NEW in v108.0
             populateQuickLogButtons();
         } else if (state.currentView === 'dashboard') {
             renderDashboard();
@@ -207,7 +201,7 @@
         }
     }
     
-    // MODIFIED in v107.2 to standardize on ui_component
+    // MODIFIED in v108.0 for smart scrolling
     function addMessage(htmlContent, sender, responseData = {}, doAutoScroll = true) {
         const chatLog = state.targetElement.querySelector('.tyra-chat-log');
         if (!chatLog) return;
@@ -309,6 +303,28 @@
         return messageDiv;
     }
 
+    // NEW in v108.0: Smart scroll function
+    function smartScroll(userMessageElement, aiMessageElement) {
+        const chatLog = state.targetElement.querySelector('.tyra-chat-log');
+        if (!chatLog) return;
+        
+        if (!userMessageElement || !aiMessageElement) {
+            chatLog.scrollTop = chatLog.scrollHeight; // Fallback to simple scroll
+            return;
+        }
+
+        const containerHeight = chatLog.clientHeight;
+        const lastTwoMessagesHeight = userMessageElement.offsetHeight + aiMessageElement.offsetHeight + 20; // Add gap
+
+        if (lastTwoMessagesHeight > containerHeight) {
+            // If they don't fit, scroll to the top of the user's message
+            userMessageElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else {
+            // If they fit, scroll to the bottom to ensure everything is visible
+            chatLog.scrollTop = chatLog.scrollHeight;
+        }
+    }
+
     function setFormError(formId, message) {
         const errorDiv = state.targetElement.querySelector(`#${formId} .tyra-form-error`);
         if (errorDiv) errorDiv.textContent = message;
@@ -317,7 +333,9 @@
     // --- API & DATA HANDLING ---
     const api = {
         async get(endpoint, params = {}, isBlob = false) {
-            const headers = { 'Authorization': `Bearer ${state.jwtToken}` };
+            // MODIFIED in v108.0: Use the correct token for history vs other gets
+            const token = endpoint === 'chat_history' ? state.jwtToken : state.jwtToken;
+            const headers = { 'Authorization': `Bearer ${token}` };
             const url = new URL(`${state.apiUrl}/api/v1/${endpoint}`);
             url.search = new URLSearchParams(params).toString();
 
@@ -502,13 +520,14 @@
         // ... (This function is now legacy and will not be triggered in the v103.0 default flow)
     }
     
-    // MODIFIED in v107.0 to handle internal actions
+    // MODIFIED in v108.0 for smart scroll
     async function onChatSubmit(e, internalAction = null) {
         e.preventDefault();
         
         let messagePayload = {};
         let userMessageToDisplay = '';
         const input = state.targetElement.querySelector('.tyra-chat-input');
+        let userMessageElement = null;
 
         if (internalAction) {
             messagePayload = internalAction;
@@ -520,7 +539,7 @@
         }
         
         if (userMessageToDisplay) {
-            addMessage(userMessageToDisplay, 'user');
+            userMessageElement = addMessage(userMessageToDisplay, 'user', {}, false);
         }
         if (input) {
             input.value = '';
@@ -552,7 +571,8 @@
             if (responseData.proactive_summary) {
                 addMessage(responseData.proactive_summary, 'ai');
             }
-            addMessage(responseData.reply || '', 'ai', responseData);
+            const aiMessageElement = addMessage(responseData.reply || '', 'ai', responseData, false);
+            smartScroll(userMessageElement, aiMessageElement);
         }
 
         if (input) {
@@ -620,9 +640,38 @@
 
         state.isDashboardStale = true;
 
-        addMessage(logLabel, 'user', {});
+        const userMsgEl = addMessage(logLabel, 'user', {}, false);
         const { ok, data } = await api.post('quick_log', { category: logCategory, value: logValue });
-        if (ok) addMessage(data.reply, 'ai', data);
+        if (ok) {
+            const aiMsgEl = addMessage(data.reply, 'ai', data, false);
+            smartScroll(userMsgEl, aiMsgEl);
+        }
+    }
+
+    // NEW in v108.0: Load and render chat history.
+    async function loadChatHistory() {
+        if (state.isGuest) {
+            addMessage(state.lang.welcome_message_guest, 'ai');
+            return;
+        }
+        try {
+            const history = await api.get('chat_history');
+            const chatLog = state.targetElement.querySelector('.tyra-chat-log');
+            if (history && history.length > 0) {
+                chatLog.innerHTML = ''; // Clear any existing messages
+                history.forEach(item => {
+                    addMessage(item.content, item.role, {}, false);
+                });
+                chatLog.scrollTop = chatLog.scrollHeight; // Scroll to bottom after load
+            } else {
+                const welcomeMessage = (state.lang.welcome_message_return || 'Welcome back, {name}!').replace('{name}', state.userName);
+                addMessage(welcomeMessage, 'ai', {});
+            }
+        } catch(e) {
+             console.error('Failed to load chat history:', e);
+             const welcomeMessage = (state.lang.welcome_message_return || 'Welcome back, {name}!').replace('{name}', state.userName);
+             addMessage(welcomeMessage, 'ai', {});
+        }
     }
 
     async function initializeAuthenticatedSession() {
