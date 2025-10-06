@@ -1,4 +1,4 @@
-# app.py (v110.0 - Migrated to ZeptoMail & Preserved v109 Logging Fix)
+# app.py (v110.2 - Sanitize Env Vars & ZeptoMail Fix)
 import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets, random, requests
 from datetime import datetime, timedelta, timezone, date
 from flask import Flask, Response, render_template, request, jsonify, session, redirect, url_for, send_from_directory, g
@@ -103,8 +103,15 @@ ENABLE_SECURE_CORS_POLICY = False # !!! SET TO TRUE FOR PRODUCTION DEPLOYMENT !!
 app = Flask(__name__)
 
 # BUG FIX v94.5: Robustly load config from .env into Flask's config object.
-# This is more reliable than depending on os.getenv() which can fail with reloaders.
 app.config.update(dotenv_values(".env")) 
+
+# --- NEW in v110.2: Sanitize environment variables to remove extra quotes ---
+# This handles inconsistencies between local .env file parsing and cloud provider environments (like Render).
+for key in ['FLASK_SECRET_KEY', 'GEMINI_API_KEY', 'ZEPTOMAIL_TOKEN', 'SENDER_EMAIL']:
+    if key in app.config and isinstance(app.config[key], str):
+        app.config[key] = app.config[key].strip('\'"')
+# --- End Sanitize ---
+
 app.config['SECRET_KEY'] = app.config.get("FLASK_SECRET_KEY")
 
 # Now, set feature flags in the app config as well for consistency
