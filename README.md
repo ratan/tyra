@@ -148,6 +148,9 @@ This is where you will securely store your secret keys and tell the application 
 | `SENDGRID_API_KEY`          | *Your SendGrid API Key*                       | Your production key for sending OTP emails.                                 |
 | `SENDER_EMAIL`              | *your_verified_email@example.com*             | The "From" email address verified in SendGrid.                              |
 | `ADMIN_SECRET_KEY`          | *A new, very long, unpredictable secret*      | The secret "password" for accessing the database download endpoint.         |
+| `ZEPTOMAIL_TOKEN`           | *Your ZeptoMail API Key*                       | Your production key for sending OTP emails.                                 |
+
+We are using ZEPTOMAIL_TOKEN instead of SENDGRID_API_KEY now.
 
 #### **Step 4: Configure Build and Start Commands**
 1.  Go back to the service's **"Settings"** tab.

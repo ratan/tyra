@@ -1,5 +1,5 @@
-# app.py (v109.0 - Fix Chat History Logging)
-import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets, random
+# app.py (v110.0 - Migrated to ZeptoMail & Preserved v109 Logging Fix)
+import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets, random, requests
 from datetime import datetime, timedelta, timezone, date
 from flask import Flask, Response, render_template, request, jsonify, session, redirect, url_for, send_from_directory, g
 from dotenv import load_dotenv, dotenv_values
@@ -14,8 +14,6 @@ from fpdf.enums import XPos, YPos # BUG FIX v93.0: Import necessary enums
 import jwt
 from functools import wraps
 from flask_session import Session
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail
 from flask_sqlalchemy import SQLAlchemy
 
 from user_profiler import create_user_profile, format_profile_for_prompt, LANG_MAP
@@ -284,28 +282,45 @@ def before_request_handler():
     ip_request_timestamps[ip] = recent_timestamps
 
 
-# --- NEW: OTP Email Helper ---
+# MODIFIED in v110.0: Switched from SendGrid to ZeptoMail for OTP
 def send_otp_email(to_email, otp):
-    # BUG FIX v94.5: Use app.config which is now the reliable source
-    sendgrid_api_key = app.config.get("SENDGRID_API_KEY")
+    """Sends an OTP email using the ZeptoMail API."""
+    zeptomail_token = app.config.get("ZEPTOMAIL_TOKEN")
     sender_email = app.config.get("SENDER_EMAIL")
-    
-    if not sendgrid_api_key or not sender_email:
-        print("!!! CRITICAL ERROR: SendGrid API Key or Sender Email not configured in app.config.")
+
+    if not zeptomail_token or not sender_email:
+        print("!!! CRITICAL ERROR: ZeptoMail Token or Sender Email not configured in app.config.")
         return False
+
+    url = "https://api.zeptomail.in/v1.1/email"
     
-    message = Mail(
-        from_email=sender_email,
-        to_emails=to_email,
-        subject='Your Tyra Verification Code',
-        html_content=f'<strong>Your one-time verification code is: {otp}</strong><br>This code will expire in 5 minutes.'
-    )
+    # The name for the recipient can be generic, as we only have the email.
+    recipient_name = to_email.split('@')[0].capitalize()
+
+    payload = {
+        "from": {"address": sender_email},
+        "to": [{"email_address": {"address": to_email, "name": recipient_name}}],
+        "subject": "Your Tyra Verification Code",
+        "htmlbody": f"<div><b>Your one-time verification code is: {otp}</b><br>This code will expire in 5 minutes.</div>"
+    }
+
+    headers = {
+        'accept': "application/json",
+        'content-type': "application/json",
+        'authorization': zeptomail_token,
+    }
+
     try:
-        sg = SendGridAPIClient(sendgrid_api_key)
-        response = sg.send(message)
-        return response.status_code == 202
-    except Exception as e:
-        print(f"!!! SendGrid Error: {e}")
+        response = requests.post(url, json=payload, headers=headers)
+        # This will raise an exception for 4xx and 5xx status codes.
+        # Any 2xx code (like 200 OK or 201 Created) will pass.
+        response.raise_for_status()
+        return True
+    except requests.exceptions.RequestException as e:
+        print(f"!!! ZeptoMail Error: {e}")
+        # Log the response text if available, as it often contains useful error details from the API
+        if e.response is not None:
+            print(f"!!! ZeptoMail Response: {e.response.text}")
         return False
 
 # --- All original helper functions ---
@@ -1418,7 +1433,7 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
         response_payload = _handle_video_suggestion(profile) # Initial call without a category
         if proactive_summary:
             response_payload["proactive_summary"] = proactive_summary
-        
+
         # --- FIX v109.0: Log this interaction to the chat history ---
         profile.setdefault("chat_log", []).extend([
             {'role': 'user', 'content': user_message},
@@ -1426,7 +1441,7 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
         ])
         profile['chat_log'] = profile['chat_log'][-MAX_CHAT_LOG_ENTRIES:]
         # --- End FIX ---
-            
+
         save_profile(profile_hash, profile)
         return jsonify(response_payload)
 
@@ -1437,7 +1452,7 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
             json_response["target_date"] = chart_query.get('target_date')
         if proactive_summary:
             json_response["proactive_summary"] = proactive_summary
-            
+
         # --- FIX v109.0: Log this interaction to the chat history ---
         profile.setdefault("chat_log", []).extend([
             {'role': 'user', 'content': user_message},
@@ -3013,6 +3028,7 @@ def _handle_video_suggestion(profile, selected_category=None):
 if __name__ == '__main__':
     if not app.config.get("FLASK_SECRET_KEY"):
         raise ValueError("No FLASK_SECRET_KEY set for Flask application.")
-    if app.config.get('ENABLE_EMAIL_OTP_VERIFICATION') and (not app.config.get("SENDGRID_API_KEY") or not app.config.get("SENDER_EMAIL")):
-        print("WARNING: ENABLE_EMAIL_OTP_VERIFICATION is True, but SENDGRID_API_KEY or SENDER_EMAIL is not set. OTP emails will fail.")
+    # MODIFIED in v110.0: Check for ZeptoMail token instead of SendGrid
+    if app.config.get('ENABLE_EMAIL_OTP_VERIFICATION') and (not app.config.get("ZEPTOMAIL_TOKEN") or not app.config.get("SENDER_EMAIL")):
+        print("WARNING: ENABLE_EMAIL_OTP_VERIFICATION is True, but ZEPTOMAIL_TOKEN or SENDER_EMAIL is not set. OTP emails will fail.")
     app.run(host='0.0.0.0', port=5001, debug=True)
