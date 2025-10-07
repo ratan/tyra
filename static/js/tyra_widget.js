@@ -1,4 +1,4 @@
-// static/js/tyra_widget.js (v110.3 - Fix Onboarding Race Condition)
+// static/js/tyra_widget.js (v111.1 - Local Avatar Integration)
 (function() {
     'use strict';
 
@@ -20,23 +20,29 @@
         isDashboardStale: false // FIX v100.2: Flag to signal dashboard needs a refresh
     };
 
+    // --- CONSTANTS ---
+    // MODIFIED in v111.1: This will be dynamically constructed in init()
+    let TYRA_AVATAR_URL = '';
+
     // --- TEMPLATES ---
     const templates = {
         launcher: () => `<div class="tyra-launcher">
                             <div class="tyra-launcher-icon">
-                                <svg viewBox="0 0 24 24">
-                                    <path fill="white" d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2z"></path>
-                                    <text x="50%" y="55%" text-anchor="middle" dominant-baseline="central">T</text>
-                                </svg>
+                                <img src="${TYRA_AVATAR_URL}" alt="Tyra Avatar">
                             </div>
                          </div>`,
         widgetShell: (title) => `
             <div class="tyra-widget-container">
                 <div class="tyra-widget-header">
-                    <button id="tyra-header-logout-btn" class="tyra-header-button" style="display: none;"></button>
-                    <h3 id="tyra-header-title">${title}</h3>
-                    <button id="tyra-header-nav-btn" class="tyra-header-button" style="display: none;"></button>
-                    <button id="tyra-close-btn" class="tyra-close-btn">×</button>
+                    <div class="tyra-header-identity">
+                        <img src="${TYRA_AVATAR_URL}" alt="Tyra Avatar" class="tyra-header-avatar">
+                        <h3 id="tyra-header-title">${title}</h3>
+                    </div>
+                    <div class="tyra-header-controls">
+                        <button id="tyra-header-logout-btn" class="tyra-header-button" style="display: none;"></button>
+                        <button id="tyra-header-nav-btn" class="tyra-header-button" style="display: none;"></button>
+                        <button id="tyra-close-btn" class="tyra-close-btn">×</button>
+                    </div>
                 </div>
                 <div class="tyra-view-container"></div>
             </div>`,
@@ -152,17 +158,28 @@
         const headerTitle = state.targetElement.querySelector('#tyra-header-title');
         const navButton = state.targetElement.querySelector('#tyra-header-nav-btn');
         const logoutButton = state.targetElement.querySelector('#tyra-header-logout-btn');
+        const headerIdentity = state.targetElement.querySelector('.tyra-header-identity');
 
-        if (!headerTitle || !navButton || !logoutButton) return;
+        if (!headerTitle || !navButton || !logoutButton || !headerIdentity) return;
 
         let viewHTML = '';
         navButton.style.display = 'none';
         logoutButton.style.display = 'none';
+        headerIdentity.style.visibility = 'visible'; // Default to visible
 
         switch (state.currentView) {
-            case 'email_entry': viewHTML = templates.emailEntryView(); break;
-            case 'otp_entry': viewHTML = templates.otpEntryView(); break;
-            case 'profile_creation': viewHTML = templates.profileCreationView(); break;
+            case 'email_entry': 
+                viewHTML = templates.emailEntryView(); 
+                headerIdentity.style.visibility = 'hidden'; // Hide avatar/name on login screen
+                break;
+            case 'otp_entry': 
+                viewHTML = templates.otpEntryView(); 
+                headerIdentity.style.visibility = 'hidden';
+                break;
+            case 'profile_creation': 
+                viewHTML = templates.profileCreationView(); 
+                headerIdentity.style.visibility = 'hidden';
+                break;
             case 'chat':
                 viewHTML = templates.chatView();
                 headerTitle.textContent = state.lang.app_title || 'Tyra';
@@ -896,6 +913,9 @@
             if (!options.targetElementId || !options.apiUrl) return console.error("Tyra Widget: 'targetElementId' and 'apiUrl' are required.");
             
             Object.assign(state, { apiUrl: options.apiUrl.replace(/\/$/, ''), targetElement: document.getElementById(options.targetElementId), jwtToken: null, verificationToken: null, isGuest: false, userEmail: '', currentView: 'loading', userName: '', lang: {}, dashboardData: null, childDobs: [], isDashboardStale: false });
+
+            // NEW in v111.1: Dynamically construct the avatar URL
+            TYRA_AVATAR_URL = `${state.apiUrl}/static/images/tyra_avatar.png`;
 
             // --- NEW Launcher Logic ---
             state.targetElement.innerHTML = templates.launcher() + templates.widgetShell('Tyra');

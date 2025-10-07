@@ -1,4 +1,4 @@
-/* static/css/tyra_widget.css (v107.0 - Interactive Video Library) */
+/* static/css/tyra_widget.css (v111.3 - Fix Header Avatar Aspect Ratio) */
 :root {
     --primary-color: #8B4A9C; /* Deep Purple */
     --secondary-color: #A855A8; /* Lighter Purple */
@@ -33,6 +33,8 @@
     cursor: pointer;
     z-index: 9998;
     transition: transform 0.2s ease-in-out, opacity 0.3s ease, visibility 0.3s;
+    /* NEW in v111.2: Ensure inner content doesn't overflow */
+    padding: 3px;
 }
 .tyra-launcher:hover {
     transform: scale(1.1);
@@ -44,16 +46,21 @@
     transform: scale(0.8);
 }
 
-.tyra-launcher-icon svg {
-    width: 32px;
-    height: 32px;
+/* MODIFIED in v111.2: Launcher Avatar Styling Fix */
+.tyra-launcher-icon {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    overflow: hidden; /* Ensures image stays circular */
 }
-.tyra-launcher-icon text {
-    font-family: var(--font-family);
-    font-weight: bold;
-    font-size: 14px;
-    fill: var(--primary-color);
+.tyra-launcher-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover; /* Prevents image distortion */
+    border-radius: 50%;
+    border: 3px solid white;
 }
+
 
 /* --- Base Widget Container --- */
 .tyra-widget-container {
@@ -113,17 +120,42 @@
     min-height: 50px;
 }
 
+/* NEW in v111.0: Header Persona Styling */
+.tyra-header-identity {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    /* Allow this element to shrink if needed */
+    flex: 1 1 auto; 
+    min-width: 0;
+}
+.tyra-header-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    object-fit: cover; /* NEW in v111.3: Prevents image distortion */
+}
 .tyra-widget-header h3 {
     margin: 0;
     font-size: 1.1em;
     font-weight: 600;
-    flex-grow: 1;
-    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
+.tyra-header-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+/* End v111.0 Styles */
+
 
 .tyra-header-button {
-    background: none;
-    border: 1px solid white;
+    background: rgba(255,255,255,0.2);
+    border: none;
     color: white;
     padding: 4px 10px;
     border-radius: 4px;
@@ -133,7 +165,7 @@
     white-space: nowrap;
 }
 .tyra-header-button:hover {
-    background-color: var(--secondary-color);
+    background-color: rgba(255,255,255,0.3);
 }
 .tyra-close-btn {
     background: none;
