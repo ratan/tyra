@@ -1,8 +1,8 @@
-# app.py (v110.2 - Sanitize Env Vars & ZeptoMail Fix)
+# app.py (v110.3 - Fix Onboarding Race Condition)
 import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets, random, requests
 from datetime import datetime, timedelta, timezone, date
 from flask import Flask, Response, render_template, request, jsonify, session, redirect, url_for, send_from_directory, g
-from dotenv import load_dotenv, dotenv_values
+from dotenv import load_dotenv
 from markdown_it import MarkdownIt
 from google.api_core import exceptions
 import dateparser
@@ -2771,7 +2771,7 @@ def _handle_onboarding_step(profile_hash, user_message, onboarding_data, is_api_
         response_payload['onboarding_state'] = onboarding_data
         return jsonify(response_payload)
 
-# NEW in v106.1: Centralized function to create the profile at the end of any onboarding path.
+# MODIFIED in v110.3: Fix onboarding race condition by pre-populating chat log.
 def _finalize_onboarding(profile_hash, onboarding_data, is_api_call=False):
     """Creates, saves, and returns the final response for a new user profile."""
     profile_data = onboarding_data.get('profile_data', {})
@@ -2789,11 +2789,15 @@ def _finalize_onboarding(profile_hash, onboarding_data, is_api_call=False):
     # Perform initial calculations
     calculate_child_ages(new_profile)
     calculate_trimester(new_profile)
-    save_profile(profile_hash, new_profile)
 
     # Choose the correct completion message
     final_reply_key = 'onboarding_complete_parent' if new_profile.get('secondary_details', {}).get('is_parent') else 'onboarding_complete'
     final_reply = lang_data.get(final_reply_key, '').format(name=profile_data['name'].split(' ')[0])
+    
+    # Pre-populate the chat log with the final welcome message to prevent a race condition on the frontend.
+    new_profile['chat_log'] = [{'role': 'assistant', 'content': md.render(final_reply)}]
+    
+    save_profile(profile_hash, new_profile)
     
     if is_api_call:
         final_token = generate_token(profile_hash)

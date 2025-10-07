@@ -1,4 +1,4 @@
-// static/js/tyra_widget.js (v108.0 - Chat History Persistence & Smart Scroll)
+// static/js/tyra_widget.js (v110.3 - Fix Onboarding Race Condition)
 (function() {
     'use strict';
 
@@ -190,9 +190,13 @@
         postRenderSetup();
     }
     
+    // MODIFIED in v110.3 to prevent race condition
     function postRenderSetup() {
         if (state.currentView === 'chat') {
-            loadChatHistory(); // NEW in v108.0
+            // Only load history if we are NOT in the middle of onboarding.
+            if (!state.onboardingToken) {
+                loadChatHistory();
+            }
             populateQuickLogButtons();
         } else if (state.currentView === 'dashboard') {
             renderDashboard();
@@ -333,20 +337,24 @@
     // --- API & DATA HANDLING ---
     const api = {
         async get(endpoint, params = {}, isBlob = false) {
-            // MODIFIED in v108.0: Use the correct token for history vs other gets
-            const token = endpoint === 'chat_history' ? state.jwtToken : state.jwtToken;
-            const headers = { 'Authorization': `Bearer ${token}` };
+            const token = state.jwtToken;
+            const headers = {};
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
             const url = new URL(`${state.apiUrl}/api/v1/${endpoint}`);
             url.search = new URLSearchParams(params).toString();
 
             const response = await fetch(url, { headers });
-            if (!response.ok) throw new Error(`API GET ${endpoint} failed`);
+            if (!response.ok) throw new Error(`API GET ${endpoint} failed with status ${response.status}`);
             return isBlob ? response.blob() : response.json();
         },
         async post(endpoint, body, isFormData = false) {
-            // MODIFIED in v103.0: Use the correct token for the request
             const token = endpoint.startsWith('auth/onboard') ? state.onboardingToken : state.jwtToken;
-            const headers = { 'Authorization': `Bearer ${token}` };
+            const headers = {};
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
             if (!isFormData) headers['Content-Type'] = 'application/json';
             
             const response = await fetch(`${state.apiUrl}/api/v1/${endpoint}`, {
@@ -517,7 +525,7 @@
     
     async function onProfileSubmit(e) { // Only used if conversational onboarding is OFF
         e.preventDefault();
-        // ... (This function is now legacy and will not be triggered in the v103.0 default flow)
+        // ... (This function is now legacy and will not be triggered in the v110.3 default flow)
     }
     
     // MODIFIED in v108.0 for smart scroll
@@ -889,8 +897,6 @@
             
             Object.assign(state, { apiUrl: options.apiUrl.replace(/\/$/, ''), targetElement: document.getElementById(options.targetElementId), jwtToken: null, verificationToken: null, isGuest: false, userEmail: '', currentView: 'loading', userName: '', lang: {}, dashboardData: null, childDobs: [], isDashboardStale: false });
 
-            if (!state.targetElement) return console.error(`Tyra Widget: Target element "#${options.targetElementId}" not found.`);
-            
             // --- NEW Launcher Logic ---
             state.targetElement.innerHTML = templates.launcher() + templates.widgetShell('Tyra');
             const launcher = state.targetElement.querySelector('.tyra-launcher');
