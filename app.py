@@ -18,7 +18,8 @@ from flask_sqlalchemy import SQLAlchemy
 
 from user_profiler import create_user_profile, format_profile_for_prompt, LANG_MAP
 
-# Load environment variables from .env file FIRST.
+# Load environment variables from .env file FIRST. This is safe for production.
+# On Render, it does nothing. On local, it loads the .env file into the OS environment.
 load_dotenv()
 
 # --- Configuration Constants ---
@@ -102,8 +103,8 @@ ENABLE_SECURE_CORS_POLICY = False # !!! SET TO TRUE FOR PRODUCTION DEPLOYMENT !!
 # ---
 app = Flask(__name__)
 
-# BUG FIX v94.5: Robustly load config from .env into Flask's config object.
-app.config.update(dotenv_values(".env")) 
+# MODIFIED in v110.2: Load config directly from the OS environment, which `load_dotenv` populates.
+app.config.from_mapping(os.environ)
 
 # --- NEW in v110.2: Sanitize environment variables to remove extra quotes ---
 # This handles inconsistencies between local .env file parsing and cloud provider environments (like Render).
