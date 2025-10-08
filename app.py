@@ -1,4 +1,4 @@
-# app.py (v110.3 - Fix Onboarding Race Condition)
+# app.py (v112.1 - Program-First Logic Fix)
 import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets, random, requests
 from datetime import datetime, timedelta, timezone, date
 from flask import Flask, Response, render_template, request, jsonify, session, redirect, url_for, send_from_directory, g
@@ -453,7 +453,7 @@ def normalize_date_string(date_str: str) -> str:
     parsed_date = dateparser.parse(date_str, settings={'PREFER_DATES_FROM': 'past'})
     return parsed_date.strftime("%Y-%m-%d") if parsed_date else datetime.now().strftime("%Y-%m-%d")
 
-# MODIFIED in v107.6 to include provide_dob intent
+# MODIFIED in v112.1: Removed query_wellness_video from high-priority intents
 def get_conversation_summary(user_message):
     today_date = datetime.now().strftime('%Y-%m-%d')
     summary_prompt = f"""
@@ -464,14 +464,13 @@ Today's date is {today_date}. Resolve all relative dates to 'YYYY-MM-DD' format.
 **CRITICAL RULES & INTENTS (In Order of Priority):**
 1.  **LIFE EVENT UPDATE (Highest Priority):** If the user announces a new life stage like pregnancy or perimenopause, or the end of one (giving birth), you MUST return a `life_event_update` intent with the correct `type`.
 2.  **PROVIDE DOB:** If the user explicitly states their date of birth ("my dob is", "I was born on"), you MUST return a `provide_dob` intent with the extracted date.
-3.  **WELLNESS VIDEO QUERY:** If the user asks for "yoga", "exercise", "workout", or a "video", you MUST return `query_wellness_video`.
-4.  **CHARTING OVERRIDE:** This is your next highest priority. If the message contains 'chart', 'calendar', 'graph', or 'visualize', you MUST return a `query_chart` intent.
-5.  **SET GOAL:** For phrases like "my goal is..." or "I want to start...", return a `set_goal` intent with the full goal text.
-6.  **MEDICATION LOG:** For phrases about taking or logging medicine, return `medication_log` with `name`, `dosage`, and `frequency`.
-7.  **REMINDERS (EXPLICIT):** For command-like phrases ("remind me to", "set a reminder"), return `reminder_action` with the `text` and `due_date`.
-8.  **REMINDERS (CONTEXTUAL):** For future events mentioned conversationally (e.g., "I have an appointment on Friday"), return `potential_reminder` with `text` and `date`.
-9.  **OTHER ACTIONS:** Process `health_log`, `period_action`, or `ambiguous_log` as normal.
-10. **GENERAL CHAT / QUESTIONS:** For anything else, especially questions asking for information (e.g., "what should I do for..."), return an empty JSON object `{{}}`.
+3.  **CHARTING OVERRIDE:** This is your next highest priority. If the message contains 'chart', 'calendar', 'graph', or 'visualize', you MUST return a `query_chart` intent.
+4.  **SET GOAL:** For phrases like "my goal is..." or "I want to start...", return a `set_goal` intent with the full goal text.
+5.  **MEDICATION LOG:** For phrases about taking or logging medicine, return `medication_log` with `name`, `dosage`, and `frequency`.
+6.  **REMINDERS (EXPLICIT):** For command-like phrases ("remind me to", "set a reminder"), return `reminder_action` with the `text` and `due_date`.
+7.  **REMINDERS (CONTEXTUAL):** For future events mentioned conversationally (e.g., "I have an appointment on Friday"), return `potential_reminder` with `text` and `date`.
+8.  **OTHER ACTIONS:** Process `health_log`, `period_action`, or `ambiguous_log` as normal.
+9.  **GENERAL CHAT / QUESTIONS:** For anything else, especially questions asking for information (e.g., "what should I do for..."), return an empty JSON object `{{}}`.
 
 
 --- EXAMPLES ---
@@ -488,13 +487,13 @@ User: 'my date of birth is 1st feb 1992'
 {{"provide_dob": {{"date": "1992-02-01"}}}}
 
 User: 'Do you have any yoga videos for the first trimester?'
-{{"query_wellness_video": {{"keywords": ["yoga", "first trimester"]}}}}
+{{}}
 
 User: 'my period started on july 1st'
 {{"period_action": {{"type": "log_period_start", "date": "{datetime.now().year}-07-01"}}}}
 
 User: 'show me some postnatal exercises'
-{{"query_wellness_video": {{"keywords": ["postnatal", "exercises"]}}}}
+{{}}
 
 User: 'visualize my cycle length'
 {{"query_chart": {{"type": "cycle_length"}}}}
@@ -1411,7 +1410,7 @@ def _handle_internal_action(action_data, profile):
     # Fallback for unknown actions
     return jsonify({"reply": "I'm sorry, I didn't understand that action."})
 
-# MODIFIED in v109.0: Add chat logging to video/chart handlers
+# MODIFIED in v112.1: Prioritize program suggestions over videos
 def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
     # Recalculate dynamic and analytical data on every interaction.
     profile = _recalculate_age_dependent_categories(profile)
@@ -1436,22 +1435,7 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
 
     if insights.get('error'): return jsonify({"reply": md.render("I'm having a little trouble understanding. Please rephrase.")})
 
-    # --- MODIFIED in v107.0: Video query now triggers interactive flow ---
-    if insights.get('query_wellness_video'):
-        response_payload = _handle_video_suggestion(profile) # Initial call without a category
-        if proactive_summary:
-            response_payload["proactive_summary"] = proactive_summary
-
-        # --- FIX v109.0: Log this interaction to the chat history ---
-        profile.setdefault("chat_log", []).extend([
-            {'role': 'user', 'content': user_message},
-            {'role': 'assistant', 'content': response_payload.get('reply', 'Here are some videos for you.')}
-        ])
-        profile['chat_log'] = profile['chat_log'][-MAX_CHAT_LOG_ENTRIES:]
-        # --- End FIX ---
-
-        save_profile(profile_hash, profile)
-        return jsonify(response_payload)
+    # --- Start of Core Action Handlers ---
 
     if ENABLE_CHART_VISUALIZATION and insights.get('query_chart'):
         chart_query = insights.get('query_chart')
@@ -1612,15 +1596,20 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
         save_profile(profile_hash, profile)
         return jsonify(response_payload)
     
+    # --- End of Core Action Handlers ---
+
+    # --- MODIFIED in v112.1: Program-First Logic ---
     is_follow_up = False
     last_discussed_program_context = None
     suggested_program_object = None
 
+    # 1. Check for a program follow-up first.
     follow_up_program, profile = handle_follow_up_request(profile, user_message)
     if follow_up_program:
         is_follow_up = True
         suggested_program_object = follow_up_program
     else:
+        # 2. If not a follow-up, check for a NEW program suggestion.
         new_suggestion = get_program_suggestion(profile, user_message)
         if new_suggestion:
             suggested_program_object = new_suggestion
@@ -1631,6 +1620,23 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
             if question_is_about_suggestion:
                  special_context = { "type": "explain_and_offer_program", "program_name": new_suggestion['name']}
     
+    # 3. If NO program was found, check for a video query as a fallback.
+    if not suggested_program_object:
+        video_keywords = ["video", "yoga", "exercise", "workout", "routine"]
+        if any(keyword in user_message.lower() for keyword in video_keywords):
+            response_payload = _handle_video_suggestion(profile)
+            if proactive_summary:
+                response_payload["proactive_summary"] = proactive_summary
+
+            profile.setdefault("chat_log", []).extend([
+                {'role': 'user', 'content': user_message},
+                {'role': 'assistant', 'content': response_payload.get('reply', 'Here are some videos for you.')}
+            ])
+            profile['chat_log'] = profile['chat_log'][-MAX_CHAT_LOG_ENTRIES:]
+            save_profile(profile_hash, profile)
+            return jsonify(response_payload)
+    # --- End of Program-First Logic ---
+
     if not special_context: 
         tidbit_text, tidbit_id = _get_relevant_education_tidbit(profile, user_message)
         if tidbit_text:
@@ -2350,7 +2356,7 @@ if not app.config['ENABLE_WIDGET_MODE']:
 
         @app.route('/verify_otp', methods=['POST'])
         def verify_otp():
-            data = request.get_json()
+            data = request.json
             email = data.get('email', '').strip().lower()
             otp = data.get('otp', '')
             otp_data = session.get('otp_data')
