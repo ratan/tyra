@@ -1,5 +1,6 @@
-# user_profiler.py (v108.0 - Chat History Persistence)
+# user_profiler.py (v111.4 - Add missing dateparser import)
 from datetime import datetime, timedelta
+import dateparser # NEW in v111.4: Fix for NameError in format_profile_for_prompt
 
 PROMPT_HISTORY_LIMIT = 5
 RECENT_LOG_LIMIT = 7
