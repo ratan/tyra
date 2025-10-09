@@ -1,4 +1,4 @@
-// static/js/tyra_widget.js (v111.1 - Local Avatar Integration)
+// static/js/tyra_widget.js (v111.5 - Fix Launcher Avatar CSS)
 (function() {
     'use strict';
 
@@ -26,10 +26,9 @@
 
     // --- TEMPLATES ---
     const templates = {
+        // MODIFIED in v111.5: Simplified launcher HTML structure
         launcher: () => `<div class="tyra-launcher">
-                            <div class="tyra-launcher-icon">
-                                <img src="${TYRA_AVATAR_URL}" alt="Tyra Avatar">
-                            </div>
+                            <img src="${TYRA_AVATAR_URL}" alt="Tyra Avatar">
                          </div>`,
         widgetShell: (title) => `
             <div class="tyra-widget-container">
@@ -542,7 +541,7 @@
     
     async function onProfileSubmit(e) { // Only used if conversational onboarding is OFF
         e.preventDefault();
-        // ... (This function is now legacy and will not be triggered in the v110.3 default flow)
+        // ... (This function is now legacy and will not be triggered in the v111.5 default flow)
     }
     
     // MODIFIED in v108.0 for smart scroll
