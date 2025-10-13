@@ -196,8 +196,11 @@ We are using ZEPTOMAIL_TOKEN instead of SENDGRID_API_KEY now.
 
 ### **Miscelleneous Points (v101.4)**
 
-This gusection covers the other miscelleneous points here.
-
+This sectoion covers the other miscelleneous points here.
+1. Privacy Policy
+   tyra_widget.js
+   <a href="https://fitcommunity.in/privacyPolicy.php" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
+2. TBD
 ---
 
 #### **Point 1: Exact Command to download DB**

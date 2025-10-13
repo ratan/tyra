@@ -1,4 +1,4 @@
-// static/js/tyra_widget.js (v111.5 - Fix Launcher Avatar CSS)
+// static/js/tyra_widget.js (v114.0 - Implement Hybrid Settings Menu)
 (function() {
     'use strict';
 
@@ -17,7 +17,8 @@
         mediaRecorder: null,
         audioChunks: [],
         childDobs: [], // For profile creation form
-        isDashboardStale: false // FIX v100.2: Flag to signal dashboard needs a refresh
+        isDashboardStale: false, // FIX v100.2: Flag to signal dashboard needs a refresh
+        isSettingsMenuOpen: false // NEW in v114.0
     };
 
     // --- CONSTANTS ---
@@ -30,6 +31,7 @@
         launcher: () => `<div class="tyra-launcher">
                             <img src="${TYRA_AVATAR_URL}" alt="Tyra Avatar">
                          </div>`,
+        // MODIFIED in v114.0: Implement Hybrid Header with Settings Menu
         widgetShell: (title) => `
             <div class="tyra-widget-container">
                 <div class="tyra-widget-header">
@@ -38,8 +40,12 @@
                         <h3 id="tyra-header-title">${title}</h3>
                     </div>
                     <div class="tyra-header-controls">
-                        <button id="tyra-header-logout-btn" class="tyra-header-button" style="display: none;"></button>
-                        <button id="tyra-header-nav-btn" class="tyra-header-button" style="display: none;"></button>
+                        <button id="tyra-dashboard-btn" class="tyra-header-button" style="display: none;"></button>
+                        <button id="tyra-settings-btn" class="tyra-settings-btn" style="display: none;">⋮</button>
+                        <div id="tyra-settings-dropdown" class="tyra-settings-dropdown">
+                            <a href="https://fitcommunity.in/privacyPolicy.php" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
+                            <a href="#" id="tyra-logout-link">Logout</a>
+                        </div>
                         <button id="tyra-close-btn" class="tyra-close-btn">×</button>
                     </div>
                 </div>
@@ -154,16 +160,17 @@
         const viewContainer = state.targetElement.querySelector('.tyra-view-container');
         if (!viewContainer) return; // The shell might not be rendered yet
         
+        // MODIFIED in v114.0: Select new header elements
         const headerTitle = state.targetElement.querySelector('#tyra-header-title');
-        const navButton = state.targetElement.querySelector('#tyra-header-nav-btn');
-        const logoutButton = state.targetElement.querySelector('#tyra-header-logout-btn');
+        const dashboardButton = state.targetElement.querySelector('#tyra-dashboard-btn');
+        const settingsButton = state.targetElement.querySelector('#tyra-settings-btn');
         const headerIdentity = state.targetElement.querySelector('.tyra-header-identity');
 
-        if (!headerTitle || !navButton || !logoutButton || !headerIdentity) return;
+        if (!headerTitle || !dashboardButton || !settingsButton || !headerIdentity) return;
 
         let viewHTML = '';
-        navButton.style.display = 'none';
-        logoutButton.style.display = 'none';
+        dashboardButton.style.display = 'none';
+        settingsButton.style.display = 'none';
         headerIdentity.style.visibility = 'visible'; // Default to visible
 
         switch (state.currentView) {
@@ -182,22 +189,20 @@
             case 'chat':
                 viewHTML = templates.chatView();
                 headerTitle.textContent = state.lang.app_title || 'Tyra';
-                if (state.jwtToken || state.onboardingToken) { // MODIFIED v103.0
-                    logoutButton.textContent = state.lang.logout_link || 'Logout';
-                    logoutButton.style.display = 'block';
-                    if (!state.isGuest && !state.onboardingToken) { // MODIFIED v103.0
-                        navButton.textContent = state.lang.dashboard_link || 'Dashboard';
-                        navButton.style.display = 'block';
+                if (state.jwtToken || state.onboardingToken) {
+                    settingsButton.style.display = 'block';
+                    if (!state.isGuest && !state.onboardingToken) {
+                        dashboardButton.textContent = state.lang.dashboard_link || 'Dashboard';
+                        dashboardButton.style.display = 'block';
                     }
                 }
                 break;
             case 'dashboard':
                 viewHTML = templates.dashboardView();
                 headerTitle.textContent = `${state.userName}'s Dashboard`;
-                navButton.textContent = state.lang.back_to_chat_link || 'Back to Chat';
-                logoutButton.textContent = state.lang.logout_link || 'Logout';
-                navButton.style.display = 'block';
-                logoutButton.style.display = 'block';
+                dashboardButton.textContent = state.lang.back_to_chat_link || 'Back to Chat';
+                settingsButton.style.display = 'block';
+                dashboardButton.style.display = 'block';
                 break;
             default: viewHTML = '<p style="text-align:center;padding:20px;">Loading...</p>';
         }
@@ -413,11 +418,15 @@
 
     // --- EVENT HANDLERS & LOGIC ---
     function bindEventListeners() {
-        const navButton = state.targetElement.querySelector('#tyra-header-nav-btn');
-        if (navButton) navButton.addEventListener('click', onNavButtonClick);
+        // MODIFIED in v114.0: Bind to new/changed header buttons
+        const dashboardButton = state.targetElement.querySelector('#tyra-dashboard-btn');
+        if (dashboardButton) dashboardButton.addEventListener('click', onNavButtonClick);
 
-        const logoutButton = state.targetElement.querySelector('#tyra-header-logout-btn');
-        if (logoutButton) logoutButton.addEventListener('click', onLogout);
+        const settingsButton = state.targetElement.querySelector('#tyra-settings-btn');
+        if (settingsButton) settingsButton.addEventListener('click', onSettingsClick);
+        
+        const logoutLink = state.targetElement.querySelector('#tyra-logout-link');
+        if (logoutLink) logoutLink.addEventListener('click', onLogout);
         
         const emailForm = state.targetElement.querySelector('#tyra-email-form');
         if (emailForm) emailForm.addEventListener('submit', onEmailSubmit);
@@ -458,9 +467,12 @@
         render();
     }
     
-    function onLogout() {
+    // MODIFIED in v114.0
+    function onLogout(e) {
+        if (e) e.preventDefault();
+        toggleSettingsMenu(false); // Close menu if it's open
         state.jwtToken = null;
-        state.onboardingToken = null; // NEW in v103.0
+        state.onboardingToken = null;
         state.userName = '';
         state.isGuest = false;
         state.dashboardData = null;
@@ -468,6 +480,34 @@
         state.currentView = 'email_entry'; // Go back to the start
         render();
     }
+
+    // --- NEW in v114.0: Settings Menu Logic ---
+    function onSettingsClick() {
+        toggleSettingsMenu();
+    }
+
+    function toggleSettingsMenu(forceState) {
+        const dropdown = state.targetElement.querySelector('#tyra-settings-dropdown');
+        if (!dropdown) return;
+        
+        state.isSettingsMenuOpen = typeof forceState === 'boolean' ? forceState : !state.isSettingsMenuOpen;
+        dropdown.style.display = state.isSettingsMenuOpen ? 'block' : 'none';
+
+        // Add a listener to close the menu if clicking outside of it
+        if (state.isSettingsMenuOpen) {
+            document.addEventListener('click', handleOutsideClick, true);
+        } else {
+            document.removeEventListener('click', handleOutsideClick, true);
+        }
+    }
+
+    function handleOutsideClick(event) {
+        const controls = state.targetElement.querySelector('.tyra-header-controls');
+        if (controls && !controls.contains(event.target)) {
+            toggleSettingsMenu(false);
+        }
+    }
+    // --- End v114.0 Logic ---
 
     async function onEmailSubmit(e) {
         e.preventDefault();
@@ -541,7 +581,7 @@
     
     async function onProfileSubmit(e) { // Only used if conversational onboarding is OFF
         e.preventDefault();
-        // ... (This function is now legacy and will not be triggered in the v111.5 default flow)
+        // ... (This function is now legacy and will not be triggered in the v114.0 default flow)
     }
     
     // MODIFIED in v108.0 for smart scroll

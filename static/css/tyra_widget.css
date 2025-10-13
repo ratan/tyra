@@ -1,4 +1,4 @@
-/* static/css/tyra_widget.css (v111.5 - Fix Header Avatar CSS Selector) */
+/* static/css/tyra_widget.css (v114.0 - Add Settings Menu styles) */
 :root {
     --primary-color: #8B4A9C; /* Deep Purple */
     --secondary-color: #A855A8; /* Lighter Purple */
@@ -142,6 +142,7 @@
     align-items: center;
     gap: 10px;
     flex-shrink: 0;
+    position: relative; /* NEW in v114.0 for dropdown positioning */
 }
 /* End v111.5 Styles */
 
@@ -169,6 +170,48 @@
     cursor: pointer;
     padding: 0 5px;
 }
+
+/* --- NEW in v114.0: Settings Menu Styles --- */
+.tyra-settings-btn {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 5px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.tyra-settings-btn:hover {
+    background-color: rgba(255,255,255,0.2);
+}
+.tyra-settings-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background-color: white;
+    color: var(--text-color);
+    border-radius: var(--border-radius);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 10000;
+    min-width: 160px;
+    overflow: hidden;
+}
+.tyra-settings-dropdown a {
+    display: block;
+    padding: 10px 15px;
+    color: var(--text-color);
+    text-decoration: none;
+    font-size: 0.9em;
+}
+.tyra-settings-dropdown a:hover {
+    background-color: #f1f1f1;
+}
+/* --- End v114.0 Styles --- */
 
 
 /* --- Form Views (Login, OTP, Profile) --- */
