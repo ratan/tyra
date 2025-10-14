@@ -1,4 +1,4 @@
-# app.py (v112.1 - Program-First Logic Fix)
+# app.py (v115.1 - Fix Memory/Reminder Conflict & Reminder Confirmation)
 import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets, random, requests
 from datetime import datetime, timedelta, timezone, date
 from flask import Flask, Response, render_template, request, jsonify, session, redirect, url_for, send_from_directory, g
@@ -37,6 +37,7 @@ PROGRAM_SUGGESTION_COOLDOWN_DAYS = 3
 MAX_CYCLE_HISTORY = 120
 MAX_KEY_MEMORIES = 15 # NEW in v102.0
 MAX_CHAT_LOG_ENTRIES = 50 # NEW in v108.0: Limit size of persisted chat log
+MEMORY_CHECK_IN_WINDOW_DAYS = 14 # NEW in v115.0: Window for proactive memory check-ins
 
 # NEW in v105.4: Define an ordered list of models for fallback on rate limiting.
 GEMINI_MODEL_CASCADE_LIST = [
@@ -453,7 +454,7 @@ def normalize_date_string(date_str: str) -> str:
     parsed_date = dateparser.parse(date_str, settings={'PREFER_DATES_FROM': 'past'})
     return parsed_date.strftime("%Y-%m-%d") if parsed_date else datetime.now().strftime("%Y-%m-%d")
 
-# MODIFIED in v112.1: Removed query_wellness_video from high-priority intents
+# MODIFIED in v115.1: Add `suggested_memory` to decouple from reminders.
 def get_conversation_summary(user_message):
     today_date = datetime.now().strftime('%Y-%m-%d')
     summary_prompt = f"""
@@ -462,18 +463,33 @@ Your output MUST be a single, raw, valid JSON object.
 Today's date is {today_date}. Resolve all relative dates to 'YYYY-MM-DD' format.
 
 **CRITICAL RULES & INTENTS (In Order of Priority):**
-1.  **LIFE EVENT UPDATE (Highest Priority):** If the user announces a new life stage like pregnancy or perimenopause, or the end of one (giving birth), you MUST return a `life_event_update` intent with the correct `type`.
-2.  **PROVIDE DOB:** If the user explicitly states their date of birth ("my dob is", "I was born on"), you MUST return a `provide_dob` intent with the extracted date.
-3.  **CHARTING OVERRIDE:** This is your next highest priority. If the message contains 'chart', 'calendar', 'graph', or 'visualize', you MUST return a `query_chart` intent.
-4.  **SET GOAL:** For phrases like "my goal is..." or "I want to start...", return a `set_goal` intent with the full goal text.
-5.  **MEDICATION LOG:** For phrases about taking or logging medicine, return `medication_log` with `name`, `dosage`, and `frequency`.
-6.  **REMINDERS (EXPLICIT):** For command-like phrases ("remind me to", "set a reminder"), return `reminder_action` with the `text` and `due_date`.
-7.  **REMINDERS (CONTEXTUAL):** For future events mentioned conversationally (e.g., "I have an appointment on Friday"), return `potential_reminder` with `text` and `date`.
-8.  **OTHER ACTIONS:** Process `health_log`, `period_action`, or `ambiguous_log` as normal.
-9.  **GENERAL CHAT / QUESTIONS:** For anything else, especially questions asking for information (e.g., "what should I do for..."), return an empty JSON object `{{}}`.
+1.  **REAL TALK (Highest Priority):** For phrases indicating a desire for a frank or confidential chat (e.g., "can I ask something personal", "real talk", "can I be real with you"), you MUST return a `request_real_talk` intent.
+2.  **LIFE EVENT UPDATE:** If the user announces a new life stage like pregnancy or perimenopause, or the end of one (giving birth), you MUST return a `life_event_update` intent.
+3.  **PROVIDE DOB:** If the user explicitly states their date of birth ("my dob is", "I was born on"), you MUST return a `provide_dob` intent.
+4.  **REMINDERS & MEMORIES:** For future events mentioned conversationally (e.g., "I have an appointment on Friday", "I have a huge exam next week"), you MUST include BOTH of the following:
+    a. A `potential_reminder` object with `text` and `date`.
+    b. A `suggested_memory` string containing the full fact (e.g., "User has an appointment on Friday").
+5.  **CHARTING OVERRIDE:** If the message contains 'chart', 'calendar', 'graph', or 'visualize', you MUST return a `query_chart` intent.
+6.  **SET GOAL:** For phrases like "my goal is..." or "I want to start...", return a `set_goal` intent.
+7.  **MEDICATION LOG:** For phrases about taking or logging medicine, return `medication_log`.
+8.  **REMINDERS (EXPLICIT):** For command-like phrases ("remind me to", "set a reminder"), return `reminder_action`.
+9.  **OTHER ACTIONS:** Process `health_log`, `period_action`, or `ambiguous_log` as normal.
+10. **GENERAL CHAT / QUESTIONS:** For anything else, especially questions asking for information (e.g., "what should I do for..."), return an empty JSON object `{{}}`.
 
 
 --- EXAMPLES ---
+User: 'real talk, i'm feeling really weird about my body'
+{{"request_real_talk": true}}
+
+User: 'can I ask you something personal?'
+{{"request_real_talk": true}}
+
+User: 'I have a huge final exam next Friday.'
+{{"potential_reminder": {{"text": "huge final exam", "date": "{(datetime.now() + timedelta(days=(4 - datetime.now().weekday() + 7) % 7)).strftime('%Y-%m-%d')}" }}, "suggested_memory": "User has a huge final exam next Friday."}}
+
+User: 'My follow-up appointment is next Tuesday.'
+{{"potential_reminder": {{"text": "follow-up appointment", "date": "{(datetime.now() + timedelta(days=(1 - datetime.now().weekday() + 7) % 7)).strftime('%Y-%m-%d')}" }}, "suggested_memory": "User has a follow-up appointment next Tuesday."}}
+
 User: 'I had my baby on Tuesday!'
 {{"life_event_update": {{"type": "pregnancy_to_parenting", "date": "{(datetime.now() - timedelta(days=(datetime.now().weekday() - 1) % 7)).strftime('%Y-%m-%d')}"}}}}
 
@@ -512,9 +528,6 @@ User: 'what should I do for period cramps?'
 
 User: 'Remind me to call the doctor tomorrow.'
 {{"reminder_action": {{"text": "call the doctor", "due_date": "{(datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')}"}}}}
-
-User: 'My follow-up appointment is next Tuesday.'
-{{"potential_reminder": {{"text": "follow-up appointment", "date": "{(datetime.now() + timedelta(days=(8 - datetime.now().isoweekday() + 1) % 7)).strftime('%Y-%m-%d')}" }}}}
 
 User: 'Log that I am taking Vitamin D 500mg daily.'
 {{"medication_log": {{"name": "Vitamin D", "dosage": "500mg", "frequency": "daily"}}}}
@@ -825,24 +838,43 @@ def is_reminder_due(reminder, check_date_dt):
         return delta_days >= 0 and delta_days % interval == 0
     return False
 
+# MODIFIED in v115.0: Add proactive memory check-ins
 def get_proactive_context(profile):
     if not ENABLE_PROACTIVE_ASSISTANCE: return None
-    today_dt = datetime.now()
+    today_dt = datetime.now(timezone.utc) # Use timezone-aware datetime
     today_str = today_dt.strftime('%Y-%m-%d')
     proactive_data = profile.get("proactive_assistance", {})
+    
     if ENABLE_CUSTOM_REMINDERS:
         for reminder in proactive_data.get("reminders", []):
             if reminder.get("last_triggered_date") == today_str: continue
             if is_reminder_due(reminder, today_dt):
                 reminder["last_triggered_date"] = today_str
                 return {"type": "reminder", "text": reminder["text"]}
+                
     if ENABLE_GOAL_TRACKING:
         for goal in profile.get("goals", []):
             if goal.get("last_check_in_date"):
                 last_check_in_dt = datetime.strptime(goal.get("last_check_in_date"), "%Y-%m-%d")
-                if (today_dt - last_check_in_dt).days >= GOAL_CHECK_IN_DAYS:
+                if (today_dt.replace(tzinfo=None) - last_check_in_dt).days >= GOAL_CHECK_IN_DAYS:
                     goal["last_check_in_date"] = today_str
                     return {"type": "goal_check_in", "text": goal.get("text")}
+
+    # NEW in v115.0: Memory Check-in Logic
+    for memory in profile.get("key_memories", []):
+        if memory.get("check_in_sent"):
+            continue # Already checked in about this memory
+        try:
+            memory_dt = dateparser.parse(memory.get("timestamp")).replace(tzinfo=timezone.utc)
+            days_since_memory = (today_dt - memory_dt).days
+            
+            # Check if the memory occurred within our window for a follow-up
+            if 1 <= days_since_memory <= MEMORY_CHECK_IN_WINDOW_DAYS:
+                memory["check_in_sent"] = True # Mark as checked-in to prevent re-asking
+                return {"type": "memory_check_in", "text": memory["memory"]}
+        except (ValueError, TypeError):
+            continue # Skip if timestamp is malformed
+
     return None
 
 def update_and_predict_cycles(profile, enable_ovulation_tracker=False):
@@ -1410,7 +1442,7 @@ def _handle_internal_action(action_data, profile):
     # Fallback for unknown actions
     return jsonify({"reply": "I'm sorry, I didn't understand that action."})
 
-# MODIFIED in v112.1: Prioritize program suggestions over videos
+# MODIFIED in v115.1: Decouple Key Memory creation from Contextual Reminders
 def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
     # Recalculate dynamic and analytical data on every interaction.
     profile = _recalculate_age_dependent_categories(profile)
@@ -1435,6 +1467,16 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
 
     if insights.get('error'): return jsonify({"reply": md.render("I'm having a little trouble understanding. Please rephrase.")})
 
+    # --- BUGFIX in v115.1: Immediately save suggested memory to decouple features ---
+    if insights.get("suggested_memory"):
+        memory_text = insights.get("suggested_memory")
+        profile.setdefault("key_memories", [])
+        new_memory = {"memory": memory_text, "timestamp": datetime.now(timezone.utc).strftime('%Y-%m-%d')}
+        if not any(mem['memory'] == new_memory['memory'] for mem in profile["key_memories"]):
+            profile["key_memories"].insert(0, new_memory)
+            profile["key_memories"] = profile["key_memories"][:MAX_KEY_MEMORIES]
+    # --- End BUGFIX ---
+
     # --- Start of Core Action Handlers ---
 
     if ENABLE_CHART_VISUALIZATION and insights.get('query_chart'):
@@ -1445,14 +1487,11 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
         if proactive_summary:
             json_response["proactive_summary"] = proactive_summary
 
-        # --- FIX v109.0: Log this interaction to the chat history ---
         profile.setdefault("chat_log", []).extend([
             {'role': 'user', 'content': user_message},
             {'role': 'assistant', 'content': json_response['reply']}
         ])
         profile['chat_log'] = profile['chat_log'][-MAX_CHAT_LOG_ENTRIES:]
-        # --- End FIX ---
-
         save_profile(profile_hash, profile)
         return jsonify(json_response)
         
@@ -1462,10 +1501,22 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
         is_affirmative = any(keyword in user_message.lower() for keyword in affirmative_keywords)
         action_response = None
         
+        # MODIFIED in v115.1: Make reminder clarification more robust
         if pending_question == 'clarify_reminder_creation':
             potential_reminder_context = session.pop('pending_action_context', None)
+            session.pop('pending_question', None) # Clear immediately to prevent loops
             if is_affirmative and potential_reminder_context:
-                action_to_create = {"text": potential_reminder_context.get('text'), "due_date": potential_reminder_context.get('date')}
+                action_to_create = {
+                    "text": potential_reminder_context.get('text'), 
+                    "due_date": potential_reminder_context.get('date')
+                }
+                # If the user provides more text, let the LLM parse it for better context
+                if user_message.lower() not in affirmative_keywords:
+                    insights = get_conversation_summary(f"remind me about {user_message}")
+                    if insights.get('reminder_action'):
+                        action_to_create['text'] = insights['reminder_action'].get('text', action_to_create['text'])
+                        action_to_create['due_date'] = insights['reminder_action'].get('due_date', action_to_create['due_date'])
+
                 profile, action_response, _ = handle_reminder_action(action_to_create, profile)
             else:
                 action_response = "Okay, no problem. I won't set a reminder this time."
@@ -1522,7 +1573,6 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
             response_payload = {"reply": md.render(action_response)}
             if proactive_summary:
                 response_payload["proactive_summary"] = proactive_summary
-            # NEW in v108.0: Save this interaction to the chat log
             profile.setdefault("chat_log", []).extend([
                 {'role': 'user', 'content': user_message},
                 {'role': 'assistant', 'content': response_payload['reply']}
@@ -1537,16 +1587,20 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
     education_tidbit = None 
     action_handlers = {'medication_log': handle_medication_log, 'period_action': handle_period_action, 'set_goal': handle_set_goal, 'reminder_action': handle_reminder_action}
     
-    for action_type, handler in action_handlers.items():
-        if insights.get(action_type):
-            profile, action_response, new_pending_question = handler(insights[action_type], profile)
-            break
+    # NEW in v115.0: Handle "Real Talk" mode as a special context override
+    if insights.get('request_real_talk'):
+        special_context = {"type": "real_talk_mode"}
 
-    # NEW in v107.6: Handle DOB updates
-    if not action_response and insights.get('provide_dob'):
+    if not special_context:
+        for action_type, handler in action_handlers.items():
+            if insights.get(action_type):
+                profile, action_response, new_pending_question = handler(insights[action_type], profile)
+                break
+
+    if not action_response and not special_context and insights.get('provide_dob'):
         profile, action_response, new_pending_question = _handle_dob_update(insights['provide_dob'], profile)
             
-    if not action_response and insights.get('life_event_update'):
+    if not action_response and not special_context and insights.get('life_event_update'):
         event_data = insights.pop('life_event_update')
         event_type = event_data.get('type')
 
@@ -1563,13 +1617,13 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
         else:
              action_response = None
 
-    if not action_response and ENABLE_CONTEXTUAL_REMINDERS and insights.get('potential_reminder'):
+    if not action_response and not special_context and ENABLE_CONTEXTUAL_REMINDERS and insights.get('potential_reminder'):
         potential_reminder_data = insights.pop('potential_reminder')
         session['pending_question'] = 'clarify_reminder_creation'
         session['pending_action_context'] = potential_reminder_data
         action_response = f"I noticed you mentioned your '{potential_reminder_data.get('text')}'. Would you like me to set a reminder for that?"
 
-    if not action_response and ENABLE_EXPANDED_LOGGING and insights.get('health_log'):
+    if not action_response and not special_context and ENABLE_EXPANDED_LOGGING and insights.get('health_log'):
         log_data = insights['health_log']
         profile.setdefault('health_logs', []).insert(0, {"timestamp": datetime.now().isoformat(), **log_data})
         
@@ -1587,7 +1641,6 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
         response_payload = {"reply": md.render(action_response)}
         if proactive_summary:
             response_payload["proactive_summary"] = proactive_summary
-        # NEW in v108.0: Save this interaction to the chat log
         profile.setdefault("chat_log", []).extend([
             {'role': 'user', 'content': user_message},
             {'role': 'assistant', 'content': response_payload['reply']}
@@ -1598,18 +1651,15 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
     
     # --- End of Core Action Handlers ---
 
-    # --- MODIFIED in v112.1: Program-First Logic ---
     is_follow_up = False
     last_discussed_program_context = None
     suggested_program_object = None
 
-    # 1. Check for a program follow-up first.
     follow_up_program, profile = handle_follow_up_request(profile, user_message)
     if follow_up_program:
         is_follow_up = True
         suggested_program_object = follow_up_program
     else:
-        # 2. If not a follow-up, check for a NEW program suggestion.
         new_suggestion = get_program_suggestion(profile, user_message)
         if new_suggestion:
             suggested_program_object = new_suggestion
@@ -1620,7 +1670,6 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
             if question_is_about_suggestion:
                  special_context = { "type": "explain_and_offer_program", "program_name": new_suggestion['name']}
     
-    # 3. If NO program was found, check for a video query as a fallback.
     if not suggested_program_object:
         video_keywords = ["video", "yoga", "exercise", "workout", "routine"]
         if any(keyword in user_message.lower() for keyword in video_keywords):
@@ -1635,7 +1684,6 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
             profile['chat_log'] = profile['chat_log'][-MAX_CHAT_LOG_ENTRIES:]
             save_profile(profile_hash, profile)
             return jsonify(response_payload)
-    # --- End of Program-First Logic ---
 
     if not special_context: 
         tidbit_text, tidbit_id = _get_relevant_education_tidbit(profile, user_message)
@@ -1661,28 +1709,22 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
     if response is None:
         reply = "I'm sorry, but I'm currently unable to process your request due to high demand. Please try again in a moment."
     else:
+        # BUGFIX in v115.1: Memory tag is no longer needed in the response.
+        # It is now handled by get_conversation_summary. This code is left
+        # for graceful handling of any older cached models that might still produce it.
         raw_reply = response.text
         memory_match = re.search(r"\[SUGGEST_MEMORY:\s*(.*?)\]", raw_reply)
         if memory_match:
-            memory_text = memory_match.group(1).strip()
-            if memory_text:
-                profile.setdefault("key_memories", [])
-                new_memory = {"memory": memory_text, "timestamp": datetime.now(timezone.utc).strftime('%Y-%m-%d')}
-                if not any(mem['memory'] == new_memory['memory'] for mem in profile["key_memories"]):
-                    profile["key_memories"].insert(0, new_memory)
-                    profile["key_memories"] = profile["key_memories"][:MAX_KEY_MEMORIES]
             reply = re.sub(r"\[SUGGEST_MEMORY:\s*(.*?)\]", "", raw_reply).strip()
         else:
             reply = raw_reply
             
     rendered_reply = md.render(reply)
     
-    # NEW in v108.0: Save the final AI response to the chat log for UI persistence.
     profile.setdefault("chat_log", []).extend([
         {'role': 'user', 'content': user_message},
         {'role': 'assistant', 'content': rendered_reply}
     ])
-    # Trim the log to the max size
     profile['chat_log'] = profile['chat_log'][-MAX_CHAT_LOG_ENTRIES:]
 
     save_profile(profile_hash, profile)

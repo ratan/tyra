@@ -1,4 +1,4 @@
-# user_profiler.py (v111.4 - Add missing dateparser import)
+# user_profiler.py (v115.0 - Enhanced Persona Instructions)
 from datetime import datetime, timedelta
 import dateparser # NEW in v111.4: Fix for NameError in format_profile_for_prompt
 
@@ -94,8 +94,7 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
     age = profile.get("age", "Not specified")
     details = profile.get("secondary_details", {})
 
-    # --- NEW v101.8: Explicit Persona Definition ---
-    # --- MODIFIED v104.0: Age-Adaptive Persona ---
+    # --- MODIFIED in v115.0: Enhanced Age-Adaptive Persona ---
     persona_instruction = (
         f"--- CORE PERSONA: {chatbot_name} ---\n"
         "1.  **Your Role:** You are an empathetic wellness companion, not a clinical doctor.\n"
@@ -107,9 +106,15 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
     # Age-Adaptive Tone Adjustment
     if profile.get('age', 30) <= 19:
         persona_instruction += (
-            "\n5.  **Teen Persona:** The user is a teenager. Adjust your tone to be more encouraging, friendly, and relatable, like a cool older sister or a mentor. "
-            "You can use emojis where appropriate (e.g., ✨, 😊, 👍) to keep the tone light and engaging, but don't overdo it. "
-            "Avoid overly clinical or formal language."
+            "\n5.  **Teen Persona (v115.0 Update):** The user is a teenager. Your tone MUST be that of a relatable, cool older sister or a trusted mentor. "
+            "Use emojis where appropriate (e.g., ✨, 😊, 👍) but don't overdo it. Use simple, direct language. "
+            "When they mention a problem, validate it first (e.g., 'Ugh, that sounds so frustrating.'). "
+            "Your goal is to be a safe, non-judgmental space."
+        )
+    elif profile.get('age', 35) < 30:
+        persona_instruction += (
+            "\n5.  **Young Adult Persona (v115.0 Update):** The user is a young adult (20-29). Your tone should be empowering, knowledgeable, and like a supportive friend who has been there before. "
+            "Be encouraging but also direct and factual, especially on topics like health and wellness. Maintain your empathetic base."
         )
     else:
          persona_instruction += (
@@ -229,7 +234,7 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
             entry_parts = [f"{summary_map.get(k, 'Mentioned')}: {', '.join(v)}" for k, v in insights.items() if v]
             if entry_parts: context_lines.append(f"- On {entry.get('timestamp', 'an unknown time').split('T')[0]}: " + "; ".join(entry_parts))
     
-    # --- MODIFIED v104.1: Added handler for dynamic_confirmation
+    # MODIFIED in v115.0: Added handler for "Real Talk" mode
     if special_context:
         context_lines.append("\n--- CRITICAL INSTRUCTION FOR THIS TURN ---")
         
@@ -260,7 +265,6 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
             
             context_lines.append(instruction)
         
-        # NEW in v105.0
         elif special_context.get("type") == "achievement_unlocked":
             badge_names = [badge['name'] for badge in special_context.get("badges", [])]
             badge_text = f"the '{badge_names[0]}'" if len(badge_names) == 1 else f"the following badges: {', '.join(badge_names)}"
@@ -273,6 +277,12 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
             )
             context_lines.append(instruction)
 
+        elif special_context.get("type") == "real_talk_mode": # NEW in v115.0
+            instruction = (
+                "The user has requested 'Real Talk'. This is your HIGHEST priority. You MUST adopt a more direct, frank, and confidential tone, like a trusted older sister. Start your response with a phrase like 'Of course, let's talk freely.' or 'Okay, real talk.' Then, address their underlying question with extra empathy and directness. Use 'I' statements to share wisdom (e.g., 'I know it can feel like...')."
+            )
+            context_lines.append(instruction)
+
 
     elif proactive_context:
         context_lines.append("\n--- Special Note for Conversation ---")
@@ -282,6 +292,9 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
         elif context_type == "goal_check_in":
             goal_text = proactive_context.get('text', 'one of your goals')
             context_lines.append(f"After answering the user's primary question, gently and encouragingly check in on their progress with a question like: 'By the way, how has your goal to \"{goal_text}\" been going lately?'")
+        elif context_type == "memory_check_in": # NEW in v115.0
+            memory_text = proactive_context.get('text', 'something you mentioned')
+            context_lines.append(f"Start your response with a warm, natural check-in about a past event the user mentioned. For example: 'Hey, I was just thinking about you. I remember you mentioned you had '{memory_text}'. How did it go?' Then, on a new line, address their current question.")
         elif context_type == "pregnancy_milestone":
             context_lines.append(f"Start your response with this exciting milestone update: \"{proactive_context.get('text')}\". Then, on a new line, answer their main question.")
         elif context_type == "symptom_correlation":

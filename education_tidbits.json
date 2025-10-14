@@ -56,5 +56,53 @@
         "text": "Chronic stress can sometimes deplete your body's magnesium levels. Including magnesium-rich foods like leafy greens, almonds, and avocados in your diet can be supportive."
       }
     ]
+  },
+  "body_image": {
+    "teen": [
+      {
+        "id": "body_teen_1",
+        "text": "Quick reminder: the bodies you see on social media are often posed, filtered, and not a reflection of real life. Your body is unique and wonderful just as it is!"
+      },
+      {
+        "id": "body_teen_2",
+        "text": "It's totally normal for your body to change a lot during your teen years. Try to focus on what your body can DO—like run, dance, or hug a friend—rather than just how it looks."
+      }
+    ],
+    "adult": [
+      {
+        "id": "body_adult_1",
+        "text": "Health looks different on every body. Instead of focusing on a number on the scale, try tracking things that really matter, like your energy levels, strength, and how you feel mentally."
+      }
+    ]
+  },
+  "mental_health_basics": {
+    "teen": [
+      {
+        "id": "mh_teen_1",
+        "text": "It's okay not to be okay! Having 'bad days' is a normal part of life. The important thing is to be kind to yourself and know that feelings come and go."
+      },
+      {
+        "id": "mh_teen_2",
+        "text": "Talking about your feelings isn't a sign of weakness—it's a sign of strength. Sharing what's on your mind with a trusted friend, family member, or me can make a huge difference."
+      }
+    ],
+    "adult": [
+      {
+        "id": "mh_adult_1",
+        "text": "Self-care isn't just bubble baths. It can be setting boundaries, saying 'no' to things that drain your energy, or taking five minutes of quiet time for yourself."
+      }
+    ]
+  },
+  "contraception": {
+    "adult": [
+      {
+        "id": "contra_adult_1",
+        "text": "Did you know there are over a dozen types of contraception available? From daily pills to long-acting methods like IUDs, there's likely a method that fits your lifestyle perfectly."
+      },
+      {
+        "id": "contra_adult_2",
+        "text": "Choosing a birth control method is a personal decision. It's always a great idea to chat with a healthcare provider to discuss the pros and cons of different options for you."
+      }
+    ]
   }
 }

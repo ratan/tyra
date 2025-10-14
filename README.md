@@ -228,6 +228,7 @@ https://ai.google.dev/gemini-api/docs/rate-limits#free-tier
 1.  Monolith Final: Feature_Comp_monolith_24Jul_5_women_health_chatbot/ (Jul 24)
 2.  Guest Mode: Feature_Comp_22Jul_1_women_health_chatbot/ (Jul 22)
 3.  Fertility: 21Jul_2_women_health_chatbot/
+4.  Tyra Avatar, Privacy Policy: Feature_comp_12Oct25_1_privacy_tyra_avatar__women_health_chatbot
 
 
 #### **Point 6: Pending Item**
