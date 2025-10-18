@@ -1,4 +1,4 @@
-# app.py (v115.1 - Fix Memory/Reminder Conflict & Reminder Confirmation)
+# app.py (v116.1 - Fix Streak Save Logic)
 import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets, random, requests
 from datetime import datetime, timedelta, timezone, date
 from flask import Flask, Response, render_template, request, jsonify, session, redirect, url_for, send_from_directory, g
@@ -68,6 +68,7 @@ ALLOWED_ORIGINS = [
 ]
 
 # --- Feature Flags ---
+ENABLE_GAMIFICATION_STREAKS = True # NEW in v116.0: Enables daily check-in streaks.
 ENABLE_VIDEO_SUGGESTIONS = True # NEW in v106.0: Enables in-chat YouTube video suggestions for wellness.
 ENABLE_CONVERSATIONAL_ONBOARDING = True # NEW in v103.0: Toggles between chat-based and form-based new user setup.
 ENABLE_SQLITE_DATABASE = True # NEW in v101.4: Toggles between SQLite and JSON file storage
@@ -1442,7 +1443,7 @@ def _handle_internal_action(action_data, profile):
     # Fallback for unknown actions
     return jsonify({"reply": "I'm sorry, I didn't understand that action."})
 
-# MODIFIED in v115.1: Decouple Key Memory creation from Contextual Reminders
+# MODIFIED in v116.1: Move streak update and save_profile to the end for consistency
 def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
     # Recalculate dynamic and analytical data on every interaction.
     profile = _recalculate_age_dependent_categories(profile)
@@ -1727,7 +1728,10 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
     ])
     profile['chat_log'] = profile['chat_log'][-MAX_CHAT_LOG_ENTRIES:]
 
+    # BUGFIX in v116.1: Ensure streak is updated and profile is saved on EVERY interaction.
+    profile = _update_daily_streak(profile)
     save_profile(profile_hash, profile)
+    
     response_payload = {"reply": rendered_reply}
     if proactive_summary:
         response_payload["proactive_summary"] = proactive_summary
@@ -1830,20 +1834,25 @@ def dashboard():
 
 # --- WIDGET API ROUTES ---
 if app.config['ENABLE_WIDGET_MODE']:
+    # MODIFIED in v116.0: Add streak data to config payload
     @app.route('/api/v1/config')
     @token_required
     def api_config():
         auth_mode = "otp" if app.config.get('ENABLE_EMAIL_OTP_API_VERIFICATION') else "guest"
-        # For authenticated users, load their specific language file
         lang_code = 'en'
+        streak_data = {"current": 0} # Default for guests
+
         if g.profile and not g.is_guest:
             lang_code = g.profile.get('language', 'en')
+            if ENABLE_GAMIFICATION_STREAKS:
+                streak_data = g.profile.get("streaks", {"current": 0})
         
         lang_data = load_language_data(lang_code)
 
         return jsonify({
             "auth_mode": auth_mode,
-            "lang": lang_data
+            "lang": lang_data,
+            "streaks": streak_data
         })
 
     # The config route for a user who is not yet authenticated
@@ -2865,7 +2874,7 @@ def _finalize_onboarding(profile_hash, onboarding_data, is_api_call=False):
             "reply": md.render(final_reply)
         })
 
-# --- MODIFIED in v104.6: Educational Tidbit Logic with Robust Regex ---
+# MODIFIED in v116.0: Expanded keyword map for targeted content
 def _get_relevant_education_tidbit(profile, user_message):
     if not EDUCATION_DATA:
         return None, None
@@ -2873,7 +2882,10 @@ def _get_relevant_education_tidbit(profile, user_message):
     KEYWORD_MAP = {
         "period_cramps": ["cramp", "cramps", "period pain", "menstrual pain"],
         "sleep": ["sleep", "insomnia", "couldn't sleep", "woke up"],
-        "stress": ["stress", "anxiety", "anxious", "overwhelmed"]
+        "stress": ["stress", "anxiety", "anxious", "overwhelmed"],
+        "body_image": ["fat", "ugly", "hate my body", "look weird", "body changes"],
+        "contraception": ["birth control", "condom", "pill", "iud", "contraceptive"],
+        "mental_health_basics": ["sad", "depressed", "lonely", "not okay"]
     }
 
     user_message_lower = user_message.lower()
@@ -2893,9 +2905,11 @@ def _get_relevant_education_tidbit(profile, user_message):
     
     tidbits_for_topic = EDUCATION_DATA.get(found_topic, {}).get(age_group, [])
     if not tidbits_for_topic:
-        return None, None
+        # Fallback to adult content if teen-specific content doesn't exist for the topic
+        tidbits_for_topic = EDUCATION_DATA.get(found_topic, {}).get("adult", [])
+        if not tidbits_for_topic:
+            return None, None
     
-    # Robustly handle old profiles that lack the key
     if "shown_education_tidbits" not in profile:
         profile["shown_education_tidbits"] = []
         
@@ -3084,6 +3098,25 @@ def _handle_video_suggestion(profile, selected_category=None):
             # Should not happen if suitable_videos is not empty, but a safe fallback
             return {"reply": "I couldn't find any suitable videos for you right now, but I can help with other questions!"}
 
+# NEW in v116.0: Logic for calculating and updating user streaks
+def _update_daily_streak(profile):
+    if not ENABLE_GAMIFICATION_STREAKS: return profile
+    
+    today_str = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    streaks_data = profile.setdefault("streaks", {"current": 0, "last_log_date": None})
+    
+    if streaks_data["last_log_date"] == today_str:
+        return profile # Already interacted today
+
+    last_log_dt = dateparser.parse(streaks_data["last_log_date"]) if streaks_data["last_log_date"] else None
+    
+    if last_log_dt and (datetime.now(timezone.utc).date() - last_log_dt.date()).days == 1:
+        streaks_data["current"] += 1 # Continue streak
+    else:
+        streaks_data["current"] = 1 # Start a new or reset streak
+        
+    streaks_data["last_log_date"] = today_str
+    return profile
 
 if __name__ == '__main__':
     if not app.config.get("FLASK_SECRET_KEY"):

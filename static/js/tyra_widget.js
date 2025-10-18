@@ -1,4 +1,4 @@
-// static/js/tyra_widget.js (v114.0 - Implement Hybrid Settings Menu)
+// static/js/tyra_widget.js (v116.0 - Add Streak Display Logic)
 (function() {
     'use strict';
 
@@ -18,7 +18,8 @@
         audioChunks: [],
         childDobs: [], // For profile creation form
         isDashboardStale: false, // FIX v100.2: Flag to signal dashboard needs a refresh
-        isSettingsMenuOpen: false // NEW in v114.0
+        isSettingsMenuOpen: false, // NEW in v114.0
+        streaks: { current: 0 } // NEW in v116.0
     };
 
     // --- CONSTANTS ---
@@ -40,6 +41,7 @@
                         <h3 id="tyra-header-title">${title}</h3>
                     </div>
                     <div class="tyra-header-controls">
+                        <div id="tyra-streak-indicator" class="tyra-streak-indicator" style="display: none;"></div>
                         <button id="tyra-dashboard-btn" class="tyra-header-button" style="display: none;"></button>
                         <button id="tyra-settings-btn" class="tyra-settings-btn" style="display: none;">⋮</button>
                         <div id="tyra-settings-dropdown" class="tyra-settings-dropdown">
@@ -160,23 +162,25 @@
         const viewContainer = state.targetElement.querySelector('.tyra-view-container');
         if (!viewContainer) return; // The shell might not be rendered yet
         
-        // MODIFIED in v114.0: Select new header elements
+        // MODIFIED in v114.0 & v116.0: Select new header elements
         const headerTitle = state.targetElement.querySelector('#tyra-header-title');
         const dashboardButton = state.targetElement.querySelector('#tyra-dashboard-btn');
         const settingsButton = state.targetElement.querySelector('#tyra-settings-btn');
         const headerIdentity = state.targetElement.querySelector('.tyra-header-identity');
+        const streakIndicator = state.targetElement.querySelector('#tyra-streak-indicator');
 
-        if (!headerTitle || !dashboardButton || !settingsButton || !headerIdentity) return;
+        if (!headerTitle || !dashboardButton || !settingsButton || !headerIdentity || !streakIndicator) return;
 
         let viewHTML = '';
         dashboardButton.style.display = 'none';
         settingsButton.style.display = 'none';
-        headerIdentity.style.visibility = 'visible'; // Default to visible
+        streakIndicator.style.display = 'none'; // Hide by default
+        headerIdentity.style.visibility = 'visible'; 
 
         switch (state.currentView) {
             case 'email_entry': 
                 viewHTML = templates.emailEntryView(); 
-                headerIdentity.style.visibility = 'hidden'; // Hide avatar/name on login screen
+                headerIdentity.style.visibility = 'hidden'; 
                 break;
             case 'otp_entry': 
                 viewHTML = templates.otpEntryView(); 
@@ -194,6 +198,11 @@
                     if (!state.isGuest && !state.onboardingToken) {
                         dashboardButton.textContent = state.lang.dashboard_link || 'Dashboard';
                         dashboardButton.style.display = 'block';
+                        // NEW in v116.0: Show streak indicator
+                        if (state.streaks && state.streaks.current > 0) {
+                            streakIndicator.innerHTML = `🔥 ${state.streaks.current}`;
+                            streakIndicator.style.display = 'flex';
+                        }
                     }
                 }
                 break;
@@ -478,6 +487,7 @@
         state.dashboardData = null;
         state.userEmail = '';
         state.currentView = 'email_entry'; // Go back to the start
+        state.streaks = { current: 0 }; // NEW in v116.0: Reset streaks on logout
         render();
     }
 
@@ -581,7 +591,7 @@
     
     async function onProfileSubmit(e) { // Only used if conversational onboarding is OFF
         e.preventDefault();
-        // ... (This function is now legacy and will not be triggered in the v114.0 default flow)
+        // ... (This function is now legacy and will not be triggered in the v116.0 default flow)
     }
     
     // MODIFIED in v108.0 for smart scroll
@@ -738,10 +748,14 @@
         }
     }
 
+    // MODIFIED in v116.0: Fetch and store streak data
     async function initializeAuthenticatedSession() {
         try {
             const config = await api.get('config');
             state.lang = config.lang || {};
+            if(config.streaks) {
+                state.streaks = config.streaks;
+            }
             render();
         } catch (e) {
             console.error("Failed to load config for authenticated user:", e);
@@ -951,7 +965,7 @@
         init: async function(options) {
             if (!options.targetElementId || !options.apiUrl) return console.error("Tyra Widget: 'targetElementId' and 'apiUrl' are required.");
             
-            Object.assign(state, { apiUrl: options.apiUrl.replace(/\/$/, ''), targetElement: document.getElementById(options.targetElementId), jwtToken: null, verificationToken: null, isGuest: false, userEmail: '', currentView: 'loading', userName: '', lang: {}, dashboardData: null, childDobs: [], isDashboardStale: false });
+            Object.assign(state, { apiUrl: options.apiUrl.replace(/\/$/, ''), targetElement: document.getElementById(options.targetElementId), jwtToken: null, verificationToken: null, isGuest: false, userEmail: '', currentView: 'loading', userName: '', lang: {}, dashboardData: null, childDobs: [], isDashboardStale: false, streaks: { current: 0 } });
 
             // NEW in v111.1: Dynamically construct the avatar URL
             TYRA_AVATAR_URL = `${state.apiUrl}/static/images/tyra_avatar.png`;

@@ -1,4 +1,4 @@
-/* static/css/tyra_widget.css (v114.0 - Add Settings Menu styles) */
+/* static/css/tyra_widget.css (v116.0 - Add Streak Indicator styles) */
 :root {
     --primary-color: #8B4A9C; /* Deep Purple */
     --secondary-color: #A855A8; /* Lighter Purple */
@@ -212,6 +212,20 @@
     background-color: #f1f1f1;
 }
 /* --- End v114.0 Styles --- */
+
+/* --- NEW in v116.0: Streak Indicator Styles --- */
+.tyra-streak-indicator {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.9em;
+    font-weight: 600;
+    color: white;
+    background-color: rgba(255, 255, 255, 0.2);
+    padding: 4px 8px;
+    border-radius: 12px;
+}
+/* --- End v116.0 Styles --- */
 
 
 /* --- Form Views (Login, OTP, Profile) --- */

@@ -1,4 +1,4 @@
-# user_profiler.py (v115.0 - Enhanced Persona Instructions)
+# user_profiler.py (v116.3 - Add comprehensive UI Context awareness)
 from datetime import datetime, timedelta
 import dateparser # NEW in v111.4: Fix for NameError in format_profile_for_prompt
 
@@ -13,7 +13,7 @@ LANG_MAP = {
     "or": "Odia", "ml": "Malayalam", "pa": "Punjabi", "ar": "Arabic"
 }
 
-# MODIFIED in v107.6: Added dob_source field
+# MODIFIED in v116.0: Add streaks object
 def create_user_profile(name, email, phone, age, details, lang_code='en'):
     # Calculate an approximate date of birth from the provided age
     # This makes the profile dynamic over time
@@ -56,7 +56,8 @@ def create_user_profile(name, email, phone, age, details, lang_code='en'):
         "key_memories": [], # NEW in v102.0
         "shown_education_tidbits": [], # NEW in v104.2
         "achievements": { "unlocked_badges": {} }, # NEW in v105.0
-        "shown_video_ids": [] # NEW in v106.0
+        "shown_video_ids": [], # NEW in v106.0
+        "streaks": {"current": 0, "last_log_date": None} # NEW in v116.0
     }
     if age <= 19: profile["primary_category"] = "Adolescence/Teen"
     elif 20 <= age <= 39: profile["primary_category"] = "Young Adulthood"
@@ -122,13 +123,10 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
             "Clarity and empathy are key."
         )
 
-    # --- NEW v102.0: Memory Protocol Instruction ---
+    # MODIFIED in v115.1: Memory tag is now deprecated in prompt.
     memory_protocol = (
         "--- MEMORY PROTOCOL ---\n"
-        "If the user mentions a significant, forward-looking life event (e.g., an upcoming exam, a new job, a vacation, a doctor's appointment), you MUST embed a special tag in your response for the system to save it. The tag format is `[SUGGEST_MEMORY: Text of the memory]`. The system will remove this tag before showing the user your message.\n"
-        "Example User Message: 'I'm so stressed, I have a huge final exam next Friday.'\n"
-        "Example AI Response: That sounds very stressful. Make sure to take breaks! [SUGGEST_MEMORY: User has a final exam next Friday]\n"
-        "DO NOT use this for simple health logs like 'I have a headache'."
+        "The system will automatically save important user-mentioned future events (like appointments or exams) to your memory. You can occasionally reference these past events to show you remember the user's journey."
     )
     
     # --- MODIFIED v101.8: Main instruction now includes the empathetic response pattern ---
@@ -160,6 +158,27 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
         ages_str = ", ".join([f"{age.get('years', 0)}y {age.get('months', 0)}m" for age in details.get('calculated_child_ages', [])]) or "not specified"
         context_lines.append(f"- Is a parent of {num_children} child/children. Last child born {details.get('last_child_birth_ago', 'not specified')} ago. Ages: {ages_str}.")
     if details.get('is_perimenopausal'): context_lines.append("- Is experiencing perimenopause symptoms.")
+    
+    # --- NEW in v116.3: Comprehensive UI Context for feature awareness ---
+    ui_context = ["\n--- UI CONTEXT (For your awareness of the app's features) ---", "- The user is interacting with you inside a chat widget."]
+    streaks = profile.get("streaks", {})
+    current_streak = streaks.get("current", 0)
+    
+    is_authenticated = "email" in profile and profile["email"]
+    
+    if is_authenticated:
+        ui_context.append("- Header Controls:")
+        if current_streak > 0:
+            ui_context.append(f"  - Streak Counter: A '🔥 {current_streak}' icon shows the user's 'daily streak counter,' representing how many days in a row they have chatted with you.")
+        ui_context.append("  - Dashboard Button: A 'Dashboard' button takes the user to a page summarizing their health data.")
+        ui_context.append("  - Settings Menu (⋮): Contains links for 'Privacy Policy' and 'Logout.'")
+        ui_context.append("- Dashboard Widgets: The Dashboard page contains widgets for: Current Cycle, Upcoming Reminders, Medications, Health Goals, Recent Logs, and Charts.")
+        ui_context.append("- Chat Controls:")
+        ui_context.append("  - File Upload (📎 icon): Allows users to upload documents or images for analysis.")
+        ui_context.append("  - Voice Input (🎤 icon): Allows users to speak their messages.")
+    
+    ui_context.append("\n**INSTRUCTION:** If a user asks a question about a feature of the app (like 'where are my reminders,' 'what does the flame mean,' or 'how can I see my cycle history'), you MUST use the context above to provide a direct, helpful answer that guides them to the correct UI element.")
+    context_lines.extend(ui_context)
     
     # --- NEW v102.0: Add Key Memories to context ---
     memories = profile.get("key_memories", [])
