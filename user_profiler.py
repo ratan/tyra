@@ -1,4 +1,4 @@
-# user_profiler.py (v116.3 - Add comprehensive UI Context awareness)
+# user_profiler.py (v117.0 - Add Shareable Insight Cooldown)
 from datetime import datetime, timedelta
 import dateparser # NEW in v111.4: Fix for NameError in format_profile_for_prompt
 
@@ -13,7 +13,7 @@ LANG_MAP = {
     "or": "Odia", "ml": "Malayalam", "pa": "Punjabi", "ar": "Arabic"
 }
 
-# MODIFIED in v116.0: Add streaks object
+# MODIFIED in v117.0: Add last_insight_offered_date
 def create_user_profile(name, email, phone, age, details, lang_code='en'):
     # Calculate an approximate date of birth from the provided age
     # This makes the profile dynamic over time
@@ -46,7 +46,8 @@ def create_user_profile(name, email, phone, age, details, lang_code='en'):
             "last_general_analysis_date": None,
             "last_program_suggestion_ts": None,
             "pending_program_offer": None,
-            "last_summary_date": None # NEW in v105.1
+            "last_summary_date": None, # NEW in v105.1
+            "last_insight_offered_date": None # NEW in v117.0
         },
         "behavioral_synopsis": {},
         "health_logs": [],
@@ -302,6 +303,13 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
             )
             context_lines.append(instruction)
 
+        # NEW in v117.0
+        elif special_context.get("type") == "offer_weekly_summary":
+            instruction = (
+                "The user has been highly engaged this week. Your primary goal is to answer their question, but you MUST conclude your response by offering them a weekly summary. "
+                "End your message with a friendly, encouraging offer like: 'By the way, you've been really consistent this week! Would you like to see a shareable summary of your wellness insights?'"
+            )
+            context_lines.append(instruction)
 
     elif proactive_context:
         context_lines.append("\n--- Special Note for Conversation ---")

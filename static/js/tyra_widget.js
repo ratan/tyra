@@ -1,4 +1,4 @@
-// static/js/tyra_widget.js (v116.0 - Add Streak Display Logic)
+// static/js/tyra_widget.js (v117.4 - Fix Cross-Origin Image Download)
 (function() {
     'use strict';
 
@@ -32,7 +32,7 @@
         launcher: () => `<div class="tyra-launcher">
                             <img src="${TYRA_AVATAR_URL}" alt="Tyra Avatar">
                          </div>`,
-        // MODIFIED in v114.0: Implement Hybrid Header with Settings Menu
+        // MODIFIED in v114.0 & v116.0: Implement Hybrid Header with Settings Menu & Streak Indicator
         widgetShell: (title) => `
             <div class="tyra-widget-container">
                 <div class="tyra-widget-header">
@@ -235,7 +235,7 @@
         }
     }
     
-    // MODIFIED in v108.0 for smart scrolling
+    // MODIFIED in v117.4: Handle weekly insight card and robust download
     function addMessage(htmlContent, sender, responseData = {}, doAutoScroll = true) {
         const chatLog = state.targetElement.querySelector('.tyra-chat-log');
         if (!chatLog) return;
@@ -284,7 +284,6 @@
                  messageDiv.classList.add('tyra-calendar-container');
                  messageDiv.innerHTML = templates.calendar(responseData.data);
             }
-            // --- NEW IN v107.0: Handle Video Components ---
             else if (uiComponent === 'category_picker') {
                 const pickerContainer = document.createElement('div');
                 pickerContainer.className = 'tyra-category-picker';
@@ -315,8 +314,6 @@
                 });
                 messageDiv.appendChild(carousel);
             }
-            // --- End v107.0 Video Component Handling ---
-
             else if (responseData.video_embed && responseData.video_embed.type === 'youtube') {
                 const videoContainer = document.createElement('div');
                 videoContainer.className = 'tyra-video-container';
@@ -327,6 +324,44 @@
                 iframe.allowFullscreen = true;
                 videoContainer.appendChild(iframe);
                 messageDiv.appendChild(videoContainer);
+            }
+            else if (uiComponent === 'weekly_insight_card') {
+                const card = document.createElement('div');
+                card.className = 'tyra-insight-card';
+                card.innerHTML = `
+                    <img src="${state.apiUrl}${responseData.data.image_url}" alt="Your weekly insight">
+                    <button class="tyra-download-insight-btn">Download Image</button>
+                `;
+                // BUGFIX in v117.4: Implement robust download for cross-origin images
+                card.querySelector('button').addEventListener('click', async (e) => {
+                    const btn = e.target;
+                    btn.textContent = 'Downloading...';
+                    btn.disabled = true;
+                    try {
+                        const imageUrl = `${state.apiUrl}${responseData.data.image_url}`;
+                        const response = await fetch(imageUrl);
+                        const blob = await response.blob();
+                        const objectUrl = URL.createObjectURL(blob);
+                        
+                        const link = document.createElement('a');
+                        link.href = objectUrl;
+                        link.download = `tyra-weekly-insight.png`;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        
+                        URL.revokeObjectURL(objectUrl);
+                    } catch (err) {
+                        console.error("Download failed:", err);
+                        btn.textContent = 'Download Failed';
+                    } finally {
+                        setTimeout(() => {
+                            btn.textContent = 'Download Image';
+                            btn.disabled = false;
+                        }, 2000);
+                    }
+                });
+                messageDiv.appendChild(card);
             }
         }
         
@@ -591,7 +626,7 @@
     
     async function onProfileSubmit(e) { // Only used if conversational onboarding is OFF
         e.preventDefault();
-        // ... (This function is now legacy and will not be triggered in the v116.0 default flow)
+        // ... (This function is now legacy and will not be triggered in the v117.0 default flow)
     }
     
     // MODIFIED in v108.0 for smart scroll

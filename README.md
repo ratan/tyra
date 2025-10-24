@@ -148,7 +148,7 @@ This is where you will securely store your secret keys and tell the application 
 | `SENDGRID_API_KEY`          | *Your SendGrid API Key*                       | Your production key for sending OTP emails.                                 |
 | `SENDER_EMAIL`              | *your_verified_email@example.com*             | The "From" email address verified in SendGrid.                              |
 | `ADMIN_SECRET_KEY`          | *A new, very long, unpredictable secret*      | The secret "password" for accessing the database download endpoint.         |
-| `ZEPTOMAIL_TOKEN`           | *Your ZeptoMail API Key*                       | Your production key for sending OTP emails.                                 |
+| `ZEPTOMAIL_TOKEN`           | *Your ZeptoMail API Key*                      | Your production key for sending OTP emails.                                 |
 
 We are using ZEPTOMAIL_TOKEN instead of SENDGRID_API_KEY now.
 
@@ -200,7 +200,14 @@ This sectoion covers the other miscelleneous points here.
 1. Privacy Policy
    tyra_widget.js
    <a href="https://fitcommunity.in/privacyPolicy.php" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
-2. TBD
+2. Changes done in v117.4
+    1.  Save the avatar image provided into `static/images/` and name it `tyra_avatar.png`. (Already done in previous version)
+    2.  Create a 1000x1000px background image (e.g., with a purple-to-pink gradient), save it to `static/images/`, and name it `insight_template.png`.
+    There is script which can create insight_template.png:
+    cd backup
+    python create_template.py
+    3.  Download the "Poppins" font family from Google Fonts, and place the `Poppins-Bold.ttf` file into the `static/fonts/` directory.
+3. TBD
 ---
 
 #### **Point 1: Exact Command to download DB**
@@ -229,6 +236,7 @@ https://ai.google.dev/gemini-api/docs/rate-limits#free-tier
 2.  Guest Mode: Feature_Comp_22Jul_1_women_health_chatbot/ (Jul 22)
 3.  Fertility: 21Jul_2_women_health_chatbot/
 4.  Tyra Avatar, Privacy Policy: Feature_comp_12Oct25_1_privacy_tyra_avatar__women_health_chatbot
+5.  Sharable Insights: Feature_comp_24oct25_1_sharable_insights_women_health_chatbot
 
 
 #### **Point 6: Pending Item**

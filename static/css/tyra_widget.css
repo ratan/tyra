@@ -1,4 +1,4 @@
-/* static/css/tyra_widget.css (v116.0 - Add Streak Indicator styles) */
+/* static/css/tyra_widget.css (v117.0 - Add Shareable Insight Card styles) */
 :root {
     --primary-color: #8B4A9C; /* Deep Purple */
     --secondary-color: #A855A8; /* Lighter Purple */
@@ -451,6 +451,28 @@
     text-overflow: ellipsis;
 }
 /* End of v107.0 Styles */
+
+/* --- NEW in v117.0: Shareable Insight Card --- */
+.tyra-insight-card {
+    margin-top: 10px;
+}
+.tyra-insight-card img {
+    max-width: 100%;
+    border-radius: var(--border-radius);
+    border: 1px solid var(--border-color);
+}
+.tyra-download-insight-btn {
+    width: 100%;
+    margin-top: 10px;
+    padding: 8px;
+    background-color: var(--secondary-color);
+    color: white;
+    border: none;
+    border-radius: var(--border-radius);
+    font-weight: 600;
+    cursor: pointer;
+}
+/* --- End v117.0 Styles --- */
 
 
 /* NEW in v103.1: Language Picker styles */

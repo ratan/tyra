@@ -1,4 +1,4 @@
-# app.py (v116.1 - Fix Streak Save Logic)
+# app.py (v117.2 - Add missing insight generation function)
 import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets, random, requests
 from datetime import datetime, timedelta, timezone, date
 from flask import Flask, Response, render_template, request, jsonify, session, redirect, url_for, send_from_directory, g
@@ -15,6 +15,8 @@ import jwt
 from functools import wraps
 from flask_session import Session
 from flask_sqlalchemy import SQLAlchemy
+from PIL import Image, ImageDraw, ImageFont # NEW in v117.0
+import textwrap # NEW in v117.3
 
 from user_profiler import create_user_profile, format_profile_for_prompt, LANG_MAP
 
@@ -38,6 +40,7 @@ MAX_CYCLE_HISTORY = 120
 MAX_KEY_MEMORIES = 15 # NEW in v102.0
 MAX_CHAT_LOG_ENTRIES = 50 # NEW in v108.0: Limit size of persisted chat log
 MEMORY_CHECK_IN_WINDOW_DAYS = 14 # NEW in v115.0: Window for proactive memory check-ins
+INSIGHT_COOLDOWN_DAYS = 7 # NEW in v117.0
 
 # NEW in v105.4: Define an ordered list of models for fallback on rate limiting.
 GEMINI_MODEL_CASCADE_LIST = [
@@ -68,6 +71,7 @@ ALLOWED_ORIGINS = [
 ]
 
 # --- Feature Flags ---
+ENABLE_SHAREABLE_INSIGHTS = True # NEW in v117.0
 ENABLE_GAMIFICATION_STREAKS = True # NEW in v116.0: Enables daily check-in streaks.
 ENABLE_VIDEO_SUGGESTIONS = True # NEW in v106.0: Enables in-chat YouTube video suggestions for wellness.
 ENABLE_CONVERSATIONAL_ONBOARDING = True # NEW in v103.0: Toggles between chat-based and form-based new user setup.
@@ -162,6 +166,7 @@ else:
 # Define other persistent data paths
 UPLOADS_DIR = os.path.join(DATA_BASE_PATH, "temp_uploads")
 SHARED_REPORTS_DIR = os.path.join(DATA_BASE_PATH, "shared_reports")
+SHARED_INSIGHTS_DIR = os.path.join(DATA_BASE_PATH, "shared_insights") # NEW in v117.0
 TRIBHER_DATA_FILE = os.path.join(DATA_BASE_PATH, "tribher_data_final.json")
 MILESTONES_DATA_FILE = os.path.join(DATA_BASE_PATH, "milestones_data.json")
 EDUCATION_DATA_FILE = os.path.join(DATA_BASE_PATH, "education_tidbits.json") # FIX in v104.4
@@ -170,14 +175,17 @@ WELLNESS_VIDEOS_FILE = os.path.join(DATA_BASE_PATH, "wellness_videos.json") # NE
 # Define static directories separately as they are part of the app package
 STATIC_CSS_DIR = os.path.join('static', 'css')
 STATIC_JS_DIR = os.path.join('static', 'js')
+STATIC_FONTS_DIR = os.path.join('static', 'fonts') # NEW in v117.0
 LOCALES_DIR = "locales"
 
 # Create all necessary non-profile directories
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 os.makedirs(SHARED_REPORTS_DIR, exist_ok=True)
+os.makedirs(SHARED_INSIGHTS_DIR, exist_ok=True) # NEW in v117.0
 SHARED_REPORTS_DB_FILE = os.path.join(SHARED_REPORTS_DIR, "shared_reports_db.json")
 os.makedirs(STATIC_CSS_DIR, exist_ok=True)
 os.makedirs(STATIC_JS_DIR, exist_ok=True)
+os.makedirs(STATIC_FONTS_DIR, exist_ok=True) # NEW in v117.0
 os.makedirs(LOCALES_DIR, exist_ok=True)
 # --- End of Storage Configuration ---
 
@@ -455,7 +463,7 @@ def normalize_date_string(date_str: str) -> str:
     parsed_date = dateparser.parse(date_str, settings={'PREFER_DATES_FROM': 'past'})
     return parsed_date.strftime("%Y-%m-%d") if parsed_date else datetime.now().strftime("%Y-%m-%d")
 
-# MODIFIED in v115.1: Add `suggested_memory` to decouple from reminders.
+# MODIFIED in v117.0: Add `accept_weekly_insight` intent.
 def get_conversation_summary(user_message):
     today_date = datetime.now().strftime('%Y-%m-%d')
     summary_prompt = f"""
@@ -464,21 +472,25 @@ Your output MUST be a single, raw, valid JSON object.
 Today's date is {today_date}. Resolve all relative dates to 'YYYY-MM-DD' format.
 
 **CRITICAL RULES & INTENTS (In Order of Priority):**
-1.  **REAL TALK (Highest Priority):** For phrases indicating a desire for a frank or confidential chat (e.g., "can I ask something personal", "real talk", "can I be real with you"), you MUST return a `request_real_talk` intent.
-2.  **LIFE EVENT UPDATE:** If the user announces a new life stage like pregnancy or perimenopause, or the end of one (giving birth), you MUST return a `life_event_update` intent.
-3.  **PROVIDE DOB:** If the user explicitly states their date of birth ("my dob is", "I was born on"), you MUST return a `provide_dob` intent.
-4.  **REMINDERS & MEMORIES:** For future events mentioned conversationally (e.g., "I have an appointment on Friday", "I have a huge exam next week"), you MUST include BOTH of the following:
+1.  **ACCEPT WEEKLY INSIGHT (Highest Priority):** If the user agrees to see their weekly summary (e.g., "yes show me", "sure", "show me my summary"), return `accept_weekly_insight`.
+2.  **REAL TALK:** For phrases indicating a desire for a frank or confidential chat (e.g., "can I ask something personal", "real talk"), return a `request_real_talk` intent.
+3.  **LIFE EVENT UPDATE:** If the user announces a new life stage like pregnancy or perimenopause, or the end of one (giving birth), return a `life_event_update` intent.
+4.  **PROVIDE DOB:** If the user explicitly states their date of birth ("my dob is", "I was born on"), you MUST return a `provide_dob` intent.
+5.  **REMINDERS & MEMORIES:** For future events mentioned conversationally (e.g., "I have an appointment on Friday", "I have a huge exam next week"), you MUST include BOTH of the following:
     a. A `potential_reminder` object with `text` and `date`.
     b. A `suggested_memory` string containing the full fact (e.g., "User has an appointment on Friday").
-5.  **CHARTING OVERRIDE:** If the message contains 'chart', 'calendar', 'graph', or 'visualize', you MUST return a `query_chart` intent.
-6.  **SET GOAL:** For phrases like "my goal is..." or "I want to start...", return a `set_goal` intent.
-7.  **MEDICATION LOG:** For phrases about taking or logging medicine, return `medication_log`.
-8.  **REMINDERS (EXPLICIT):** For command-like phrases ("remind me to", "set a reminder"), return `reminder_action`.
-9.  **OTHER ACTIONS:** Process `health_log`, `period_action`, or `ambiguous_log` as normal.
-10. **GENERAL CHAT / QUESTIONS:** For anything else, especially questions asking for information (e.g., "what should I do for..."), return an empty JSON object `{{}}`.
+6.  **CHARTING OVERRIDE:** If the message contains 'chart', 'calendar', 'graph', or 'visualize', you MUST return a `query_chart` intent.
+7.  **SET GOAL:** For phrases like "my goal is..." or "I want to start...", return a `set_goal` intent.
+8.  **MEDICATION LOG:** For phrases about taking or logging medicine, return `medication_log`.
+9.  **REMINDERS (EXPLICIT):** For command-like phrases ("remind me to", "set a reminder"), return `reminder_action`.
+10. **OTHER ACTIONS:** Process `health_log`, `period_action`, or `ambiguous_log` as normal.
+11. **GENERAL CHAT / QUESTIONS:** For anything else, return an empty JSON object `{{}}`.
 
 
 --- EXAMPLES ---
+User: 'yes, show me my summary'
+{{"accept_weekly_insight": true}}
+
 User: 'real talk, i'm feeling really weird about my body'
 {{"request_real_talk": true}}
 
@@ -503,29 +515,14 @@ User: 'I think I am starting perimenopause.'
 User: 'my date of birth is 1st feb 1992'
 {{"provide_dob": {{"date": "1992-02-01"}}}}
 
-User: 'Do you have any yoga videos for the first trimester?'
-{{}}
-
 User: 'my period started on july 1st'
 {{"period_action": {{"type": "log_period_start", "date": "{datetime.now().year}-07-01"}}}}
-
-User: 'show me some postnatal exercises'
-{{}}
-
-User: 'visualize my cycle length'
-{{"query_chart": {{"type": "cycle_length"}}}}
 
 User: 'graph my period length over the last few months'
 {{"query_chart": {{"type": "cycle_length"}}}}
 
-User: 'I have a headache'
-{{"health_log": {{"category": "physical_symptom", "value": "headache"}}}}
-
 User: 'show my period calendar for june month'
 {{"query_chart": {{"type": "cycle_calendar", "target_date": "{datetime.now().year}-06-01"}}}}
-
-User: 'what should I do for period cramps?'
-{{}}
 
 User: 'Remind me to call the doctor tomorrow.'
 {{"reminder_action": {{"text": "call the doctor", "due_date": "{(datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')}"}}}}
@@ -533,11 +530,26 @@ User: 'Remind me to call the doctor tomorrow.'
 User: 'Log that I am taking Vitamin D 500mg daily.'
 {{"medication_log": {{"name": "Vitamin D", "dosage": "500mg", "frequency": "daily"}}}}
 
+User: 'Do you have any yoga videos for the first trimester?'
+{{}}
+
+User: 'show me some postnatal exercises'
+{{}}
+
+User: 'visualize my cycle length'
+{{"query_chart": {{"type": "cycle_length"}}}}
+
+User: 'I have a headache'
+{{"health_log": {{"category": "physical_symptom", "value": "headache"}}}}
+
+User: 'what should I do for period cramps?'
+{{}}
+
 User: 'My goal is to exercise 3 times a week.'
 {{"set_goal": {{"text": "exercise 3 times a week"}}}}
 
-User: 'I was born on March 3rd, 1985'
-{{"provide_dob": {{"date": "1985-03-03"}}}}
+User: 'what should I do for period cramps?'
+{{}}
 --- END EXAMPLES ---
 
 Now, process this user message:
@@ -1493,8 +1505,7 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
             {'role': 'assistant', 'content': json_response['reply']}
         ])
         profile['chat_log'] = profile['chat_log'][-MAX_CHAT_LOG_ENTRIES:]
-        save_profile(profile_hash, profile)
-        return jsonify(json_response)
+        # BUGFIX in v116.1: Moved streak update and save to end of function
         
     pending_question = session.get('pending_question')
     if pending_question:
@@ -1579,8 +1590,7 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
                 {'role': 'assistant', 'content': response_payload['reply']}
             ])
             profile['chat_log'] = profile['chat_log'][-MAX_CHAT_LOG_ENTRIES:]
-            save_profile(profile_hash, profile)
-            return jsonify(response_payload)
+            # BUGFIX in v116.1: Moved streak update and save to end of function
 
     action_response = None
     new_pending_question = None
@@ -1591,6 +1601,29 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
     # NEW in v115.0: Handle "Real Talk" mode as a special context override
     if insights.get('request_real_talk'):
         special_context = {"type": "real_talk_mode"}
+    # NEW in v117.0: Handle accepting a weekly insight
+    elif insights.get('accept_weekly_insight'):
+        insight_text, image_url = _generate_and_save_insight_image(profile)
+        if image_url:
+            response_payload = {
+                "reply": "Here is your weekly insight! ✨",
+                "ui_component": "weekly_insight_card",
+                "data": {
+                    "image_url": image_url,
+                    "insight_text": insight_text
+                }
+            }
+        else:
+            response_payload = {"reply": "I couldn't generate your insight right now, but let's try again later!"}
+        # This is a final action, so we can save and return directly
+        profile.setdefault("chat_log", []).extend([
+            {'role': 'user', 'content': user_message},
+            {'role': 'assistant', 'content': response_payload['reply']}
+        ])
+        profile['chat_log'] = profile['chat_log'][-MAX_CHAT_LOG_ENTRIES:]
+        profile = _update_daily_streak(profile)
+        save_profile(profile_hash, profile)
+        return jsonify(response_payload)
 
     if not special_context:
         for action_type, handler in action_handlers.items():
@@ -1647,10 +1680,13 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
             {'role': 'assistant', 'content': response_payload['reply']}
         ])
         profile['chat_log'] = profile['chat_log'][-MAX_CHAT_LOG_ENTRIES:]
-        save_profile(profile_hash, profile)
-        return jsonify(response_payload)
+        # BUGFIX in v116.1: Moved streak update and save to end of function
     
     # --- End of Core Action Handlers ---
+
+    # Re-use json_response if it was generated by chart logic but didn't return
+    if 'json_response' in locals() and not action_response and not special_context:
+        pass # Let it fall through to the final save and return
 
     is_follow_up = False
     last_discussed_program_context = None
@@ -1683,8 +1719,14 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
                 {'role': 'assistant', 'content': response_payload.get('reply', 'Here are some videos for you.')}
             ])
             profile['chat_log'] = profile['chat_log'][-MAX_CHAT_LOG_ENTRIES:]
-            save_profile(profile_hash, profile)
-            return jsonify(response_payload)
+            # BUGFIX in v116.1: Moved streak update and save to end of function
+
+    # NEW in v117.0: Proactively offer weekly insight
+    if not special_context and not action_response and not ('response_payload' in locals()):
+        if _should_offer_weekly_insight(profile):
+            special_context = {"type": "offer_weekly_summary"}
+            profile.setdefault("proactive_assistance", {})["last_insight_offered_date"] = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+
 
     if not special_context: 
         tidbit_text, tidbit_id = _get_relevant_education_tidbit(profile, user_message)
@@ -1705,26 +1747,33 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
         is_summary_request=is_summary_request, special_context=special_context, education_tidbit=education_tidbit
     )
     
-    response = _call_llm_with_fallback(f"{context_prompt}\n{user_message}")
-
-    if response is None:
-        reply = "I'm sorry, but I'm currently unable to process your request due to high demand. Please try again in a moment."
+    # If an action response was generated, use it. Otherwise, call the LLM.
+    if 'response_payload' in locals() and response_payload:
+        pass
+    elif 'json_response' in locals() and json_response:
+        response_payload = json_response
+    elif action_response:
+        response_payload = {"reply": md.render(action_response)}
     else:
-        # BUGFIX in v115.1: Memory tag is no longer needed in the response.
-        # It is now handled by get_conversation_summary. This code is left
-        # for graceful handling of any older cached models that might still produce it.
-        raw_reply = response.text
-        memory_match = re.search(r"\[SUGGEST_MEMORY:\s*(.*?)\]", raw_reply)
-        if memory_match:
-            reply = re.sub(r"\[SUGGEST_MEMORY:\s*(.*?)\]", "", raw_reply).strip()
+        response = _call_llm_with_fallback(f"{context_prompt}\n{user_message}")
+
+        if response is None:
+            reply = "I'm sorry, but I'm currently unable to process your request due to high demand. Please try again in a moment."
         else:
-            reply = raw_reply
-            
-    rendered_reply = md.render(reply)
-    
+            raw_reply = response.text
+            memory_match = re.search(r"\[SUGGEST_MEMORY:\s*(.*?)\]", raw_reply)
+            if memory_match:
+                reply = re.sub(r"\[SUGGEST_MEMORY:\s*(.*?)\]", "", raw_reply).strip()
+            else:
+                reply = raw_reply
+                
+        rendered_reply = md.render(reply)
+        response_payload = {"reply": rendered_reply}
+
+    # Finalize and Save
     profile.setdefault("chat_log", []).extend([
         {'role': 'user', 'content': user_message},
-        {'role': 'assistant', 'content': rendered_reply}
+        {'role': 'assistant', 'content': response_payload.get('reply', '...')}
     ])
     profile['chat_log'] = profile['chat_log'][-MAX_CHAT_LOG_ENTRIES:]
 
@@ -1732,8 +1781,7 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
     profile = _update_daily_streak(profile)
     save_profile(profile_hash, profile)
     
-    response_payload = {"reply": rendered_reply}
-    if proactive_summary:
+    if proactive_summary and "proactive_summary" not in response_payload:
         response_payload["proactive_summary"] = proactive_summary
         
     return jsonify(response_payload)
@@ -2658,6 +2706,11 @@ def view_report(report_id):
     filename = os.path.basename(report_data['filepath'])
     return send_from_directory(SHARED_REPORTS_DIR, filename)
 
+# --- NEW in v117.0: Endpoint to serve generated insight images ---
+@app.route('/shared_insights/<filename>')
+def shared_insight(filename):
+    return send_from_directory(SHARED_INSIGHTS_DIR, filename)
+
 # --- ADMIN DEBUG ENDPOINT (NEW for v101.4) ---
 # This route is only active when the SQLite backend is enabled
 if ENABLE_SQLITE_DATABASE:
@@ -2931,7 +2984,7 @@ def _check_for_new_achievements(profile):
     Checks the user's interaction history to unlock new usage-based badges.
     Returns a list of newly unlocked badge objects, or an empty list.
     """
-    # Use setdefault to handle old profiles gracefully
+    # Use setdefault to gracefully handle old profiles gracefully
     achievements = profile.setdefault("achievements", {"unlocked_badges": {}})
     unlocked_ids = achievements["unlocked_badges"].keys()
 
@@ -3117,6 +3170,128 @@ def _update_daily_streak(profile):
         
     streaks_data["last_log_date"] = today_str
     return profile
+
+# --- NEW in v117.0: Shareable Insight Functions ---
+# BUGFIX in v117.1: Added missing function _should_offer_weekly_insight
+def _should_offer_weekly_insight(profile):
+    if not ENABLE_SHAREABLE_INSIGHTS:
+        return False
+
+    proactive_data = profile.setdefault("proactive_assistance", {})
+    last_offered_str = proactive_data.get("last_insight_offered_date")
+    
+    # Cooldown Check: Don't offer if one was offered recently.
+    if last_offered_str:
+        try:
+            last_offered_dt = date.fromisoformat(last_offered_str)
+            if (date.today() - last_offered_dt).days < INSIGHT_COOLDOWN_DAYS:
+                return False
+        except (ValueError, TypeError):
+            pass # Ignore malformed dates
+
+    # Activity Check: Count unique interaction days in the last 7 days.
+    interaction_log = profile.get("interaction_log", [])
+    if not interaction_log:
+        return False
+
+    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    recent_interaction_days = set()
+    for entry in interaction_log:
+        try:
+            entry_dt = dateparser.parse(entry["timestamp"]).replace(tzinfo=timezone.utc)
+            if entry_dt > seven_days_ago:
+                recent_interaction_days.add(entry_dt.date())
+        except (ValueError, TypeError):
+            continue
+    
+    # Trigger if active on 5 or more of the last 7 days.
+    return len(recent_interaction_days) >= 5
+
+def _analyze_last_7_days(profile):
+    interaction_log = profile.get("interaction_log", [])
+    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    recent_interactions = [e for e in interaction_log if dateparser.parse(e["timestamp"]).replace(tzinfo=timezone.utc) > seven_days_ago]
+    
+    if not recent_interactions:
+        return "You had a quiet week, but it's great to see you back!", None
+
+    # Simple Insight Logic: Check for the most frequent activity
+    intent_counts = defaultdict(int)
+    for interaction in recent_interactions:
+        intent = interaction.get("extracted_intent", {})
+        if intent.get("health_log"):
+            intent_counts[intent["health_log"]["category"]] += 1
+        elif intent.get("period_action"):
+            intent_counts["period_tracking"] += 1
+    
+    if intent_counts:
+        most_common_activity = max(intent_counts, key=intent_counts.get).replace("_", " ")
+        return f"This week, you were really focused on your {most_common_activity}!", None
+        
+    # Fallback insight
+    day_count = len(set(dateparser.parse(e["timestamp"]).date() for e in recent_interactions))
+    return f"This week, you were active on {day_count} different days. Keep it up!", None
+
+# BUGFIX in v117.1: Added missing function _generate_and_save_insight_image
+def _generate_and_save_insight_image(profile):
+    name = profile.get("name", "User").split(" ")[0]
+    insight_text, _ = _analyze_last_7_days(profile)
+    image_url = _generate_insight_image(name, insight_text)
+    return insight_text, image_url
+
+# MODIFIED in v117.3: Beautify image generation
+def _generate_insight_image(name, insight_text):
+    try:
+        # --- Define paths and constants ---
+        template_path = os.path.join('static', 'images', 'insight_template.png')
+        avatar_path = os.path.join('static', 'images', 'tyra_avatar.png')
+        font_path = os.path.join('static', 'fonts', 'Poppins-Bold.ttf')
+        
+        IMAGE_WIDTH = 1000
+        AVATAR_SIZE = 180
+        
+        # --- Load assets ---
+        base_img = Image.open(template_path).convert("RGBA")
+        avatar_img = Image.open(avatar_path).convert("RGBA")
+        
+        # --- Create circular avatar ---
+        avatar_img = avatar_img.resize((AVATAR_SIZE, AVATAR_SIZE))
+        mask = Image.new("L", (AVATAR_SIZE, AVATAR_SIZE), 0)
+        draw_mask = ImageDraw.Draw(mask)
+        draw_mask.ellipse((0, 0, AVATAR_SIZE, AVATAR_SIZE), fill=255)
+        
+        # --- Composite avatar onto base image ---
+        avatar_pos = ((IMAGE_WIDTH - AVATAR_SIZE) // 2, 100)
+        base_img.paste(avatar_img, avatar_pos, mask)
+        
+        # --- Prepare for text drawing ---
+        draw = ImageDraw.Draw(base_img)
+        title_font = ImageFont.truetype(font_path, 60)
+        text_font = ImageFont.truetype(font_path, 50)
+        brand_font = ImageFont.truetype(font_path, 30)
+        
+        # --- Wrap and draw insight text ---
+        wrapped_text = textwrap.fill(insight_text, width=30)
+        
+        # --- Define text and positions ---
+        title_text = f"{name}'s Weekly Insight"
+        brand_text = "Generated by Tyra | tribher.com"
+        
+        # --- Draw text on image with new positions ---
+        draw.text((IMAGE_WIDTH / 2, 320), title_text, font=title_font, fill="white", anchor="ms")
+        draw.multiline_text((IMAGE_WIDTH / 2, 500), wrapped_text, font=text_font, fill="white", anchor="mm", align="center", spacing=15)
+        draw.text((IMAGE_WIDTH / 2, 900), brand_text, font=brand_font, fill=(255, 255, 255, 200), anchor="ms")
+        
+        # --- Save the image ---
+        filename = f"insight_{uuid.uuid4().hex[:8]}.png"
+        save_path = os.path.join(SHARED_INSIGHTS_DIR, filename)
+        base_img.save(save_path)
+        
+        # Return the public-facing URL
+        return url_for('shared_insight', filename=filename, _external=False)
+    except Exception as e:
+        print(f"!!! ERROR generating insight image: {e}")
+        return None
 
 if __name__ == '__main__':
     if not app.config.get("FLASK_SECRET_KEY"):
