@@ -1,4 +1,4 @@
-// static/js/tyra_widget.js (v117.4 - Fix Cross-Origin Image Download)
+// static/js/tyra_widget.js (v118.1 - Add WebView Bridge support)
 (function() {
     'use strict';
 
@@ -1000,43 +1000,77 @@
         init: async function(options) {
             if (!options.targetElementId || !options.apiUrl) return console.error("Tyra Widget: 'targetElementId' and 'apiUrl' are required.");
             
-            Object.assign(state, { apiUrl: options.apiUrl.replace(/\/$/, ''), targetElement: document.getElementById(options.targetElementId), jwtToken: null, verificationToken: null, isGuest: false, userEmail: '', currentView: 'loading', userName: '', lang: {}, dashboardData: null, childDobs: [], isDashboardStale: false, streaks: { current: 0 } });
+            // MODIFIED in v118.1: Accept authToken and forceOpen options
+            const { apiUrl, targetElementId, authToken, forceOpen } = options;
 
-            // NEW in v111.1: Dynamically construct the avatar URL
+            Object.assign(state, { 
+                apiUrl: apiUrl.replace(/\/$/, ''), 
+                targetElement: document.getElementById(targetElementId),
+                jwtToken: authToken || null, // Use the provided token if it exists
+                onboardingToken: null, 
+                isGuest: false, 
+                userEmail: '',
+                currentView: 'loading',
+                userName: '',
+                lang: {},
+                dashboardData: null,
+                childDobs: [],
+                isDashboardStale: false,
+                streaks: { current: 0 }
+            });
+
             TYRA_AVATAR_URL = `${state.apiUrl}/static/images/tyra_avatar.png`;
 
-            // --- NEW Launcher Logic ---
-            state.targetElement.innerHTML = templates.launcher() + templates.widgetShell('Tyra');
-            const launcher = state.targetElement.querySelector('.tyra-launcher');
-            const widgetContainer = state.targetElement.querySelector('.tyra-widget-container');
-            const closeBtn = state.targetElement.querySelector('#tyra-close-btn');
-
-            launcher.addEventListener('click', () => {
+            // MODIFIED in v118.1: Handle forced open state for native app
+            if (forceOpen) {
+                // Directly render the widget shell without the launcher
+                state.targetElement.innerHTML = templates.widgetShell('Tyra');
+                const widgetContainer = state.targetElement.querySelector('.tyra-widget-container');
                 widgetContainer.classList.add('open');
-                launcher.classList.add('hidden');
-            });
-            closeBtn.addEventListener('click', () => {
-                widgetContainer.classList.remove('open');
-                launcher.classList.remove('hidden');
-            });
-            // --- End Launcher Logic ---
+                // Remove the close button as the native app will handle closing the view
+                const closeBtn = state.targetElement.querySelector('#tyra-close-btn');
+                if(closeBtn) closeBtn.style.display = 'none';
+            } else {
+                // Original web flow with launcher
+                state.targetElement.innerHTML = templates.launcher() + templates.widgetShell('Tyra');
+                const launcher = state.targetElement.querySelector('.tyra-launcher');
+                const widgetContainer = state.targetElement.querySelector('.tyra-widget-container');
+                const closeBtn = state.targetElement.querySelector('#tyra-close-btn');
 
-            try {
-                const config = await api.initialConfig();
-                state.lang = config.lang;
-                state.targetElement.querySelector('#tyra-header-title').textContent = state.lang.app_title || 'Tyra';
-                
-                if (config.auth_mode === 'otp') {
-                    state.currentView = 'email_entry';
-                } else {
-                    await onGuestButtonClick({target: document.createElement('button')});
-                }
-            } catch (error) {
-                console.error("Tyra Init Error:", error);
-                state.lang = { app_title: 'Tyra', welcome_message_guest: 'Chat is temporarily unavailable.' };
-                state.currentView = 'error';
+                launcher.addEventListener('click', () => {
+                    widgetContainer.classList.add('open');
+                    launcher.classList.add('hidden');
+                });
+                closeBtn.addEventListener('click', () => {
+                    widgetContainer.classList.remove('open');
+                    launcher.classList.remove('hidden');
+                });
             }
-            render();
+
+            // MODIFIED in v118.1: Check if we already have a token
+            if (state.jwtToken) {
+                // If a token was provided, we are already authenticated.
+                state.currentView = 'chat';
+                await initializeAuthenticatedSession(); // Fetches config and renders the chat view
+            } else {
+                // Original flow for web users without a token
+                try {
+                    const config = await api.initialConfig();
+                    state.lang = config.lang;
+                    state.targetElement.querySelector('#tyra-header-title').textContent = state.lang.app_title || 'Tyra';
+                    
+                    if (config.auth_mode === 'otp') {
+                        state.currentView = 'email_entry';
+                    } else {
+                        await onGuestButtonClick({target: document.createElement('button')});
+                    }
+                } catch (error) {
+                    console.error("Tyra Init Error:", error);
+                    state.lang = { app_title: 'Tyra', welcome_message_guest: 'Chat is temporarily unavailable.' };
+                    state.currentView = 'error';
+                }
+                render();
+            }
         }
     };
 })();

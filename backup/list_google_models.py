@@ -9,7 +9,7 @@ load_dotenv()
 # or replace os.environ.get('GOOGLE_API_KEY') with your key string.
 genai.configure(api_key=os.environ.get('GOOGLE_API_KEY'))
 
-print("Available Models for generateContent:")
+print("Available Gemini Models for Generation:")
 print("-" * 30)
 
 for m in genai.list_models():

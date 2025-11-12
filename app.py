@@ -1,4 +1,4 @@
-# app.py (v117.2 - Add missing insight generation function)
+# app.py (v118.1 - Add Native App WebView embed route)
 import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets, random, requests
 from datetime import datetime, timedelta, timezone, date
 from flask import Flask, Response, render_template, request, jsonify, session, redirect, url_for, send_from_directory, g
@@ -71,6 +71,7 @@ ALLOWED_ORIGINS = [
 ]
 
 # --- Feature Flags ---
+ENABLE_NATIVE_APP_AUTH = True # NEW in v118.0: Enables a secure endpoint for an authenticated native app to get a token.
 ENABLE_SHAREABLE_INSIGHTS = True # NEW in v117.0
 ENABLE_GAMIFICATION_STREAKS = True # NEW in v116.0: Enables daily check-in streaks.
 ENABLE_VIDEO_SUGGESTIONS = True # NEW in v106.0: Enables in-chat YouTube video suggestions for wellness.
@@ -114,7 +115,7 @@ app.config.from_mapping(os.environ)
 
 # --- NEW in v110.2: Sanitize environment variables to remove extra quotes ---
 # This handles inconsistencies between local .env file parsing and cloud provider environments (like Render).
-for key in ['FLASK_SECRET_KEY', 'GEMINI_API_KEY', 'ZEPTOMAIL_TOKEN', 'SENDER_EMAIL']:
+for key in ['FLASK_SECRET_KEY', 'GEMINI_API_KEY', 'ZEPTOMAIL_TOKEN', 'SENDER_EMAIL', 'NATIVE_APP_SECRET_KEY']:
     if key in app.config and isinstance(app.config[key], str):
         app.config[key] = app.config[key].strip('\'"')
 # --- End Sanitize ---
@@ -126,6 +127,7 @@ app.config['ENABLE_WIDGET_MODE'] = ENABLE_WIDGET_MODE
 app.config['ENABLE_EMAIL_OTP_VERIFICATION'] = ENABLE_EMAIL_OTP_VERIFICATION
 app.config['ENABLE_EMAIL_OTP_API_VERIFICATION'] = ENABLE_EMAIL_OTP_API_VERIFICATION
 app.config['ENABLE_CONVERSATIONAL_ONBOARDING'] = ENABLE_CONVERSATIONAL_ONBOARDING # NEW in v103.0
+app.config['ENABLE_NATIVE_APP_AUTH'] = ENABLE_NATIVE_APP_AUTH # NEW in v118.0
 
 # --- DUAL-BACKEND PERSISTENT STORAGE CONFIGURATION (v101.4) ---
 # Check for a persistent storage path from an environment variable (set in Render).
@@ -210,7 +212,7 @@ def after_request(response):
             # Insecure mode for testing
             response.headers['Access-Control-Allow-Origin'] = '*'
 
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-App-Secret-Key'
         response.headers['Access-Control-Allow-Methods'] = 'POST, GET, OPTIONS, PUT, DELETE'
     return response
 
@@ -278,7 +280,7 @@ def before_request_handler():
             # Insecure mode for testing
             resp.headers['Access-Control-Allow-Origin'] = '*'
 
-        resp.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        resp.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-App-Secret-Key'
         resp.headers['Access-Control-Allow-Methods'] = 'POST, GET, OPTIONS, PUT, DELETE'
 
         return resp
@@ -1882,6 +1884,12 @@ def dashboard():
 
 # --- WIDGET API ROUTES ---
 if app.config['ENABLE_WIDGET_MODE']:
+
+    # NEW in v118.1: A dedicated route to serve the hosting page for the native app's WebView
+    @app.route('/embed/native')
+    def native_embed():
+        return render_template('native_embed.html')
+        
     # MODIFIED in v116.0: Add streak data to config payload
     @app.route('/api/v1/config')
     @token_required
@@ -1918,6 +1926,44 @@ if app.config['ENABLE_WIDGET_MODE']:
         token = generate_token(guest_hash, is_guest=True)
         return jsonify({"status": "success", "token": token, "is_guest": True})
     
+    # NEW in v118.0: Secure endpoint for the authenticated native mobile app
+    if app.config.get('ENABLE_NATIVE_APP_AUTH'):
+        @app.route('/api/v1/auth/native_app_session', methods=['POST'])
+        def api_native_app_session():
+            app_secret_key = request.headers.get('X-App-Secret-Key')
+            correct_key = app.config.get('NATIVE_APP_SECRET_KEY')
+
+            if not correct_key or not app_secret_key or not secrets.compare_digest(app_secret_key, correct_key):
+                return jsonify({"error": "Unauthorized: Invalid application secret key."}), 401
+            
+            data = request.json
+            identifier = data.get('identifier')
+            if not identifier:
+                return jsonify({"error": "User identifier is required."}), 400
+            
+            profile_hash = get_profile_hash(identifier)
+            profile = load_profile(profile_hash)
+
+            if not profile:
+                # If the user doesn't exist, create a profile for them on the fly
+                name = data.get('name')
+                age_str = data.get('age')
+                if not name or not age_str:
+                    return jsonify({"error": "Name and age are required for new user creation."}), 400
+                
+                try:
+                    phone = identifier if '@' not in identifier else ''
+                    primary_email = identifier if '@' in identifier else ''
+                    
+                    profile = create_user_profile(name, primary_email, phone, int(age_str), {}, 'en')
+                    save_profile(profile_hash, profile)
+                except (ValueError, TypeError) as e:
+                    return jsonify({"error": f"Invalid data for profile creation: {e}"}), 400
+
+            # If profile exists or was just created, issue a long-lived token
+            token = generate_token(profile_hash)
+            return jsonify({"status": "success", "token": token})
+
     if app.config.get('ENABLE_EMAIL_OTP_API_VERIFICATION'):
         @app.route('/api/v1/auth/request_otp', methods=['POST'])
         def api_request_otp():
@@ -3299,4 +3345,7 @@ if __name__ == '__main__':
     # MODIFIED in v110.0: Check for ZeptoMail token instead of SendGrid
     if app.config.get('ENABLE_EMAIL_OTP_VERIFICATION') and (not app.config.get("ZEPTOMAIL_TOKEN") or not app.config.get("SENDER_EMAIL")):
         print("WARNING: ENABLE_EMAIL_OTP_VERIFICATION is True, but ZEPTOMAIL_TOKEN or SENDER_EMAIL is not set. OTP emails will fail.")
+    # NEW in v118.0: Check for the native app secret key if the feature is enabled
+    if app.config.get('ENABLE_NATIVE_APP_AUTH') and not app.config.get('NATIVE_APP_SECRET_KEY'):
+        print("WARNING: ENABLE_NATIVE_APP_AUTH is True, but NATIVE_APP_SECRET_KEY is not set. Native app authentication will fail.")
     app.run(host='0.0.0.0', port=5001, debug=True)

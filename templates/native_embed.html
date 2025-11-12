@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Tyra Native Embed</title>
+    <!-- The widget's CSS will be loaded by the script -->
+    <style>
+        /* Basic reset to ensure full-screen display */
+        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+    </style>
+</head>
+<body>
+    <!-- This is the target container for the widget -->
+    <div id="tyra-chat-widget"></div>
+
+    <script>
+        // This global function will be called by the native app to start Tyra
+        // It receives the API URL and the pre-authenticated JWT.
+        function initializeTyra(apiUrl, authToken) {
+            // --- DYNAMIC LOADER SCRIPT ---
+            const cssLink = document.createElement('link');
+            cssLink.rel = 'stylesheet';
+            cssLink.href = `${apiUrl}/static/css/tyra_widget.css`;
+            document.head.appendChild(cssLink);
+
+            const widgetScript = document.createElement('script');
+            widgetScript.src = `${apiUrl}/static/js/tyra_widget.js`;
+            
+            widgetScript.onload = function() {
+                // Initialize the widget, but force it open and pass the auth token
+                TyraWidget.init({
+                    targetElementId: 'tyra-chat-widget',
+                    apiUrl: apiUrl,
+                    forceOpen: true, // Keep the widget open, no launcher
+                    authToken: authToken // Pass the pre-authenticated token
+                });
+            };
+            
+            document.body.appendChild(widgetScript);
+        }
+    </script>
+</body>
+</html>

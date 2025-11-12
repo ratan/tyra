@@ -24,13 +24,32 @@ COMPREHENSIVE_PROGRAM_DATA = {
                 "points": ["45-60 minute comprehensive sessions", "Warm-up with mobility and activation exercises", "Functional strength training targeting major muscle groups", "Yoga flow for flexibility and stress reduction", "Moderate cardio intervals for cardiovascular health", "Cool-down with meditation and breathing exercises"]
             }
         },
-        "sub_programs": [{
-            "name": "Pre-conception Program",
-            "pricing_plans": [
-                {"plan_title": "1 Month", "price": "₹ 3499", "features": ["12 sessions", "Personalized Attention", "Recordings Available"]},
-                {"plan_title": "3 Months", "price": "₹ 8999", "features": ["36 sessions", "Personalized Attention", "Recordings Available"]}
-            ]
-        }]
+        "sub_programs": [
+            {
+                "name": "Pre-conception Yoga",
+                "pricing_plans": [
+                    {"plan_title": "1 Month", "price": "₹ 2999", "features": ["12 sessions", "Personalized Attention", "Recordings Available"]},
+                    {"plan_title": "3 Months", "price": "₹ 8987", "features": ["36 sessions", "Personalized Attention", "Recordings Available"]},
+                    {"plan_title": "6 Months", "price": "₹ 17994", "features": ["72 sessions", "Personalized Attention", "Recordings Available"]}
+                ]
+            },
+            {
+                "name": "Pre-conception Strength",
+                "pricing_plans": [
+                    {"plan_title": "1 Month", "price": "₹ 2999", "features": ["12 sessions", "Personalized Attention", "Recordings Available"]},
+                    {"plan_title": "3 Months", "price": "₹ 8987", "features": ["36 sessions", "Personalized Attention", "Recordings Available"]},
+                    {"plan_title": "6 Months", "price": "₹ 17994", "features": ["72 sessions", "Personalized Attention", "Recordings Available"]}
+                ]
+            },
+            {
+                "name": "Pre-conception Signature",
+                "pricing_plans": [
+                    {"plan_title": "1 Month", "price": "₹ 3999", "features": ["24 sessions", "Personalized Attention", "Recordings Available"]},
+                    {"plan_title": "3 Months", "price": "₹ 11997", "features": ["72 sessions", "Personalized Attention", "Recordings Available"]},
+                    {"plan_title": "6 Months", "price": "₹ 23994", "features": ["114 sessions", "Personalized Attention", "Recordings Available"]}
+                ]
+            }
+        ]
     },
     "Prenatal / Pregnancy Programs": {
         "name": "Prenatal / Pregnancy Programs",
@@ -49,19 +68,27 @@ COMPREHENSIVE_PROGRAM_DATA = {
         },
         "sub_programs": [
             {
-                "name": "Prenatal Yoga",
+                "name": "Pregnancy Yoga Program",
                 "pricing_plans": [
-                    {"plan_title": "1 Month", "price": "₹ 3499", "features": ["12 sessions", "Personalized Attention", "Recordings Available"]},
-                    {"plan_title": "3 Months", "price": "₹ 8999", "features": ["36 sessions", "Personalized Attention", "Recordings Available"]},
-                    {"plan_title": "6 Months", "price": "₹ 15999", "features": ["72 sessions", "Personalized Attention", "Recordings Available"]}
+                    {"plan_title": "1 Month", "price": "₹ 2499", "features": ["12 sessions", "Personalized Attention", "Recordings Available"]},
+                    {"plan_title": "3 Months", "price": "₹ 7497", "features": ["36 sessions", "Personalized Attention", "Recordings Available"]},
+                    {"plan_title": "6 Months", "price": "₹ 14994", "features": ["72 sessions", "Personalized Attention", "Recordings Available"]}
                 ]
             },
             {
-                "name": "Prenatal Exercise",
+                "name": "Pregnancy Strength Training",
+                "pricing_plans": [
+                    {"plan_title": "1 Month", "price": "₹ 2499", "features": ["12 sessions", "Personalized Attention", "Recordings Available"]},
+                    {"plan_title": "3 Months", "price": "₹ 7497", "features": ["36 sessions", "Personalized Attention", "Recordings Available"]},
+                    {"plan_title": "6 Months", "price": "₹ 14994", "features": ["72 sessions", "Personalized Attention", "Recordings Available"]}
+                ]
+            },
+            {
+                "name": "Signature Pregnancy Wellness",
                 "pricing_plans": [
                     {"plan_title": "1 Month", "price": "₹ 3499", "features": ["12 sessions", "Personalized Attention", "Recordings Available"]},
-                    {"plan_title": "3 Months", "price": "₹ 8999", "features": ["36 sessions", "Personalized Attention", "Recordings Available"]},
-                    {"plan_title": "6 Months", "price": "₹ 15999", "features": ["72 sessions", "Personalized Attention", "Recordings Available"]}
+                    {"plan_title": "3 Months", "price": "₹ 10497", "features": ["36 sessions", "Personalized Attention", "Recordings Available"]},
+                    {"plan_title": "6 Months", "price": "₹ 20994", "features": ["72 sessions", "Personalized Attention", "Recordings Available"]}
                 ]
             }
         ]
@@ -81,14 +108,33 @@ COMPREHENSIVE_PROGRAM_DATA = {
                 "points": ["Progressive 6-week recovery phases", "Core rehabilitation exercises", "Pelvic floor strengthening routines", "Posture correction and mobility work", "Gradual return to higher intensity training"]
             }
         },
-        "sub_programs": [{
-            "name": "Postnatal Program",
-            "pricing_plans": [
-                {"plan_title": "1 Month", "price": "₹ 3499", "features": ["12 sessions", "Personalized Attention", "Recordings Available"]},
-                {"plan_title": "3 Months", "price": "₹ 8999", "features": ["36 sessions", "Personalized Attention", "Recordings Available"]},
-                {"plan_title": "6 Months", "price": "₹ 15999", "features": ["72 sessions", "Personalized Attention", "Recordings Available"]}
-            ]
-        }]
+        # --- THIS IS THE CORRECTED SECTION ---
+        "sub_programs": [
+            {
+                "name": "Mummy Tummy Program",
+                "pricing_plans": [
+                    {"plan_title": "1 Month", "price": "₹ 3299", "features": ["12 sessions", "Personalized Attention", "Recordings Available"]},
+                    {"plan_title": "3 Months", "price": "₹ 9897", "features": ["36 sessions", "Personalized Attention", "Recordings Available"]},
+                    {"plan_title": "6 Months", "price": "₹ 19794", "features": ["72 sessions", "Personalized Attention", "Recordings Available"]}
+                ]
+            },
+            {
+                "name": "Post Pregnancy Yoga Program",
+                "pricing_plans": [
+                    {"plan_title": "1 Month", "price": "₹ 1999", "features": ["12 sessions", "Personalized Attention", "Recordings Available"]},
+                    {"plan_title": "3 Months", "price": "₹ 5397", "features": ["36 sessions", "Personalized Attention", "Recordings Available"]},
+                    {"plan_title": "6 Months", "price": "₹ 11994", "features": ["72 sessions", "Personalized Attention", "Recordings Available"]}
+                ]
+            },
+            {
+                "name": "Signature Post Pregnancy Program",
+                "pricing_plans": [
+                    {"plan_title": "1 Month", "price": "₹ 2999", "features": ["12 sessions", "Personalized Attention", "Recordings Available"]},
+                    {"plan_title": "3 Months", "price": "₹ 8987", "features": ["36 sessions", "Personalized Attention", "Recordings Available"]},
+                    {"plan_title": "6 Months", "price": "₹ 17994", "features": ["72 sessions", "Personalized Attention", "Recordings Available"]}
+                ]
+            }
+        ]
     },
     "StrongHer 40+ Programs": {
         "name": "StrongHer 40+ Programs",
@@ -105,14 +151,32 @@ COMPREHENSIVE_PROGRAM_DATA = {
                 "points": ["Strength training for bone and muscle health", "Hormone-balancing yoga sequences", "Face yoga for natural anti-aging", "Restorative practices for stress relief", "Nutrition workshops for metabolic health"]
             }
         },
-        "sub_programs": [{
-            "name": "StrongHer 40+ Program",
-            "pricing_plans": [
-                {"plan_title": "1 Month", "price": "₹ 3499", "features": ["12 sessions", "Personalized Attention", "Recordings Available"]},
-                {"plan_title": "3 Months", "price": "₹ 8999", "features": ["36 sessions", "Personalized Attention", "Recordings Available"]},
-                {"plan_title": "6 Months", "price": "₹ 15999", "features": ["72 sessions", "Personalized Attention", "Recordings Available"]}
-            ]
-        }]
+        "sub_programs": [
+            {
+                "name": "Perimenopause Yoga",
+                "pricing_plans": [
+                    {"plan_title": "1 Month", "price": "₹ 2999", "features": ["12 sessions", "Personalized Attention", "Recordings Available"]},
+                    {"plan_title": "3 Months", "price": "₹ 8997", "features": ["36 sessions", "Personalized Attention", "Recordings Available"]},
+                    {"plan_title": "6 Months", "price": "₹ 17994", "features": ["72 sessions", "Personalized Attention", "Recordings Available"]}
+                ]
+            },
+            {
+                "name": "Perimenopause Pelvic",
+                "pricing_plans": [
+                    {"plan_title": "1 Month", "price": "₹ 2999", "features": ["12 sessions", "Personalized Attention", "Recordings Available"]},
+                    {"plan_title": "3 Months", "price": "₹ 8997", "features": ["36 sessions", "Personalized Attention", "Recordings Available"]},
+                    {"plan_title": "6 Months", "price": "₹ 17994", "features": ["72 sessions", "Personalized Attention", "Recordings Available"]}
+                ]
+            },
+            {
+                "name": "Perimenopause Signature",
+                "pricing_plans": [
+                    {"plan_title": "1 Month", "price": "₹ 3999", "features": ["12 sessions", "Personalized Attention", "Recordings Available"]},
+                    {"plan_title": "3 Months", "price": "₹ 11997", "features": ["36 sessions", "Personalized Attention", "Recordings Available"]},
+                    {"plan_title": "6 Months", "price": "₹ 23994", "features": ["72 sessions", "Personalized Attention", "Recordings Available"]}
+                ]
+            }
+        ]
     }
 }
 
@@ -136,11 +200,7 @@ class TribherScraper:
             return None
     
     def get_structured_program_data(self):
-        """
-        Returns the comprehensive, hardcoded program data with nested pricing.
-        This is the most reliable method for this site.
-        """
-        # Return the values from the global dictionary as a list
+        """Returns the comprehensive, hardcoded program data with nested pricing."""
         return list(COMPREHENSIVE_PROGRAM_DATA.values())
         
     def extract_general_info_enhanced(self, soup):
@@ -162,17 +222,14 @@ class TribherScraper:
         """Main scraping method using the reliable structured data approach."""
         print(f"Starting enhanced scrape of {self.base_url}...")
         
-        # We fetch the page mainly for general info like meta tags.
         soup = self.fetch_page(self.base_url)
         if not soup:
             print("Warning: Failed to fetch the website. General info might be incomplete.")
             soup = BeautifulSoup("<html></html>", 'html.parser')
 
-        # Get the definitive program data and general info
         programs_with_pricing = self.get_structured_program_data()
         general_info = self.extract_general_info_enhanced(soup)
         
-        # Create the final structured data object
         structured_data = {
             'site_name': 'Tribher',
             'scrape_timestamp_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -210,7 +267,6 @@ class TribherScraper:
             print(f"      - Goals: {len(program.get('details', {}).get('goals', []))} items")
             print(f"      - Benefits: {len(program.get('details', {}).get('benefits', []))} items") 
             
-            # Print Sub-Programs and Pricing
             print(f"      - Sub-Programs & Pricing:")
             if not program.get('sub_programs'):
                 print("         - No sub-programs listed.")
@@ -233,7 +289,7 @@ def main():
     
     if data:
         scraper.print_detailed_summary(data)
-        scraper.save_to_json(data, 'tribher_data_final.json')
+        scraper.save_to_json(data, '../tribher_data_final.json')
         print(f"\n🎉 Scraping completed successfully!")
     else:
         print("❌ Failed to scrape data from the website.")

@@ -74,7 +74,8 @@ The `.env` file holds your secret keys for local development.
 
 **2. Fill in your credentials:**
    *   Generate a `FLASK_SECRET_KEY` by running this in your terminal: `python3 -c 'import secrets; print(secrets.token_hex(24))'`
-   *   Add your `GEMINI_API_KEY` from Google AI Studio.
+   *   Add your `GEMINI_API_KEY` from Google AI Studio. Currently it is linked with GEMINI API dummy project.
+   *   https://aistudio.google.com/ -> Get API Key -> Project -> Import Project -> Gemini API -> Key (Select API Key) (Later Set Up billing)
    *   Add your `SENDGRID_API_KEY` and verified `SENDER_EMAIL` from SendGrid.
    *   Add a temporary `ADMIN_SECRET_KEY` for local testing of the download endpoint.
 
@@ -222,16 +223,13 @@ https://tyra-ai.onrender.com/admin/backup/download_db/X7kP9mW3qT8rY2nF6vL4zJ0hB5
 4.  Run the Script: python scrape_tribher_final.py
 5.  Check the Output: A file named tribher_data_final.json will be created with the correctly structured data.
 
-#### **Point 3: Gemini Rate Limit**
-https://ai.google.dev/gemini-api/docs/rate-limits#free-tier
 
-
-#### **Point 4: Health data**
+#### **Point 3: Health data**
 1.  https://www.healthyapps.dev/developers
 2.  https://sahha.ai/pricing
 
 
-#### **Point 5: Milestones**
+#### **Point 4: Milestones**
 1.  Monolith Final: Feature_Comp_monolith_24Jul_5_women_health_chatbot/ (Jul 24)
 2.  Guest Mode: Feature_Comp_22Jul_1_women_health_chatbot/ (Jul 22)
 3.  Fertility: 21Jul_2_women_health_chatbot/
@@ -239,13 +237,13 @@ https://ai.google.dev/gemini-api/docs/rate-limits#free-tier
 5.  Sharable Insights: Feature_comp_24oct25_1_sharable_insights_women_health_chatbot
 
 
-#### **Point 6: Pending Item**
+#### **Point 5: Pending Item**
 1.  ENABLE_SECURE_CORS_POLICY=True (Once Tribher is connected)  
-2.  Add video in youtube and make them private (check app too)
+2.  Add video in youtube and make them Public but dont list in channel (check app too)
 3.  Redis support
 4.  TBD
 
-#### **Point 7: SCP to Render**
+#### **Point 6: SCP to Render**
 1.  From Render, Shell, SSH Address: ssh srv-d2675ure5dus73d8l7qg@ssh.singapore.render.com
 2.  ssh srv-d2675ure5dus73d8l7qg@ssh.singapore.render.com
 3.  When asked, enter yes
@@ -253,7 +251,7 @@ https://ai.google.dev/gemini-api/docs/rate-limits#free-tier
 5.  You can see all the persistant files
 6.  scp -r milestones_data.json srv-d2675ure5dus73d8l7qg@ssh.singapore.render.com:/data/tyra
 
-#### **Point 8: Language Support**
+#### **Point 7: Language Support**
 ```html
 <select name="language" id="language" required>
     <option value="en" selected>English</option>
@@ -271,3 +269,47 @@ https://ai.google.dev/gemini-api/docs/rate-limits#free-tier
     <option value="ar">العربية (Arabic)</option>
 </select>
 ```
+
+
+### **Utility or Helper tools**
+
+This sectoion list few of helper or utility tools or functions needed for Tyra.
+
+#### **1: Available Models for generatation**
+List the Available Gemini Models for generatation
+
+```bash
+cd backup/
+python list_google_models.py
+```
+This will list of acive gemini models.
+Use/Update the appropriate models in GEMINI_MODEL_CASCADE_LIST in app.py.
+
+#### **2: Gemini Rate Limit**
+https://ai.google.dev/gemini-api/docs/rate-limits#free-tier
+
+We are using Free Tier righjt now, later move to  Tier 1.
+
+* How to Correlate
+
+```bash
+list_google_models.py list two models:
+models/gemini-2.5-flash-lite-preview-06-17
+models/gemini-2.5-flash-lite-preview-09-2025
+```
+
+The rate limit for "Gemini 2.5 Flash-Lite Preview" applies to both of the specific models you listed above.
+
+Best Practice: You should generally use the most recent version available from the API, which in your list would be `models/gemini-2.5-flash-lite-preview-09-2025`. This ensures you are using the latest iteration of the preview model.
+
+#### **3: Tribher Pricing Plan**
+
+```bash
+cd backup/
+python scrape_tribher_final.py
+```
+This script generates `tribher_data_final.json` file which is used by Tyra to suggest about Tribher Programs and pricing.
+
+* How to Update
+
+Update `scrape_tribher_final.py` carefully. As Tribher.com was not allowing the general web scrapping, we had to manually update `scrape_tribher_final.py` file with all the contents, plans, pricing. Do it carefully as json format is important for Tyra.
