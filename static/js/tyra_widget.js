@@ -1,4 +1,4 @@
-// static/js/tyra_widget.js (v118.3 - Link Quick Logs to Animations)
+// static/js/tyra_widget.js (v118.5 - Sync Header Icon with Launcher)
 (function() {
     'use strict';
 
@@ -19,12 +19,24 @@
         childDobs: [], // For profile creation form
         isDashboardStale: false, // FIX v100.2: Flag to signal dashboard needs a refresh
         isSettingsMenuOpen: false, // NEW in v114.0
-        streaks: { current: 0 } // NEW in v116.0
+        streaks: { current: 0 }, // NEW in v116.0
+        launcherIconKey: 'default' // NEW in v118.4: Track selected icon key
     };
 
     // --- CONSTANTS ---
     // MODIFIED in v111.1: This will be dynamically constructed in init()
     let TYRA_AVATAR_URL = '';
+    
+    // --- NEW in v118.4: Discreet Mode Options ---
+    // Note: Ensure these images exist in your static/images folder for this feature to fully work.
+    // 'default' uses the existing avatar.
+    const DISCREET_ICONS = {
+        'default': { label: 'Tyra', src: 'static/images/tyra_avatar.png' },
+        'notes': { label: 'Notes', src: 'static/images/icon_notes.png' },
+        'weather': { label: 'Weather', src: 'static/images/icon_weather.png' },
+        'calendar': { label: 'Calendar', src: 'static/images/icon_calendar.png' },
+        'journal': { label: 'Journal', src: 'static/images/icon_journal.png' }
+    };
     
     // --- MODIFIED in v118.3: Expanded Easter Egg Keywords for Quick Logs ---
     const EASTER_EGGS = {
@@ -42,16 +54,31 @@
 
     // --- TEMPLATES ---
     const templates = {
-        // MODIFIED in v111.5: Simplified launcher HTML structure
-        launcher: () => `<div class="tyra-launcher">
-                            <img src="${TYRA_AVATAR_URL}" alt="Tyra Avatar">
-                         </div>`,
-        // MODIFIED in v114.0 & v116.0 & v118.2: Added FX Container for animations
-        widgetShell: (title) => `
+        // MODIFIED in v118.4: Use dynamic icon URL for launcher based on state
+        launcher: () => {
+            const iconKey = state.launcherIconKey || 'default';
+            // Fallback to default if key doesn't exist (e.g. old localstorage value)
+            const iconInfo = DISCREET_ICONS[iconKey] || DISCREET_ICONS['default'];
+            const iconPath = iconInfo.src;
+            // Construct full URL if relative
+            const fullUrl = iconPath.startsWith('http') ? iconPath : `${state.apiUrl}/${iconPath}`;
+            return `<div class="tyra-launcher">
+                        <img src="${fullUrl}" alt="Tyra Widget">
+                    </div>`;
+        },
+        // MODIFIED in v118.5: Sync Header Icon with Launcher Icon Logic
+        widgetShell: (title) => {
+            // Logic to pick the correct icon for the header
+            const iconKey = state.launcherIconKey || 'default';
+            const iconInfo = DISCREET_ICONS[iconKey] || DISCREET_ICONS['default'];
+            const iconPath = iconInfo.src;
+            const fullUrl = iconPath.startsWith('http') ? iconPath : `${state.apiUrl}/${iconPath}`;
+
+            return `
             <div class="tyra-widget-container">
                 <div class="tyra-widget-header">
                     <div class="tyra-header-identity">
-                        <img src="${TYRA_AVATAR_URL}" alt="Tyra Avatar" class="tyra-header-avatar">
+                        <img src="${fullUrl}" alt="App Icon" class="tyra-header-avatar">
                         <h3 id="tyra-header-title">${title}</h3>
                     </div>
                     <div class="tyra-header-controls">
@@ -60,6 +87,10 @@
                         <button id="tyra-settings-btn" class="tyra-settings-btn" style="display: none;">⋮</button>
                         <div id="tyra-settings-dropdown" class="tyra-settings-dropdown">
                             <a href="https://fitcommunity.in/privacyPolicy.php" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
+                            <!-- NEW in v118.4: Change Icon Menu Item -->
+                            <div class="tyra-settings-separator"></div>
+                            <button id="tyra-change-icon-btn">🎭 Change App Icon</button>
+                            <div class="tyra-settings-separator"></div>
                             <a href="#" id="tyra-logout-link">Logout</a>
                         </div>
                         <button id="tyra-close-btn" class="tyra-close-btn">×</button>
@@ -70,7 +101,33 @@
                     <div id="tyra-fx-container" class="tyra-fx-container"></div>
                     <div id="tyra-comfort-overlay" class="tyra-comfort-overlay"></div>
                 </div>
-            </div>`,
+                <!-- NEW in v118.4: Hidden Icon Picker Modal Container (Populated dynamically) -->
+                <div id="tyra-icon-picker-container"></div>
+            </div>`;
+        },
+        // NEW in v118.4: Icon Picker Modal Template
+        iconPickerModal: () => {
+            let gridHtml = '';
+            for (const [key, info] of Object.entries(DISCREET_ICONS)) {
+                const fullUrl = `${state.apiUrl}/${info.src}`;
+                const isSelected = key === state.launcherIconKey ? 'selected' : '';
+                gridHtml += `
+                    <div class="tyra-icon-choice ${isSelected}" data-icon-key="${key}">
+                        <img src="${fullUrl}" alt="${info.label}">
+                        <span class="tyra-icon-label">${info.label}</span>
+                    </div>`;
+            }
+            return `
+                <div class="tyra-icon-picker-overlay">
+                    <div class="tyra-icon-picker-modal">
+                        <h4>Choose Icon</h4>
+                        <div class="tyra-icon-grid">
+                            ${gridHtml}
+                        </div>
+                        <button class="tyra-icon-picker-close">Cancel</button>
+                    </div>
+                </div>`;
+        },
         emailEntryView: () => `
             <div class="tyra-form-view">
                 <h2>${state.lang.welcome_text || 'Welcome!'}</h2>
@@ -548,6 +605,10 @@
         const logoutLink = state.targetElement.querySelector('#tyra-logout-link');
         if (logoutLink) logoutLink.addEventListener('click', onLogout);
         
+        // NEW in v118.4: Icon Change Listener
+        const changeIconBtn = state.targetElement.querySelector('#tyra-change-icon-btn');
+        if(changeIconBtn) changeIconBtn.addEventListener('click', onIconChangeClick);
+
         const emailForm = state.targetElement.querySelector('#tyra-email-form');
         if (emailForm) emailForm.addEventListener('submit', onEmailSubmit);
         
@@ -628,7 +689,54 @@
             toggleSettingsMenu(false);
         }
     }
-    // --- End v114.0 Logic ---
+    
+    // --- NEW in v118.4: Icon Picker Logic ---
+    function onIconChangeClick(e) {
+        e.preventDefault();
+        toggleSettingsMenu(false); // Close settings
+        
+        const container = state.targetElement.querySelector('#tyra-icon-picker-container');
+        if(container) {
+            container.innerHTML = templates.iconPickerModal();
+            
+            // Bind close button
+            container.querySelector('.tyra-icon-picker-close').addEventListener('click', () => {
+                container.innerHTML = '';
+            });
+            
+            // Bind icon selection
+            container.querySelectorAll('.tyra-icon-choice').forEach(choice => {
+                choice.addEventListener('click', () => {
+                    const selectedKey = choice.dataset.iconKey;
+                    changeLauncherIcon(selectedKey);
+                    container.innerHTML = ''; // Close modal
+                });
+            });
+        }
+    }
+
+    // --- MODIFIED in v118.5: Update BOTH launcher and header ---
+    function changeLauncherIcon(key) {
+        state.launcherIconKey = key;
+        localStorage.setItem('tyra_launcher_pref', key);
+        
+        // Update the launcher image
+        const launcherImg = document.querySelector('.tyra-launcher img');
+        // Update the header avatar
+        const headerImg = document.querySelector('.tyra-header-avatar');
+        
+        // Fallback to default if key doesn't exist (e.g. old localstorage value)
+        const iconInfo = DISCREET_ICONS[key] || DISCREET_ICONS['default'];
+        
+        if (iconInfo) {
+            const iconPath = iconInfo.src;
+            const fullUrl = iconPath.startsWith('http') ? iconPath : `${state.apiUrl}/${iconPath}`;
+            
+            if (launcherImg) launcherImg.src = fullUrl;
+            if (headerImg) headerImg.src = fullUrl;
+        }
+    }
+    // --- End v118.4 Logic ---
 
     async function onEmailSubmit(e) {
         e.preventDefault();
@@ -1089,6 +1197,9 @@
             // MODIFIED in v118.1: Accept authToken and forceOpen options
             const { apiUrl, targetElementId, authToken, forceOpen } = options;
 
+            // NEW in v118.4: Read saved icon preference
+            const savedIconKey = localStorage.getItem('tyra_launcher_pref') || 'default';
+
             Object.assign(state, { 
                 apiUrl: apiUrl.replace(/\/$/, ''), 
                 targetElement: document.getElementById(targetElementId),
@@ -1102,7 +1213,8 @@
                 dashboardData: null,
                 childDobs: [],
                 isDashboardStale: false,
-                streaks: { current: 0 }
+                streaks: { current: 0 },
+                launcherIconKey: savedIconKey // Set initial icon state
             });
 
             TYRA_AVATAR_URL = `${state.apiUrl}/static/images/tyra_avatar.png`;
