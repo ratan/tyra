@@ -1,4 +1,4 @@
-// static/js/tyra_widget.js (v118.5 - Sync Header Icon with Launcher)
+// static/js/tyra_widget.js (v119.0 - Added Theme Picker)
 (function() {
     'use strict';
 
@@ -20,7 +20,8 @@
         isDashboardStale: false, // FIX v100.2: Flag to signal dashboard needs a refresh
         isSettingsMenuOpen: false, // NEW in v114.0
         streaks: { current: 0 }, // NEW in v116.0
-        launcherIconKey: 'default' // NEW in v118.4: Track selected icon key
+        launcherIconKey: 'default', // NEW in v118.4: Track selected icon key
+        themeKey: 'default' // NEW in v119.0: Track selected theme
     };
 
     // --- CONSTANTS ---
@@ -28,14 +29,22 @@
     let TYRA_AVATAR_URL = '';
     
     // --- NEW in v118.4: Discreet Mode Options ---
-    // Note: Ensure these images exist in your static/images folder for this feature to fully work.
-    // 'default' uses the existing avatar.
     const DISCREET_ICONS = {
         'default': { label: 'Tyra', src: 'static/images/tyra_avatar.png' },
         'notes': { label: 'Notes', src: 'static/images/icon_notes.png' },
         'weather': { label: 'Weather', src: 'static/images/icon_weather.png' },
         'calendar': { label: 'Calendar', src: 'static/images/icon_calendar.png' },
         'journal': { label: 'Journal', src: 'static/images/icon_journal.png' }
+    };
+
+    // --- NEW in v119.0: Aesthetic Theme Options ---
+    const THEMES = {
+        'default': { label: 'Tyra', color: '#8B4A9C' },
+        'midnight': { label: 'Midnight', color: '#121212' }, // Dark
+        'coquette': { label: 'Coquette', color: '#FFCDD2' }, // Pink
+        'matcha': { label: 'Matcha', color: '#558B2F' },    // Green
+        'ocean': { label: 'Ocean', color: '#00838F' },       // Blue
+        'sunset': { label: 'Sunset', color: '#FF7043' }      // Orange
     };
     
     // --- MODIFIED in v118.3: Expanded Easter Egg Keywords for Quick Logs ---
@@ -67,6 +76,7 @@
                     </div>`;
         },
         // MODIFIED in v118.5: Sync Header Icon with Launcher Icon Logic
+        // MODIFIED in v119.0: Add Data Theme Attribute & Change Theme Button
         widgetShell: (title) => {
             // Logic to pick the correct icon for the header
             const iconKey = state.launcherIconKey || 'default';
@@ -75,7 +85,7 @@
             const fullUrl = iconPath.startsWith('http') ? iconPath : `${state.apiUrl}/${iconPath}`;
 
             return `
-            <div class="tyra-widget-container">
+            <div class="tyra-widget-container" data-theme="${state.themeKey}">
                 <div class="tyra-widget-header">
                     <div class="tyra-header-identity">
                         <img src="${fullUrl}" alt="App Icon" class="tyra-header-avatar">
@@ -87,9 +97,10 @@
                         <button id="tyra-settings-btn" class="tyra-settings-btn" style="display: none;">⋮</button>
                         <div id="tyra-settings-dropdown" class="tyra-settings-dropdown">
                             <a href="https://fitcommunity.in/privacyPolicy.php" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
-                            <!-- NEW in v118.4: Change Icon Menu Item -->
+                            <!-- NEW in v119.0: Change Theme Menu Item -->
                             <div class="tyra-settings-separator"></div>
-                            <button id="tyra-change-icon-btn">🎭 Change App Icon</button>
+                            <button id="tyra-change-theme-btn">🎨 Change Theme</button>
+                            <button id="tyra-change-icon-btn">🎭 Change Icon</button>
                             <div class="tyra-settings-separator"></div>
                             <a href="#" id="tyra-logout-link">Logout</a>
                         </div>
@@ -101,8 +112,8 @@
                     <div id="tyra-fx-container" class="tyra-fx-container"></div>
                     <div id="tyra-comfort-overlay" class="tyra-comfort-overlay"></div>
                 </div>
-                <!-- NEW in v118.4: Hidden Icon Picker Modal Container (Populated dynamically) -->
-                <div id="tyra-icon-picker-container"></div>
+                <!-- NEW in v118.4: Hidden Modal Container (Populated dynamically) -->
+                <div id="tyra-modal-container"></div>
             </div>`;
         },
         // NEW in v118.4: Icon Picker Modal Template
@@ -118,13 +129,36 @@
                     </div>`;
             }
             return `
-                <div class="tyra-icon-picker-overlay">
-                    <div class="tyra-icon-picker-modal">
+                <div class="tyra-modal-overlay">
+                    <div class="tyra-picker-modal">
                         <h4>Choose Icon</h4>
                         <div class="tyra-icon-grid">
                             ${gridHtml}
                         </div>
-                        <button class="tyra-icon-picker-close">Cancel</button>
+                        <button class="tyra-modal-close">Cancel</button>
+                    </div>
+                </div>`;
+        },
+        // NEW in v119.0: Theme Picker Modal Template
+        themePickerModal: () => {
+            let gridHtml = '';
+            for (const [key, info] of Object.entries(THEMES)) {
+                const isSelected = key === state.themeKey ? 'selected' : '';
+                // Show a color circle
+                gridHtml += `
+                    <div class="tyra-theme-choice ${isSelected}" data-theme-key="${key}">
+                        <div class="tyra-theme-circle" style="background-color: ${info.color};"></div>
+                        <span class="tyra-theme-label">${info.label}</span>
+                    </div>`;
+            }
+            return `
+                <div class="tyra-modal-overlay">
+                    <div class="tyra-picker-modal">
+                        <h4>Choose Aesthetic</h4>
+                        <div class="tyra-theme-grid">
+                            ${gridHtml}
+                        </div>
+                        <button class="tyra-modal-close">Cancel</button>
                     </div>
                 </div>`;
         },
@@ -341,7 +375,7 @@
         // MODIFIED in v118.2: Append view HTML but preserve the fixed overlay containers
         viewContainer.innerHTML = viewHTML;
         
-        // Re-inject FX containers if they were wiped by innerHTML (surgical fix)
+        // Surgical fix for FX containers
         if (!viewContainer.querySelector('#tyra-fx-container')) {
              const fxDiv = document.createElement('div'); fxDiv.id = 'tyra-fx-container'; fxDiv.className = 'tyra-fx-container';
              const comfortDiv = document.createElement('div'); comfortDiv.id = 'tyra-comfort-overlay'; comfortDiv.className = 'tyra-comfort-overlay';
@@ -608,6 +642,10 @@
         // NEW in v118.4: Icon Change Listener
         const changeIconBtn = state.targetElement.querySelector('#tyra-change-icon-btn');
         if(changeIconBtn) changeIconBtn.addEventListener('click', onIconChangeClick);
+        
+        // NEW in v119.0: Theme Change Listener
+        const changeThemeBtn = state.targetElement.querySelector('#tyra-change-theme-btn');
+        if(changeThemeBtn) changeThemeBtn.addEventListener('click', onThemeChangeClick);
 
         const emailForm = state.targetElement.querySelector('#tyra-email-form');
         if (emailForm) emailForm.addEventListener('submit', onEmailSubmit);
@@ -695,12 +733,12 @@
         e.preventDefault();
         toggleSettingsMenu(false); // Close settings
         
-        const container = state.targetElement.querySelector('#tyra-icon-picker-container');
+        const container = state.targetElement.querySelector('#tyra-modal-container');
         if(container) {
             container.innerHTML = templates.iconPickerModal();
             
             // Bind close button
-            container.querySelector('.tyra-icon-picker-close').addEventListener('click', () => {
+            container.querySelector('.tyra-modal-close').addEventListener('click', () => {
                 container.innerHTML = '';
             });
             
@@ -709,6 +747,31 @@
                 choice.addEventListener('click', () => {
                     const selectedKey = choice.dataset.iconKey;
                     changeLauncherIcon(selectedKey);
+                    container.innerHTML = ''; // Close modal
+                });
+            });
+        }
+    }
+
+    // --- NEW in v119.0: Theme Picker Logic ---
+    function onThemeChangeClick(e) {
+        e.preventDefault();
+        toggleSettingsMenu(false); // Close settings
+        
+        const container = state.targetElement.querySelector('#tyra-modal-container');
+        if(container) {
+            container.innerHTML = templates.themePickerModal();
+            
+            // Bind close button
+            container.querySelector('.tyra-modal-close').addEventListener('click', () => {
+                container.innerHTML = '';
+            });
+            
+            // Bind theme selection
+            container.querySelectorAll('.tyra-theme-choice').forEach(choice => {
+                choice.addEventListener('click', () => {
+                    const selectedKey = choice.dataset.themeKey;
+                    changeTheme(selectedKey);
                     container.innerHTML = ''; // Close modal
                 });
             });
@@ -736,7 +799,18 @@
             if (headerImg) headerImg.src = fullUrl;
         }
     }
-    // --- End v118.4 Logic ---
+    
+    // --- NEW in v119.0: Change Theme Logic ---
+    function changeTheme(key) {
+        state.themeKey = key;
+        localStorage.setItem('tyra_theme_pref', key);
+        
+        const container = state.targetElement.querySelector('.tyra-widget-container');
+        if (container) {
+            container.setAttribute('data-theme', key);
+        }
+    }
+    // --- End v119.0 Logic ---
 
     async function onEmailSubmit(e) {
         e.preventDefault();
@@ -1199,6 +1273,9 @@
 
             // NEW in v118.4: Read saved icon preference
             const savedIconKey = localStorage.getItem('tyra_launcher_pref') || 'default';
+            
+            // NEW in v119.0: Read saved theme preference
+            const savedThemeKey = localStorage.getItem('tyra_theme_pref') || 'default';
 
             Object.assign(state, { 
                 apiUrl: apiUrl.replace(/\/$/, ''), 
@@ -1214,7 +1291,8 @@
                 childDobs: [],
                 isDashboardStale: false,
                 streaks: { current: 0 },
-                launcherIconKey: savedIconKey // Set initial icon state
+                launcherIconKey: savedIconKey, // Set initial icon state
+                themeKey: savedThemeKey // Set initial theme state
             });
 
             TYRA_AVATAR_URL = `${state.apiUrl}/static/images/tyra_avatar.png`;
