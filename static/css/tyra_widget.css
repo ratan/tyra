@@ -1,4 +1,4 @@
-/* static/css/tyra_widget.css (v117.0 - Add Shareable Insight Card styles) */
+/* static/css/tyra_widget.css (v118.2 - Added Easter Egg Animations) */
 :root {
     --primary-color: #8B4A9C; /* Deep Purple */
     --secondary-color: #A855A8; /* Lighter Purple */
@@ -99,6 +99,7 @@
     overflow-y: auto;
     display: flex;
     flex-direction: column;
+    position: relative; /* NEW in v118.2: Relative positioning for effect overlays */
 }
 
 /* --- Header --- */
@@ -341,6 +342,8 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
+    position: relative; /* Ensure content stacks below effects if needed */
+    z-index: 1;
 }
 
 .tyra-message {
@@ -492,6 +495,8 @@
     padding: 10px;
     border-top: 1px solid var(--border-color);
     background-color: white;
+    position: relative;
+    z-index: 2; /* Ensure input stays above effects */
 }
 .tyra-chat-form {
     display: flex;
@@ -639,3 +644,47 @@
 .tyra-share-link-container.hidden { display: none; }
 .tyra-share-link-container input { flex-grow: 1; border: 1px solid var(--border-color); padding: 8px; border-radius: 4px 0 0 4px; }
 .tyra-share-link-container button { border-radius: 0 4px 4px 0; }
+
+
+/* --- NEW in v118.2: Easter Egg Animations & Effects --- */
+.tyra-fx-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1000;
+    overflow: hidden;
+}
+
+/* Confetti Particles */
+.tyra-confetti {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background: var(--primary-color);
+    animation: tyra-fall linear forwards;
+}
+@keyframes tyra-fall {
+    0% { transform: translateY(-10px) rotate(0deg); opacity: 1; }
+    100% { transform: translateY(600px) rotate(720deg); opacity: 0; }
+}
+
+/* Comfort Overlay (Glow) */
+.tyra-comfort-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle, rgba(255, 182, 193, 0.4) 0%, rgba(255, 255, 255, 0) 70%);
+    opacity: 0;
+    transition: opacity 1s ease;
+    pointer-events: none;
+    z-index: 900;
+}
+.tyra-comfort-overlay.active {
+    opacity: 1;
+}
+/* --- End v118.2 Styles --- */

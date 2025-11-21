@@ -1,4 +1,4 @@
-// static/js/tyra_widget.js (v118.1 - Add WebView Bridge support)
+// static/js/tyra_widget.js (v118.3 - Link Quick Logs to Animations)
 (function() {
     'use strict';
 
@@ -25,6 +25,20 @@
     // --- CONSTANTS ---
     // MODIFIED in v111.1: This will be dynamically constructed in init()
     let TYRA_AVATAR_URL = '';
+    
+    // --- MODIFIED in v118.3: Expanded Easter Egg Keywords for Quick Logs ---
+    const EASTER_EGGS = {
+        // Positive / Celebration Triggers
+        confetti: [
+            'congrats', 'yay', 'woo', 'awesome', 'streak', 'slay', 'queen', 'party', 'amazing',
+            'good sleep', 'low stress', 'energetic' // Added Quick Log terms
+        ],
+        // Negative / Comfort Triggers
+        comfort: [
+            'sad', 'tired', 'cramps', 'pain', 'period', 'stress', 'anxious', 'ugh', 'lonely', 'overwhelmed',
+            'poor sleep', 'headache', 'high stress' // Added Quick Log terms
+        ]
+    };
 
     // --- TEMPLATES ---
     const templates = {
@@ -32,7 +46,7 @@
         launcher: () => `<div class="tyra-launcher">
                             <img src="${TYRA_AVATAR_URL}" alt="Tyra Avatar">
                          </div>`,
-        // MODIFIED in v114.0 & v116.0: Implement Hybrid Header with Settings Menu & Streak Indicator
+        // MODIFIED in v114.0 & v116.0 & v118.2: Added FX Container for animations
         widgetShell: (title) => `
             <div class="tyra-widget-container">
                 <div class="tyra-widget-header">
@@ -51,7 +65,11 @@
                         <button id="tyra-close-btn" class="tyra-close-btn">×</button>
                     </div>
                 </div>
-                <div class="tyra-view-container"></div>
+                <div class="tyra-view-container">
+                    <!-- NEW in v118.2: Containers for visual effects -->
+                    <div id="tyra-fx-container" class="tyra-fx-container"></div>
+                    <div id="tyra-comfort-overlay" class="tyra-comfort-overlay"></div>
+                </div>
             </div>`,
         emailEntryView: () => `
             <div class="tyra-form-view">
@@ -157,6 +175,53 @@
         }
     };
 
+    // --- NEW in v118.2: Animation Logic Functions ---
+    function checkAndTriggerEasterEgg(text) {
+        if (!text) return;
+        const lower = text.toLowerCase();
+        
+        if (EASTER_EGGS.confetti.some(k => lower.includes(k))) {
+            triggerConfetti();
+        } else if (EASTER_EGGS.comfort.some(k => lower.includes(k))) {
+            triggerComfortMode();
+        }
+    }
+
+    function triggerConfetti() {
+        const container = state.targetElement.querySelector('#tyra-fx-container');
+        if (!container) return;
+
+        const colors = ['#8B4A9C', '#E6A4E6', '#FFD700', '#FF69B4', '#87CEEB'];
+        
+        for (let i = 0; i < 25; i++) {
+            const particle = document.createElement('div');
+            particle.classList.add('tyra-confetti');
+            particle.style.left = Math.random() * 100 + '%';
+            particle.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+            // Randomize animation duration for natural feel
+            particle.style.animationDuration = (Math.random() * 1.5 + 1.5) + 's';
+            
+            container.appendChild(particle);
+            
+            // Clean up
+            setTimeout(() => {
+                if (container.contains(particle)) container.removeChild(particle);
+            }, 3000);
+        }
+    }
+
+    function triggerComfortMode() {
+        const overlay = state.targetElement.querySelector('#tyra-comfort-overlay');
+        if (!overlay) return;
+        
+        overlay.classList.add('active');
+        setTimeout(() => {
+            overlay.classList.remove('active');
+        }, 4000); // Hold glow for 4 seconds then fade out
+    }
+    // --- End v118.2 Logic ---
+
+
     // --- RENDER & DOM FUNCTIONS ---
     function render() {
         const viewContainer = state.targetElement.querySelector('.tyra-view-container');
@@ -215,7 +280,18 @@
                 break;
             default: viewHTML = '<p style="text-align:center;padding:20px;">Loading...</p>';
         }
+        
+        // MODIFIED in v118.2: Append view HTML but preserve the fixed overlay containers
         viewContainer.innerHTML = viewHTML;
+        
+        // Re-inject FX containers if they were wiped by innerHTML (surgical fix)
+        if (!viewContainer.querySelector('#tyra-fx-container')) {
+             const fxDiv = document.createElement('div'); fxDiv.id = 'tyra-fx-container'; fxDiv.className = 'tyra-fx-container';
+             const comfortDiv = document.createElement('div'); comfortDiv.id = 'tyra-comfort-overlay'; comfortDiv.className = 'tyra-comfort-overlay';
+             viewContainer.appendChild(fxDiv);
+             viewContainer.appendChild(comfortDiv);
+        }
+
         bindEventListeners();
         postRenderSetup();
     }
@@ -643,6 +719,10 @@
         } else {
             const messageText = input.value.trim();
             if (!messageText) return;
+            
+            // NEW in v118.2: Check and trigger animations instantly
+            checkAndTriggerEasterEgg(messageText);
+            
             messagePayload = { message: messageText };
             userMessageToDisplay = messageText;
         }
@@ -748,6 +828,12 @@
         const { logCategory, logValue, logLabel } = button.dataset;
 
         state.isDashboardStale = true;
+
+        // --- NEW in v118.3: Trigger animation on button click ---
+        // We pass the log label (e.g., "😴 Good Sleep") to the checker, 
+        // which now includes these phrases in its list.
+        checkAndTriggerEasterEgg(logLabel);
+        // --------------------------------------------------------
 
         const userMsgEl = addMessage(logLabel, 'user', {}, false);
         const { ok, data } = await api.post('quick_log', { category: logCategory, value: logValue });
