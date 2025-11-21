@@ -1,4 +1,4 @@
-// static/js/tyra_widget.js (v119.0 - Added Theme Picker)
+// static/js/tyra_widget.js (v119.1 - Added Burner Mode Logic)
 (function() {
     'use strict';
 
@@ -77,6 +77,7 @@
         },
         // MODIFIED in v118.5: Sync Header Icon with Launcher Icon Logic
         // MODIFIED in v119.0: Add Data Theme Attribute & Change Theme Button
+        // MODIFIED in v119.1: Add Burn History Button
         widgetShell: (title) => {
             // Logic to pick the correct icon for the header
             const iconKey = state.launcherIconKey || 'default';
@@ -101,6 +102,8 @@
                             <div class="tyra-settings-separator"></div>
                             <button id="tyra-change-theme-btn">🎨 Change Theme</button>
                             <button id="tyra-change-icon-btn">🎭 Change Icon</button>
+                            <div class="tyra-settings-separator"></div>
+                            <button id="tyra-burn-history-btn" class="tyra-danger-btn">🔥 Burn History</button> <!-- NEW v119.1 -->
                             <div class="tyra-settings-separator"></div>
                             <a href="#" id="tyra-logout-link">Logout</a>
                         </div>
@@ -647,6 +650,10 @@
         const changeThemeBtn = state.targetElement.querySelector('#tyra-change-theme-btn');
         if(changeThemeBtn) changeThemeBtn.addEventListener('click', onThemeChangeClick);
 
+        // NEW in v119.1: Burn History Listener
+        const burnBtn = state.targetElement.querySelector('#tyra-burn-history-btn');
+        if(burnBtn) burnBtn.addEventListener('click', onBurnHistoryClick);
+
         const emailForm = state.targetElement.querySelector('#tyra-email-form');
         if (emailForm) emailForm.addEventListener('submit', onEmailSubmit);
         
@@ -811,6 +818,36 @@
         }
     }
     // --- End v119.0 Logic ---
+
+    // NEW in v119.1: Burn History Logic
+    async function onBurnHistoryClick(e) {
+        e.preventDefault();
+        // A "Panic Button" should be fast, but wiping data requires a sanity check.
+        if(!confirm("Delete recent chat history? This action cannot be undone.")) return;
+        
+        toggleSettingsMenu(false); // Close dropdown immediately
+        
+        // Immediate Visual Feedback
+        const chatLog = state.targetElement.querySelector('.tyra-chat-log');
+        if(chatLog) {
+            // Show a system-like message
+            chatLog.innerHTML = '<div class="tyra-message tyra-ai-message" style="background:#f0f0f0; color:#666;"><p><i>Incinerating recent history... 🔥</i></p></div>';
+        }
+
+        // Call API
+        const { ok } = await api.post('privacy/burn_history');
+        
+        if(ok) {
+            setTimeout(() => {
+                if(chatLog) {
+                    // Final confirmation state
+                    chatLog.innerHTML = '<div class="tyra-message tyra-ai-message"><p>History burned. Safe slate.</p></div>';
+                }
+            }, 800); // Slight delay for effect
+        } else {
+             if(chatLog) chatLog.innerHTML += '<div class="tyra-message tyra-ai-message"><p>Error burning history.</p></div>';
+        }
+    }
 
     async function onEmailSubmit(e) {
         e.preventDefault();

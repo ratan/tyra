@@ -1,4 +1,4 @@
-# app.py (v118.1 - Add Native App WebView embed route)
+# app.py (v119.1 - Added Burner Mode Privacy Feature)
 import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets, random, requests
 from datetime import datetime, timedelta, timezone, date
 from flask import Flask, Response, render_template, request, jsonify, session, redirect, url_for, send_from_directory, g
@@ -41,6 +41,7 @@ MAX_KEY_MEMORIES = 15 # NEW in v102.0
 MAX_CHAT_LOG_ENTRIES = 50 # NEW in v108.0: Limit size of persisted chat log
 MEMORY_CHECK_IN_WINDOW_DAYS = 14 # NEW in v115.0: Window for proactive memory check-ins
 INSIGHT_COOLDOWN_DAYS = 7 # NEW in v117.0
+BURN_WINDOW_HOURS = 24 # NEW in v119.1: Time window for Burner Mode
 
 # NEW in v105.4: Define an ordered list of models for fallback on rate limiting.
 GEMINI_MODEL_CASCADE_LIST = [
@@ -2181,6 +2182,60 @@ if app.config['ENABLE_WIDGET_MODE']:
         if g.is_guest: return jsonify({"error": "This feature requires an account."}), 403
         # The logic is identical, so we reuse the monolith endpoint's function
         return chart_data(g.profile)
+
+    # NEW in v119.1: Burner Mode Endpoint
+    @app.route('/api/v1/privacy/burn_history', methods=['POST'])
+    @token_required
+    def api_burn_history():
+        """
+        Privacy feature to 'burn' recent chat history.
+        1. Clears the persistable 'chat_log' (used for UI history) completely.
+        2. Filters the 'interaction_log' (used for AI context) to remove entries from the last 24 hours.
+        """
+        if g.is_guest: 
+            return jsonify({'error': 'Feature not available for guests.'}), 403
+        
+        # 1. Clear UI Chat Log completely to ensure immediate visual privacy
+        g.profile['chat_log'] = []
+        
+        # 2. Filter Interaction Log (Backend Memory) for the burn window
+        # We use simple naive comparison because stored timestamps are typically naive ISO (local time)
+        now = datetime.now()
+        cutoff = now - timedelta(hours=BURN_WINDOW_HOURS)
+        
+        original_log = g.profile.get('interaction_log', [])
+        filtered_log = []
+        
+        for entry in original_log:
+            try:
+                # Parse the timestamp. Assuming stored format matches datetime.now().isoformat()
+                entry_dt = dateparser.parse(entry['timestamp'])
+                
+                # Normalize timezone info for comparison if necessary
+                # If stored is naive and cutoff is naive, we are good.
+                # If one is aware, we strip tz from it to compare loosely (safest for this 'panic button' logic)
+                if entry_dt.tzinfo and not cutoff.tzinfo:
+                    entry_dt = entry_dt.replace(tzinfo=None)
+                elif not entry_dt.tzinfo and cutoff.tzinfo:
+                    cutoff = cutoff.replace(tzinfo=None)
+
+                # Keep only entries OLDER than the cutoff
+                if entry_dt < cutoff:
+                    filtered_log.append(entry)
+                    
+            except (ValueError, TypeError):
+                # If we can't parse the date, keep the entry to be safe/conservative, 
+                # or delete it? For 'Burner', safer to delete malformed recent-looking data, 
+                # but here we preserve data integrity.
+                filtered_log.append(entry)
+        
+        g.profile['interaction_log'] = filtered_log
+        
+        # 3. Save the sanitized profile
+        save_profile(g.profile_hash, g.profile)
+        
+        return jsonify({"status": "success", "message": "Recent history incinerated."})
+
 
 # --- ROUTES SHARED BY MONOLITH & API LOGIC ---
 

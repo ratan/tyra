@@ -112,7 +112,6 @@ The server will start on `http://127.0.0.1:5000`. When you run it for the first 
 *   **In your browser, go to:** **http://localhost:8000/embedding_test.html**
 *   You should see the test page with the purple Tyra widget launcher in the bottom-right corner.
 
----
 
 ### **Part 2: Production Deployment Setup (Render.com)**
 
@@ -236,6 +235,7 @@ https://tyra-ai.onrender.com/admin/backup/download_db/X7kP9mW3qT8rY2nF6vL4zJ0hB5
 4.  Tyra Avatar, Privacy Policy: Feature_comp_12Oct25_1_privacy_tyra_avatar__women_health_chatbot
 5.  Sharable Insights: Feature_comp_24oct25_1_sharable_insights_women_health_chatbot
 6.  Easter Egg, Discrete Icon: Feature_comp_21Nov25_1_easter_egg_discrete_mode_women_health_chatbot
+7.  Burn Mode: Feature_comp_21Nov25_2_burn_mode_women_health_chatbot
 
 
 #### **Point 5: Pending Item**
@@ -382,3 +382,23 @@ This sectoion list few of the newer feature added to Tyra.
     *   **The "Matcha"** (Wellness/Clean Girl)
     *   **The "Ocean"** (Calm Blue)
     *   **The "Sunset"** (Dopamine)
+
+
+#### **4: "Burner Mode" (The Panic Button)**.
+
+**Complexity:** ⭐⭐ (Backend Logic + UI Button)
+**Impact:** Extremely High for Trust & Safety.
+
+### **Why this is next:**
+1.  **Completes the "Discreet" Arc:** You just gave them a way to hide the app icon (Discreet Mode). Now, give them a way to **hide the conversation**.
+2.  **The Use Case:** A user is chatting about a sensitive topic (e.g., pregnancy scare, UTI) in a semi-public place. They want to close the app and ensure that if they open it again 5 minutes later (or if someone else does), that specific conversation is **gone**.
+3.  **Gen Z Value:** This demographic values "ephemeral" messaging (like Snapchat). Knowing they can "burn" the chat history instantly creates massive trust.
+
+4.  **Implementation** We will add a "🔥 Burn History" button to the Settings menu. When clicked, it will strictly wipe the **Chat UI** immediately and tell the **Backend** to forget the last 24 hours of logs.
+
+    *   app.py: Added BURN_WINDOW_HOURS = 24 and a new endpoint /api/v1/privacy/burn_history. This endpoint wipes the persisted chat_log (UI state) entirely and filters the interaction_log (AI context) to remove entries from the last 24 hours.
+
+    *   tyra_widget.js: Added the "🔥 Burn History" button to the Settings dropdown template. Implemented the onBurnHistoryClick handler which calls the API and immediately clears the chat DOM with a visual message.
+
+    *   tyra_widget.css: Added styling for .tyra-danger-btn to make the button distinct (using the existing --error-color variable).
+
