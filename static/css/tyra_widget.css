@@ -1,4 +1,4 @@
-/* static/css/tyra_widget.css (v119.1 - Added Burner Mode Styles) */
+/* static/css/tyra_widget.css (v119.2 - Added Persona Picker Styles) */
 :root {
     /* --- BASE VARIABLES (Layout & Fonts) --- */
     --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -539,6 +539,59 @@
 .tyra-theme-choice:hover .tyra-theme-circle { transform: scale(1.1); }
 .tyra-theme-choice.selected .tyra-theme-circle { border: 3px solid var(--text-color); }
 .tyra-theme-label { font-size: 0.8em; color: var(--text-color); }
+
+/* NEW in v119.2: Persona Picker Grid */
+.tyra-persona-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin: 20px 0;
+}
+
+.tyra-persona-choice {
+    background: var(--ai-msg-bg);
+    border: 2px solid transparent;
+    border-radius: 12px;
+    padding: 15px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.tyra-persona-choice:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.tyra-persona-choice.selected {
+    border-color: var(--primary-color);
+    background-color: rgba(139, 74, 156, 0.05); /* Subtle tint */
+}
+
+.tyra-persona-icon {
+    font-size: 24px;
+}
+
+.tyra-persona-details {
+    display: flex;
+    flex-direction: column;
+}
+
+.tyra-persona-name {
+    font-weight: 700;
+    color: var(--text-color);
+    font-size: 1em;
+}
+
+.tyra-persona-desc {
+    font-size: 0.85em;
+    color: var(--text-color);
+    opacity: 0.8;
+}
 
 .tyra-modal-close {
     background: #ddd;

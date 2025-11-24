@@ -1,4 +1,4 @@
-# app.py (v119.1 - Added Burner Mode Privacy Feature)
+# app.py (v119.2 - Added Dynamic Persona API)
 import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets, random, requests
 from datetime import datetime, timedelta, timezone, date
 from flask import Flask, Response, render_template, request, jsonify, session, redirect, url_for, send_from_directory, g
@@ -1892,15 +1892,18 @@ if app.config['ENABLE_WIDGET_MODE']:
         return render_template('native_embed.html')
         
     # MODIFIED in v116.0: Add streak data to config payload
+    # MODIFIED in v119.2: Return current persona in config
     @app.route('/api/v1/config')
     @token_required
     def api_config():
         auth_mode = "otp" if app.config.get('ENABLE_EMAIL_OTP_API_VERIFICATION') else "guest"
         lang_code = 'en'
         streak_data = {"current": 0} # Default for guests
+        persona = "bestie" # Default persona
 
         if g.profile and not g.is_guest:
             lang_code = g.profile.get('language', 'en')
+            persona = g.profile.get('persona', 'bestie') # Load persona
             if ENABLE_GAMIFICATION_STREAKS:
                 streak_data = g.profile.get("streaks", {"current": 0})
         
@@ -1909,7 +1912,8 @@ if app.config['ENABLE_WIDGET_MODE']:
         return jsonify({
             "auth_mode": auth_mode,
             "lang": lang_data,
-            "streaks": streak_data
+            "streaks": streak_data,
+            "persona": persona # Return to frontend
         })
 
     # The config route for a user who is not yet authenticated
@@ -2235,6 +2239,24 @@ if app.config['ENABLE_WIDGET_MODE']:
         save_profile(g.profile_hash, g.profile)
         
         return jsonify({"status": "success", "message": "Recent history incinerated."})
+
+    # NEW in v119.2: Endpoint to set persona
+    @app.route('/api/v1/set_persona', methods=['POST'])
+    @token_required
+    def api_set_persona():
+        if g.is_guest: 
+            return jsonify({'error': 'Guest users cannot change persona.'}), 403
+        
+        data = request.json
+        new_persona = data.get('persona')
+        
+        if new_persona not in ['bestie', 'professional', 'coach']:
+            return jsonify({'error': 'Invalid persona selected.'}), 400
+            
+        g.profile['persona'] = new_persona
+        save_profile(g.profile_hash, g.profile)
+        
+        return jsonify({"status": "success", "persona": new_persona})
 
 
 # --- ROUTES SHARED BY MONOLITH & API LOGIC ---

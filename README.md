@@ -389,7 +389,7 @@ This sectoion list few of the newer feature added to Tyra.
 **Complexity:** ⭐⭐ (Backend Logic + UI Button)
 **Impact:** Extremely High for Trust & Safety.
 
-### **Why this is next:**
+#### **Why this is next:**
 1.  **Completes the "Discreet" Arc:** You just gave them a way to hide the app icon (Discreet Mode). Now, give them a way to **hide the conversation**.
 2.  **The Use Case:** A user is chatting about a sensitive topic (e.g., pregnancy scare, UTI) in a semi-public place. They want to close the app and ensure that if they open it again 5 minutes later (or if someone else does), that specific conversation is **gone**.
 3.  **Gen Z Value:** This demographic values "ephemeral" messaging (like Snapchat). Knowing they can "burn" the chat history instantly creates massive trust.
@@ -401,4 +401,42 @@ This sectoion list few of the newer feature added to Tyra.
     *   tyra_widget.js: Added the "🔥 Burn History" button to the Settings dropdown template. Implemented the onBurnHistoryClick handler which calls the API and immediately clears the chat DOM with a visual message.
 
     *   tyra_widget.css: Added styling for .tyra-danger-btn to make the button distinct (using the existing --error-color variable).
+
+
+#### **5: Dynamic Persona Switching ("The Vibe Check")**.
+
+**Complexity:** ⭐⭐⭐ (Moderate - Backend Prompt Logic + UI)
+**Impact:** High for retention and emotional connection.
+
+#### **Why this is next:**
+1.  **Personalization Depth:** We've let users change how Tyra *looks* (Themes). Now we let them change how Tyra *sounds*.
+2.  **Demographic Variance:**
+    *   Gen Z users often prefer the "Big Sister" vibe (emojis, validation, casual).
+    *   Older Millennials or users in a medical crisis often prefer the "Doctor" vibe (concise, factual, serious).
+    *   Fitness-focused users want the "Coach" vibe (high energy, accountability).
+3.  **Foundation Exists:** We already have a basic "Real Talk" mode (v115.0), but that is a temporary trigger. This feature makes the persona **persistent**.
+
+#### **Implementation Plan for v119.2**
+
+We will add a "✨ Change Vibe" option to the Settings menu, allowing the user to select Tyra's personality.
+
+##### **1. The Personas**
+*   **💜 The Bestie (Default):** Warm, empathetic, uses emojis, validating. *"I got you, that sounds tough. 🥺"*
+*   **👩‍⚕️ The Professional:** Clinical, concise, factual, no emojis. *"Based on your symptoms, here is the data."*
+*   **⚡ The Coach:** High energy, motivational, action-oriented. *"Let's crush this goal! You're doing great!"*
+
+##### **2. Technical Changes**
+
+*   **Backend (`user_profiler.py`):**
+    *   Update `format_profile_for_prompt` to check a `persona` field in the profile.
+    *   Inject a strong system instruction block that overrides the default tone based on this selection.
+
+*   **Backend (`app.py`):**
+    *   Update `/api/v1/config` to return the current persona.
+    *   Add/Update logic to save `persona_preference` in the user profile.
+
+*   **Frontend (`tyra_widget.js`):**
+    *   Add "✨ Change Vibe" to the Settings dropdown.
+    *   Create a new Modal (similar to Theme/Icon pickers) to select the persona.
+    *   Persist the selection via API.
 

@@ -1,4 +1,4 @@
-# user_profiler.py (v117.0 - Add Shareable Insight Cooldown)
+# user_profiler.py (v119.4 - Added Dynamic Persona Switching with Safe Defaults)
 from datetime import datetime, timedelta
 import dateparser # NEW in v111.4: Fix for NameError in format_profile_for_prompt
 
@@ -13,11 +13,36 @@ LANG_MAP = {
     "or": "Odia", "ml": "Malayalam", "pa": "Punjabi", "ar": "Arabic"
 }
 
+# NEW in v119.2: Define Persona Prompts
+PERSONA_PROMPTS = {
+    "bestie": (
+        "You are 'Tyra', a supportive, warm, and empathetic best friend. "
+        "Use emojis naturally (e.g., 💜, ✨, 🥺). "
+        "Your language should be casual, relatable, and validating. "
+        "Treat the user like a close sister. If they struggle, validate their feelings first."
+    ),
+    "professional": (
+        "You are 'Tyra', a clinical, objective, and professional health assistant. "
+        "DO NOT use emojis. Your tone is calm, factual, and concise. "
+        "Focus on clarity and recording data accurately. "
+        "Avoid slang (like 'ugh', 'bummer') or overly emotional language. Be efficient."
+    ),
+    "coach": (
+        "You are 'Tyra', a high-energy, motivational wellness coach. "
+        "Use emojis like 🔥, 💪, ⚡. Your tone is empowering, action-oriented, and enthusiastic. "
+        "Focus on goals, consistency, and resilience. "
+        "Reframing negatives into challenges."
+    )
+}
+
 # MODIFIED in v117.0: Add last_insight_offered_date
 def create_user_profile(name, email, phone, age, details, lang_code='en'):
     # Calculate an approximate date of birth from the provided age
     # This makes the profile dynamic over time
     dob = datetime.now() - timedelta(days=age * 365.25)
+    
+    # NEW in v119.4: Smart Default Persona
+    initial_persona = "bestie"
 
     profile = {
         "name": name, "email": email, "phone": phone, 
@@ -25,6 +50,7 @@ def create_user_profile(name, email, phone, age, details, lang_code='en'):
         "dob_source": "tool_provided", # NEW in v107.6
         "age": age, # Store initial age for immediate use
         "language": lang_code,
+        "persona": initial_persona, # NEW in v119.2: Saved preference
         "primary_category": None, "secondary_details": details,
         "conversation_history": [],
         "last_seen_timestamp": None,
@@ -96,33 +122,25 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
     age = profile.get("age", "Not specified")
     details = profile.get("secondary_details", {})
 
-    # --- MODIFIED in v115.0: Enhanced Age-Adaptive Persona ---
+    # --- MODIFIED in v119.4: Dynamic Persona Switching ---
+    selected_persona = profile.get("persona", "bestie")
+    base_persona_text = PERSONA_PROMPTS.get(selected_persona, PERSONA_PROMPTS["bestie"])
+
     persona_instruction = (
-        f"--- CORE PERSONA: {chatbot_name} ---\n"
+        f"--- CORE PERSONA: {chatbot_name} ({selected_persona.upper()} MODE) ---\n"
+        f"{base_persona_text}\n"
         "1.  **Your Role:** You are an empathetic wellness companion, not a clinical doctor.\n"
-        "2.  **Your Traits:** You are calm, knowledgeable, encouraging, and completely non-judgmental.\n"
-        "3.  **Your Tone:** Your base tone is warm and supportive. Avoid being overly bubbly or using excessive emojis.\n"
-        "4.  **CRITICAL RULE:** Always validate the user's feelings, especially when they express distress. Never be dismissive."
+        "2.  **CRITICAL RULE:** Even in professional mode, remain polite."
     )
 
-    # Age-Adaptive Tone Adjustment
+    # Age-Adaptive Tone Adjustment (FIXED in v119.4: Supports persona instead of overriding)
     if profile.get('age', 30) <= 19:
-        persona_instruction += (
-            "\n5.  **Teen Persona (v115.0 Update):** The user is a teenager. Your tone MUST be that of a relatable, cool older sister or a trusted mentor. "
-            "Use emojis where appropriate (e.g., ✨, 😊, 👍) but don't overdo it. Use simple, direct language. "
-            "When they mention a problem, validate it first (e.g., 'Ugh, that sounds so frustrating.'). "
-            "Your goal is to be a safe, non-judgmental space."
-        )
-    elif profile.get('age', 35) < 30:
-        persona_instruction += (
-            "\n5.  **Young Adult Persona (v115.0 Update):** The user is a young adult (20-29). Your tone should be empowering, knowledgeable, and like a supportive friend who has been there before. "
-            "Be encouraging but also direct and factual, especially on topics like health and wellness. Maintain your empathetic base."
-        )
-    else:
-         persona_instruction += (
-            "\n5.  **Adult Persona:** The user is an adult. Maintain your standard supportive, knowledgeable, and compassionate tone. "
-            "Clarity and empathy are key."
-        )
+        if selected_persona == "professional":
+            persona_instruction += "\n(Context: User is a Teenager. Maintain your Professional tone, but simplify medical jargon. Ensure they feel respected, not lectured.)"
+        else:
+            persona_instruction += "\n(Context: User is a Teenager. Adopt a 'Cool Older Sister' vibe. Be relatable, safe, and non-judgmental.)"
+    elif profile.get('age', 35) > 50:
+        persona_instruction += "\n(Context: User is an older adult. Ensure clarity and respect life experience.)"
 
     # MODIFIED in v115.1: Memory tag is now deprecated in prompt.
     memory_protocol = (
@@ -132,15 +150,35 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
     
     # --- MODIFIED v101.8: Main instruction now includes the empathetic response pattern ---
     if is_first_greeting_of_day:
-        main_instruction = f"Your name is {chatbot_name}. Start with a warm, personalized greeting for {name}. Then, on a new line, answer their question directly. When stating dates, use the full date (e.g., 'June 30, 2025') and avoid relative terms like 'today' or 'tomorrow'."
+        main_instruction = f"Your name is {chatbot_name}. Start with a greeting for {name} matching your {selected_persona} persona."
     else:
+        # MODIFIED v119.3: Conditional Response Patterns based on Persona
+        if selected_persona == "professional":
+            response_pattern = (
+                "When the user expresses a negative feeling or symptom:\n"
+                "1.  **Acknowledge Objectively:** (e.g., 'Noted.', 'I have logged that.')\n"
+                "2.  **Provide Context/Action:** Briefly explain or confirm the data point.\n"
+                "3.  **Neutral Support:** Suggest a medical consultation if severe, but avoid emotional coddling."
+            )
+        elif selected_persona == "coach":
+            response_pattern = (
+                "When the user expresses a negative feeling or symptom:\n"
+                "1.  **Acknowledge the Challenge:** (e.g., 'That's a hurdle, but we can handle it.')\n"
+                "2.  **Action Plan:** Suggest a small, immediate step to improve the situation.\n"
+                "3.  **Motivation:** End with encouragement."
+            )
+        else: # Bestie (Default)
+            response_pattern = (
+                "When the user expresses a negative feeling or symptom:\n"
+                "1.  **Validate their feeling** (e.g., 'I'm so sorry', 'That sucks').\n"
+                "2.  **Directly answer/confirm**.\n"
+                "3.  **Gently offer emotional support**."
+            )
+        
         main_instruction = (
-            f"Your name is {chatbot_name}. Your primary goal is to answer the user's question directly and accurately. "
-            "When the user expresses a negative feeling or symptom (e.g., stress, sadness, pain), your response structure MUST be:\n"
-            "1.  **Validate their feeling** (e.g., 'That sounds really tough,' or 'I'm sorry you're dealing with that.').\n"
-            "2.  **Directly answer their question or confirm the action** (e.g., 'I've logged that for you.').\n"
-            "3.  **Gently offer support** (e.g., 'If you'd like to talk more about it, I'm here to listen.').\n\n"
-            "Use the provided user profile context below to make your response more personal and relevant."
+            f"Your name is {chatbot_name}. Answer according to your {selected_persona} persona.\n"
+            f"{response_pattern}\n"
+            "Use the profile context below."
         )
 
     context_lines = [
@@ -266,23 +304,30 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
                 "This is your primary directive for this conversational turn."
             )
         elif special_context.get("type") == "dynamic_confirmation":
+            # FIX v119.4: Dynamic Confirmation respects Persona
             log_details = special_context.get("log_details", {})
-            log_value = log_details.get("value", "an event")
-            log_category = log_details.get("category", "health")
+            log_str = f"{log_details.get('value')} for {log_details.get('category')}"
             
-            instruction = (
-                f"The user just used a 'Quick Log' button to record '{log_value}' for their '{log_category}'. "
-                f"Your entire response MUST be a simple, natural, non-robotic confirmation of this action. Do not ask a question unless specified below."
-            )
-            
-            if special_context.get("is_negative"):
-                instruction += (
-                    " Since this is a negative log, you MUST ALSO ask a gentle, caring, open-ended follow-up question after the confirmation. "
-                    "Example: 'Got it, I've noted that you had poor sleep. Is there anything on your mind you'd like to talk about?'"
+            if selected_persona == "professional":
+                instruction = (
+                    f"The user just logged '{log_str}'. Confirm this action concisely and professionally. "
+                    "Example: 'I have updated your health log with that information.' "
+                    "DO NOT ask follow-up questions unless the value indicates a medical emergency. DO NOT use emojis."
                 )
-            else:
-                 instruction += " Example: 'Okay, I've made a note of your good sleep!'"
-            
+            elif selected_persona == "coach":
+                instruction = (
+                    f"The user just logged '{log_str}'. Confirm this with energy. "
+                    "Example: 'Got it! Tracking is the first step to improvement. 💪' "
+                    "If it's negative, suggest a quick fix."
+                )
+            else: # Bestie
+                instruction = (
+                    f"The user just logged '{log_str}'. Confirm this naturally and warmly. "
+                    "Example: 'Okay, I've made a note of that.' "
+                )
+                if special_context.get("is_negative"):
+                    instruction += " Since this is negative, ask a gentle, caring follow-up question."
+
             context_lines.append(instruction)
         
         elif special_context.get("type") == "achievement_unlocked":

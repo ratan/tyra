@@ -1,4 +1,4 @@
-// static/js/tyra_widget.js (v119.1 - Added Burner Mode Logic)
+// static/js/tyra_widget.js (v119.2 - Added Persona Switcher)
 (function() {
     'use strict';
 
@@ -21,7 +21,8 @@
         isSettingsMenuOpen: false, // NEW in v114.0
         streaks: { current: 0 }, // NEW in v116.0
         launcherIconKey: 'default', // NEW in v118.4: Track selected icon key
-        themeKey: 'default' // NEW in v119.0: Track selected theme
+        themeKey: 'default', // NEW in v119.0: Track selected theme
+        persona: 'bestie' // NEW in v119.2: Track current persona
     };
 
     // --- CONSTANTS ---
@@ -45,6 +46,13 @@
         'matcha': { label: 'Matcha', color: '#558B2F' },    // Green
         'ocean': { label: 'Ocean', color: '#00838F' },       // Blue
         'sunset': { label: 'Sunset', color: '#FF7043' }      // Orange
+    };
+
+    // NEW in v119.2: Persona Definitions
+    const PERSONAS = {
+        'bestie': { label: 'The Bestie', icon: '💜', desc: 'Supportive, empathetic, & validating.' },
+        'professional': { label: 'The Pro', icon: '👩‍⚕️', desc: 'Clinical, concise, & factual.' },
+        'coach': { label: 'The Coach', icon: '⚡', desc: 'Energetic, motivational, & active.' }
     };
     
     // --- MODIFIED in v118.3: Expanded Easter Egg Keywords for Quick Logs ---
@@ -78,6 +86,7 @@
         // MODIFIED in v118.5: Sync Header Icon with Launcher Icon Logic
         // MODIFIED in v119.0: Add Data Theme Attribute & Change Theme Button
         // MODIFIED in v119.1: Add Burn History Button
+        // MODIFIED in v119.2: Added "Change Vibe" button
         widgetShell: (title) => {
             // Logic to pick the correct icon for the header
             const iconKey = state.launcherIconKey || 'default';
@@ -98,10 +107,10 @@
                         <button id="tyra-settings-btn" class="tyra-settings-btn" style="display: none;">⋮</button>
                         <div id="tyra-settings-dropdown" class="tyra-settings-dropdown">
                             <a href="https://fitcommunity.in/privacyPolicy.php" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
-                            <!-- NEW in v119.0: Change Theme Menu Item -->
                             <div class="tyra-settings-separator"></div>
                             <button id="tyra-change-theme-btn">🎨 Change Theme</button>
                             <button id="tyra-change-icon-btn">🎭 Change Icon</button>
+                            <button id="tyra-change-persona-btn">✨ Change Vibe</button> <!-- NEW -->
                             <div class="tyra-settings-separator"></div>
                             <button id="tyra-burn-history-btn" class="tyra-danger-btn">🔥 Burn History</button> <!-- NEW v119.1 -->
                             <div class="tyra-settings-separator"></div>
@@ -159,6 +168,31 @@
                     <div class="tyra-picker-modal">
                         <h4>Choose Aesthetic</h4>
                         <div class="tyra-theme-grid">
+                            ${gridHtml}
+                        </div>
+                        <button class="tyra-modal-close">Cancel</button>
+                    </div>
+                </div>`;
+        },
+        // NEW in v119.2: Persona Picker Modal
+        personaPickerModal: () => {
+            let gridHtml = '';
+            for (const [key, info] of Object.entries(PERSONAS)) {
+                const isSelected = key === state.persona ? 'selected' : '';
+                gridHtml += `
+                    <div class="tyra-persona-choice ${isSelected}" data-persona-key="${key}">
+                        <span class="tyra-persona-icon">${info.icon}</span>
+                        <div class="tyra-persona-details">
+                            <span class="tyra-persona-name">${info.label}</span>
+                            <span class="tyra-persona-desc">${info.desc}</span>
+                        </div>
+                    </div>`;
+            }
+            return `
+                <div class="tyra-modal-overlay">
+                    <div class="tyra-picker-modal">
+                        <h4>Choose Your Vibe</h4>
+                        <div class="tyra-persona-grid">
                             ${gridHtml}
                         </div>
                         <button class="tyra-modal-close">Cancel</button>
@@ -654,6 +688,10 @@
         const burnBtn = state.targetElement.querySelector('#tyra-burn-history-btn');
         if(burnBtn) burnBtn.addEventListener('click', onBurnHistoryClick);
 
+        // NEW in v119.2: Persona Change Listener
+        const changePersonaBtn = state.targetElement.querySelector('#tyra-change-persona-btn');
+        if(changePersonaBtn) changePersonaBtn.addEventListener('click', onPersonaChangeClick);
+
         const emailForm = state.targetElement.querySelector('#tyra-email-form');
         if (emailForm) emailForm.addEventListener('submit', onEmailSubmit);
         
@@ -705,6 +743,7 @@
         state.userEmail = '';
         state.currentView = 'email_entry'; // Go back to the start
         state.streaks = { current: 0 }; // NEW in v116.0: Reset streaks on logout
+        state.persona = 'bestie'; // Reset persona
         render();
     }
 
@@ -780,6 +819,43 @@
                     const selectedKey = choice.dataset.themeKey;
                     changeTheme(selectedKey);
                     container.innerHTML = ''; // Close modal
+                });
+            });
+        }
+    }
+
+    // NEW in v119.2: Persona UI Logic
+    function onPersonaChangeClick(e) {
+        e.preventDefault();
+        toggleSettingsMenu(false);
+        
+        const container = state.targetElement.querySelector('#tyra-modal-container');
+        if(container) {
+            container.innerHTML = templates.personaPickerModal();
+            
+            container.querySelector('.tyra-modal-close').addEventListener('click', () => {
+                container.innerHTML = '';
+            });
+            
+            container.querySelectorAll('.tyra-persona-choice').forEach(choice => {
+                choice.addEventListener('click', async () => {
+                    const selectedKey = choice.dataset.personaKey;
+                    // Optimistic update UI
+                    state.persona = selectedKey; 
+                    container.innerHTML = '';
+                    
+                    // Call API
+                    await api.post('set_persona', { persona: selectedKey });
+                    
+                    // Add system note to chat
+                    const chatLog = state.targetElement.querySelector('.tyra-chat-log');
+                    if(chatLog) {
+                        const msg = document.createElement('div');
+                        msg.className = 'tyra-message tyra-ai-message';
+                        msg.innerHTML = `<i>Vibe switched to <b>${PERSONAS[selectedKey].label}</b> ${PERSONAS[selectedKey].icon}</i>`;
+                        chatLog.appendChild(msg);
+                        chatLog.scrollTop = chatLog.scrollHeight;
+                    }
                 });
             });
         }
@@ -1089,12 +1165,16 @@
     }
 
     // MODIFIED in v116.0: Fetch and store streak data
+    // MODIFIED in v119.2: Update state.persona from config
     async function initializeAuthenticatedSession() {
         try {
             const config = await api.get('config');
             state.lang = config.lang || {};
             if(config.streaks) {
                 state.streaks = config.streaks;
+            }
+            if(config.persona) {
+                state.persona = config.persona; // Load saved persona
             }
             render();
         } catch (e) {
