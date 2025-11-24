@@ -1,4 +1,4 @@
-// static/js/tyra_widget.js (v119.2 - Added Persona Switcher)
+// static/js/tyra_widget.js (v119.7 - Renamed 'Sync Vibe' to 'Cycle Sync' for clarity)
 (function() {
     'use strict';
 
@@ -22,7 +22,9 @@
         streaks: { current: 0 }, // NEW in v116.0
         launcherIconKey: 'default', // NEW in v118.4: Track selected icon key
         themeKey: 'default', // NEW in v119.0: Track selected theme
-        persona: 'bestie' // NEW in v119.2: Track current persona
+        persona: 'bestie', // NEW in v119.2: Track current persona
+        currentPhase: null, // NEW in v119.5: Track biological cycle phase
+        syncThemeToCycle: false // NEW in v119.5: User preference
     };
 
     // --- CONSTANTS ---
@@ -53,6 +55,15 @@
         'bestie': { label: 'The Bestie', icon: '💜', desc: 'Supportive, empathetic, & validating.' },
         'professional': { label: 'The Pro', icon: '👩‍⚕️', desc: 'Clinical, concise, & factual.' },
         'coach': { label: 'The Coach', icon: '⚡', desc: 'Energetic, motivational, & active.' }
+    };
+    
+    // NEW in v119.5: Phase to Theme Mapping
+    // Maps biological states to aesthetic themes
+    const PHASE_THEMES = {
+        'menstrual': 'coquette', // Comforting, Soft
+        'follicular': 'matcha',  // Fresh start, Energy building
+        'ovulation': 'sunset',   // High energy, Vibrant
+        'luteal': 'midnight'     // Inward, Restorative
     };
     
     // --- MODIFIED in v118.3: Expanded Easter Egg Keywords for Quick Logs ---
@@ -87,12 +98,18 @@
         // MODIFIED in v119.0: Add Data Theme Attribute & Change Theme Button
         // MODIFIED in v119.1: Add Burn History Button
         // MODIFIED in v119.2: Added "Change Vibe" button
+        // MODIFIED in v119.5: Added "Sync Vibe" toggle button
+        // MODIFIED in v119.7: Renamed "Sync Vibe" to "Cycle Sync"
         widgetShell: (title) => {
             // Logic to pick the correct icon for the header
             const iconKey = state.launcherIconKey || 'default';
             const iconInfo = DISCREET_ICONS[iconKey] || DISCREET_ICONS['default'];
             const iconPath = iconInfo.src;
             const fullUrl = iconPath.startsWith('http') ? iconPath : `${state.apiUrl}/${iconPath}`;
+            
+            // Determine toggle text based on state
+            // MODIFIED v119.7: Use "Cycle Sync"
+            const syncToggleText = state.syncThemeToCycle ? "🔄 Cycle Sync: ON" : "🔄 Cycle Sync: OFF";
 
             return `
             <div class="tyra-widget-container" data-theme="${state.themeKey}">
@@ -109,10 +126,11 @@
                             <a href="https://fitcommunity.in/privacyPolicy.php" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
                             <div class="tyra-settings-separator"></div>
                             <button id="tyra-change-theme-btn">🎨 Change Theme</button>
+                            <button id="tyra-sync-theme-btn" title="Auto-match theme to your cycle">${syncToggleText}</button> <!-- NEW v119.7 -->
                             <button id="tyra-change-icon-btn">🎭 Change Icon</button>
-                            <button id="tyra-change-persona-btn">✨ Change Vibe</button> <!-- NEW -->
+                            <button id="tyra-change-persona-btn">✨ Change Vibe</button>
                             <div class="tyra-settings-separator"></div>
-                            <button id="tyra-burn-history-btn" class="tyra-danger-btn">🔥 Burn History</button> <!-- NEW v119.1 -->
+                            <button id="tyra-burn-history-btn" class="tyra-danger-btn">🔥 Burn History</button>
                             <div class="tyra-settings-separator"></div>
                             <a href="#" id="tyra-logout-link">Logout</a>
                         </div>
@@ -692,6 +710,10 @@
         const changePersonaBtn = state.targetElement.querySelector('#tyra-change-persona-btn');
         if(changePersonaBtn) changePersonaBtn.addEventListener('click', onPersonaChangeClick);
 
+        // NEW in v119.5: Sync Theme Toggle Listener
+        const syncThemeBtn = state.targetElement.querySelector('#tyra-sync-theme-btn');
+        if(syncThemeBtn) syncThemeBtn.addEventListener('click', onSyncToggleClick);
+
         const emailForm = state.targetElement.querySelector('#tyra-email-form');
         if (emailForm) emailForm.addEventListener('submit', onEmailSubmit);
         
@@ -744,6 +766,7 @@
         state.currentView = 'email_entry'; // Go back to the start
         state.streaks = { current: 0 }; // NEW in v116.0: Reset streaks on logout
         state.persona = 'bestie'; // Reset persona
+        state.currentPhase = null; // Reset phase
         render();
     }
 
@@ -802,23 +825,31 @@
     // --- NEW in v119.0: Theme Picker Logic ---
     function onThemeChangeClick(e) {
         e.preventDefault();
-        toggleSettingsMenu(false); // Close settings
+        toggleSettingsMenu(false); 
         
         const container = state.targetElement.querySelector('#tyra-modal-container');
         if(container) {
             container.innerHTML = templates.themePickerModal();
             
-            // Bind close button
             container.querySelector('.tyra-modal-close').addEventListener('click', () => {
                 container.innerHTML = '';
             });
             
-            // Bind theme selection
             container.querySelectorAll('.tyra-theme-choice').forEach(choice => {
                 choice.addEventListener('click', () => {
                     const selectedKey = choice.dataset.themeKey;
+                    
+                    if (state.syncThemeToCycle) {
+                        state.syncThemeToCycle = false;
+                        localStorage.setItem('tyra_sync_cycle_pref', 'false');
+                        
+                        // MODIFIED v119.7: Updated label to "Cycle Sync"
+                        const syncBtn = state.targetElement.querySelector('#tyra-sync-theme-btn');
+                        if(syncBtn) syncBtn.textContent = "🔄 Cycle Sync: OFF";
+                    }
+                    
                     changeTheme(selectedKey);
-                    container.innerHTML = ''; // Close modal
+                    container.innerHTML = ''; 
                 });
             });
         }
@@ -861,6 +892,33 @@
         }
     }
 
+    // NEW in v119.5: Sync Toggle Logic
+    function onSyncToggleClick(e) {
+        e.preventDefault();
+        // Toggle state
+        state.syncThemeToCycle = !state.syncThemeToCycle;
+        localStorage.setItem('tyra_sync_cycle_pref', state.syncThemeToCycle);
+        
+        const btn = e.target;
+        // MODIFIED v119.7: Updated label to "Cycle Sync"
+        btn.textContent = state.syncThemeToCycle ? "🔄 Cycle Sync: ON" : "🔄 Cycle Sync: OFF";
+        
+        // Apply logic immediately
+        if (state.syncThemeToCycle) {
+            if (state.currentPhase && PHASE_THEMES[state.currentPhase]) {
+                changeTheme(PHASE_THEMES[state.currentPhase]);
+            } else {
+                // No phase data yet, revert to default or keep current?
+                // Fallback: Just keep current, but maybe notify user?
+                console.log("Sync enabled, but no active phase data found.");
+            }
+        } else {
+            // If turned off, revert to the manually saved preference
+            const savedTheme = localStorage.getItem('tyra_theme_pref') || 'default';
+            changeTheme(savedTheme);
+        }
+    }
+
     // --- MODIFIED in v118.5: Update BOTH launcher and header ---
     function changeLauncherIcon(key) {
         state.launcherIconKey = key;
@@ -886,7 +944,15 @@
     // --- NEW in v119.0: Change Theme Logic ---
     function changeTheme(key) {
         state.themeKey = key;
-        localStorage.setItem('tyra_theme_pref', key);
+        // Only save to manual preference if NOT in sync mode, 
+        // OR if called explicitly by manual picker.
+        // However, simplistic approach: always save current visual state to pref 
+        // so it persists if they turn sync off later? 
+        // Better approach: Separate manual pref from current display.
+        // But for v119.0 compatibility, we just save it.
+        if (!state.syncThemeToCycle) {
+             localStorage.setItem('tyra_theme_pref', key);
+        }
         
         const container = state.targetElement.querySelector('.tyra-widget-container');
         if (container) {
@@ -1166,16 +1232,31 @@
 
     // MODIFIED in v116.0: Fetch and store streak data
     // MODIFIED in v119.2: Update state.persona from config
+    // MODIFIED in v119.5: Check phase and auto-sync theme
     async function initializeAuthenticatedSession() {
         try {
             const config = await api.get('config');
             state.lang = config.lang || {};
+            
             if(config.streaks) {
                 state.streaks = config.streaks;
             }
             if(config.persona) {
                 state.persona = config.persona; // Load saved persona
             }
+            if(config.current_phase) {
+                state.currentPhase = config.current_phase; // Load phase
+            }
+
+            // Apply Cycle Sync Logic if enabled
+            if (state.syncThemeToCycle && state.currentPhase && PHASE_THEMES[state.currentPhase]) {
+                const autoTheme = PHASE_THEMES[state.currentPhase];
+                // Only apply if different from current to avoid thrashing
+                if (state.themeKey !== autoTheme) {
+                    changeTheme(autoTheme);
+                }
+            }
+
             render();
         } catch (e) {
             console.error("Failed to load config for authenticated user:", e);
@@ -1393,6 +1474,9 @@
             
             // NEW in v119.0: Read saved theme preference
             const savedThemeKey = localStorage.getItem('tyra_theme_pref') || 'default';
+            
+            // NEW in v119.5: Read saved cycle sync preference
+            const savedSyncPref = localStorage.getItem('tyra_sync_cycle_pref') === 'true';
 
             Object.assign(state, { 
                 apiUrl: apiUrl.replace(/\/$/, ''), 
@@ -1409,7 +1493,8 @@
                 isDashboardStale: false,
                 streaks: { current: 0 },
                 launcherIconKey: savedIconKey, // Set initial icon state
-                themeKey: savedThemeKey // Set initial theme state
+                themeKey: savedThemeKey, // Set initial theme state
+                syncThemeToCycle: savedSyncPref // Set sync preference
             });
 
             TYRA_AVATAR_URL = `${state.apiUrl}/static/images/tyra_avatar.png`;

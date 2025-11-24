@@ -1,4 +1,4 @@
-# app.py (v119.2 - Added Dynamic Persona API)
+# app.py (v119.5 - Added Cycle-Synced Interface Logic)
 import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets, random, requests
 from datetime import datetime, timedelta, timezone, date
 from flask import Flask, Response, render_template, request, jsonify, session, redirect, url_for, send_from_directory, g
@@ -72,6 +72,7 @@ ALLOWED_ORIGINS = [
 ]
 
 # --- Feature Flags ---
+ENABLE_CYCLE_SYNCED_UI = True # NEW in v119.5: Enables automatic theme switching based on cycle phase.
 ENABLE_NATIVE_APP_AUTH = True # NEW in v118.0: Enables a secure endpoint for an authenticated native app to get a token.
 ENABLE_SHAREABLE_INSIGHTS = True # NEW in v117.0
 ENABLE_GAMIFICATION_STREAKS = True # NEW in v116.0: Enables daily check-in streaks.
@@ -1361,6 +1362,48 @@ def _get_dashboard_data(profile):
     
     return dashboard_data
 
+# --- NEW in v119.5: Cycle Phase Calculation Helper ---
+def _calculate_cycle_phase(profile):
+    """
+    Determines the current biological cycle phase based on the last logged period.
+    Returns: 'menstrual', 'follicular', 'ovulation', 'luteal', or None
+    """
+    period_data = profile.get("period_data", {})
+    cycles = period_data.get("cycles", [])
+    
+    if not cycles:
+        return None
+        
+    last_start_str = cycles[0].get("start_date")
+    if not last_start_str:
+        return None
+        
+    try:
+        last_start_dt = datetime.strptime(last_start_str, "%Y-%m-%d").date()
+        today = datetime.now().date()
+        cycle_day = (today - last_start_dt).days + 1
+        
+        if cycle_day < 1: return None # Future date or error
+        
+        # Standard Phase Approximation (Assuming ~28 day cycle)
+        if 1 <= cycle_day <= 5:
+            return 'menstrual'
+        elif 6 <= cycle_day <= 13:
+            return 'follicular'
+        elif 14 <= cycle_day <= 17:
+            return 'ovulation'
+        elif cycle_day >= 18:
+            # Cap it reasonably at 45 days to avoid "Luteal" forever if they miss logging
+            if cycle_day < 45:
+                return 'luteal'
+            else:
+                return None # Cycle too long/missed logging
+                
+    except (ValueError, TypeError):
+        return None
+    
+    return None
+
 def _handle_profile_check_or_creation(data, is_api_call=False):
     identifier = data.get('identifier')
     if not is_api_call:
@@ -1893,6 +1936,7 @@ if app.config['ENABLE_WIDGET_MODE']:
         
     # MODIFIED in v116.0: Add streak data to config payload
     # MODIFIED in v119.2: Return current persona in config
+    # MODIFIED in v119.5: Return current cycle phase for UI syncing
     @app.route('/api/v1/config')
     @token_required
     def api_config():
@@ -1900,12 +1944,15 @@ if app.config['ENABLE_WIDGET_MODE']:
         lang_code = 'en'
         streak_data = {"current": 0} # Default for guests
         persona = "bestie" # Default persona
+        current_phase = None # NEW in v119.5
 
         if g.profile and not g.is_guest:
             lang_code = g.profile.get('language', 'en')
             persona = g.profile.get('persona', 'bestie') # Load persona
             if ENABLE_GAMIFICATION_STREAKS:
                 streak_data = g.profile.get("streaks", {"current": 0})
+            if ENABLE_CYCLE_SYNCED_UI:
+                current_phase = _calculate_cycle_phase(g.profile) # Calculate phase
         
         lang_data = load_language_data(lang_code)
 
@@ -1913,7 +1960,8 @@ if app.config['ENABLE_WIDGET_MODE']:
             "auth_mode": auth_mode,
             "lang": lang_data,
             "streaks": streak_data,
-            "persona": persona # Return to frontend
+            "persona": persona,
+            "current_phase": current_phase # Return to frontend
         })
 
     # The config route for a user who is not yet authenticated

@@ -1,4 +1,4 @@
-# user_profiler.py (v119.4 - Added Dynamic Persona Switching with Safe Defaults)
+# user_profiler.py (v119.7 - Renamed 'Sync Vibe' to 'Cycle Sync' for clarity)
 from datetime import datetime, timedelta
 import dateparser # NEW in v111.4: Fix for NameError in format_profile_for_prompt
 
@@ -210,13 +210,24 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
         if current_streak > 0:
             ui_context.append(f"  - Streak Counter: A '🔥 {current_streak}' icon shows the user's 'daily streak counter,' representing how many days in a row they have chatted with you.")
         ui_context.append("  - Dashboard Button: A 'Dashboard' button takes the user to a page summarizing their health data.")
-        ui_context.append("  - Settings Menu (⋮): Contains links for 'Privacy Policy' and 'Logout.'")
+        
+        # --- MODIFIED in v119.7: Detailed Settings Menu Context for Self-Awareness ---
+        ui_context.append("  - Settings Menu (⋮): This is the 'three dots' menu in the top right. It contains the following items:")
+        ui_context.append("    1. 'Privacy Policy': Link to the policy.")
+        ui_context.append("    2. '🎨 Change Theme': Lets the user manually change the app colors (Themes: Midnight, Coquette, Matcha, Ocean, Sunset).")
+        ui_context.append("    3. '🔄 Cycle Sync': A toggle feature. If ON, the app theme automatically changes color based on the user's cycle phase (Pink for Period, Orange for Ovulation). It aligns the app's aesthetic with their biology.")
+        ui_context.append("    4. '🎭 Change Icon': Lets the user disguise the app icon as a Calculator or Notes app for privacy (Discreet Mode).")
+        ui_context.append("    5. '✨ Change Vibe': Lets the user change YOUR personality (Bestie, Professional, Coach).")
+        ui_context.append("    6. '🔥 Burn History': A 'Panic Button' that instantly wipes the chat screen and removes recent logs for privacy.")
+        ui_context.append("    7. 'Logout': Logs the user out.")
+        # --- End v119.7 ---
+
         ui_context.append("- Dashboard Widgets: The Dashboard page contains widgets for: Current Cycle, Upcoming Reminders, Medications, Health Goals, Recent Logs, and Charts.")
         ui_context.append("- Chat Controls:")
         ui_context.append("  - File Upload (📎 icon): Allows users to upload documents or images for analysis.")
         ui_context.append("  - Voice Input (🎤 icon): Allows users to speak their messages.")
     
-    ui_context.append("\n**INSTRUCTION:** If a user asks a question about a feature of the app (like 'where are my reminders,' 'what does the flame mean,' or 'how can I see my cycle history'), you MUST use the context above to provide a direct, helpful answer that guides them to the correct UI element.")
+    ui_context.append("\n**INSTRUCTION:** If a user asks a question about a feature of the app (like 'where are my reminders,' 'what is Cycle Sync', 'how to hide the app'), you MUST use the context above to provide a direct, helpful answer that explains what the feature is and exactly where to find it.")
     context_lines.extend(ui_context)
     
     # --- NEW v102.0: Add Key Memories to context ---

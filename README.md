@@ -236,6 +236,7 @@ https://tyra-ai.onrender.com/admin/backup/download_db/X7kP9mW3qT8rY2nF6vL4zJ0hB5
 5.  Sharable Insights: Feature_comp_24oct25_1_sharable_insights_women_health_chatbot
 6.  Easter Egg, Discrete Icon: Feature_comp_21Nov25_1_easter_egg_discrete_mode_women_health_chatbot
 7.  Burn Mode: Feature_comp_21Nov25_2_burn_mode_women_health_chatbot
+8.  Cycle Sync: Feature_comp_24Nov25_1_cycle_sync_women_health_chatbot
 
 
 #### **Point 5: Pending Item**
@@ -440,3 +441,39 @@ We will add a "✨ Change Vibe" option to the Settings menu, allowing the user t
     *   Create a new Modal (similar to Theme/Icon pickers) to select the persona.
     *   Persist the selection via API.
 
+
+#### **6: Cycle-Synced Interface ("Bio-Adaptive UI")**
+
+**Complexity:** ⭐⭐ (Low/Moderate - Logic connection)
+**Impact:** Very High for "Alive Factor" & Daily Engagement.
+
+#### **Why this is next:**
+1.  **Bio-Feedback Loop:** Young users want technology that feels connected to their biology. This feature transforms the app from a static tool into a "living" accessory that mirrors their body's internal state.
+2.  **Leverages Existing Assets:** We already built the *Period Tracker* (Backend) and the *Theming Engine* (Frontend). This feature bridges the gap, making them work together automatically.
+3.  **Magical UX:** Having the app automatically shift from *High-Energy Orange* (Ovulation) to *Cozy Pink* (Menstrual) without user input creates a "wow" moment that feels highly personalized.
+
+#### **Implementation Plan for v119.5 - v119.7**
+
+We will add a "🔄 Cycle Sync" toggle to the Settings menu. When enabled, the app's color theme will automatically update based on the user's current biological phase.
+
+##### **1. The Phase-to-Theme Mapping**
+*   **🌸 Menstrual (Days 1-5):** **Coquette Theme** (Soft Pink/Comforting)
+*   **🌿 Follicular (Days 6-13):** **Matcha Theme** (Fresh Green/New Beginnings)
+*   **🟠 Ovulation (Days 14-17):** **Sunset Theme** (Vibrant Orange/High Energy)
+*   **🌙 Luteal (Days 18+):** **Midnight Theme** (Dark Purple/Inward/Restorative)
+
+##### **2. Technical Changes**
+
+*   **Backend (`app.py`):**
+    *   Create a helper function `_calculate_cycle_phase(profile)` that determines the phase based on the last logged period start date.
+    *   Update the `/api/v1/config` endpoint to calculate and return `current_phase` in the JSON response.
+    *   Add `ENABLE_CYCLE_SYNCED_UI` feature flag.
+
+*   **Frontend (`tyra_widget.js`):**
+    *   Define `PHASE_THEMES` constant mapping biological phases to theme keys.
+    *   Add "🔄 Cycle Sync" toggle button to the Settings dropdown.
+    *   Implement logic in `initializeAuthenticatedSession` to check the preference and auto-apply the theme.
+    *   Implement **Smart Override**: If the user manually changes the theme while Sync is ON, automatically turn Sync OFF to respect their choice.
+
+*   **Backend (`user_profiler.py`):**
+    *   Update the system prompt (`ui_context`) to make Tyra "self-aware" of this new feature so she can explain it to users.
