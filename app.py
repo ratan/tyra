@@ -1,3 +1,4 @@
+
 # app.py (v119.5 - Added Cycle-Synced Interface Logic)
 import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets, random, requests
 from datetime import datetime, timedelta, timezone, date
@@ -3410,58 +3411,148 @@ def _generate_and_save_insight_image(profile):
     image_url = _generate_insight_image(name, insight_text)
     return insight_text, image_url
 
-# MODIFIED in v117.3: Beautify image generation
-def _generate_insight_image(name, insight_text):
+# --- UPGRADED "WRAPPED" ENGINE (v119.8) ---
+def _calculate_monthly_vibe(profile):
+    """
+    Analyzes last 30 days of logs to determine the user's 'Aura'.
+    Returns: { 'title': str, 'palette': [colors], 'stat_text': str }
+    """
+    health_logs = profile.get("health_logs", [])
+    now = datetime.now(timezone.utc)
+    thirty_days_ago = now - timedelta(days=30)
+    
+    recent_logs = []
+    for log in health_logs:
+        try:
+            log_dt = dateparser.parse(log['timestamp'])
+            if log_dt.tzinfo is None: log_dt = log_dt.replace(tzinfo=timezone.utc)
+            if log_dt > thirty_days_ago: recent_logs.append(log)
+        except: continue
+
+    if not recent_logs:
+        return {
+            "title": "Clean Slate",
+            "palette": ["#E0E0E0", "#F5F5F5", "#FFFFFF"], # Grey/White
+            "stat_text": "Ready to start tracking!"
+        }
+
+    # Analyze Vibe
+    moods = [l['value'] for l in recent_logs if l['category'] == 'mood']
+    sleeps = [l['value'] for l in recent_logs if l['category'] == 'sleep']
+    stress = [l['value'] for l in recent_logs if l['category'] == 'stress']
+    
+    # 1. Chaos Coordinator (High Stress / Poor Sleep)
+    if 'high' in stress or 'poor' in sleeps or 'anxious' in moods:
+        return {
+            "title": "Chaos Coordinator",
+            "palette": ["#41295a", "#2F0743", "#A855A8"], # Deep Purple/Red
+            "stat_text": f"Survived {len(recent_logs)} logs this month."
+        }
+    
+    # 2. Main Character Energy (Energetic / Good Sleep)
+    if 'energetic' in moods or 'good' in sleeps:
+        return {
+            "title": "Main Character Energy",
+            "palette": ["#FF512F", "#DD2476", "#FF7043"], # Orange/Pink
+            "stat_text": "Radiating good vibes."
+        }
+        
+    # 3. Zen Master (Low Stress / Calm)
+    if 'low' in stress or 'calm' in moods:
+        return {
+            "title": "Zen Master",
+            "palette": ["#11998e", "#38ef7d", "#AED581"], # Green/Teal
+            "stat_text": "Unbothered & flourishing."
+        }
+
+    # Default: The Consistent Queen
+    return {
+        "title": "Consistent Queen",
+        "palette": ["#8B4A9C", "#BC9AC8", "#E6B0AA"], # Tyra Default
+        "stat_text": "Keeping it steady."
+    }
+
+def _generate_insight_image(name, insight_text_unused):
+    """
+    Generates a procedural 'Spotify Wrapped' style image based on user's Vibe.
+    """
     try:
-        # --- Define paths and constants ---
-        template_path = os.path.join('static', 'images', 'insight_template.png')
+        # Load User Context
+        profile_hash = session.get('profile_hash') or g.profile_hash
+        profile = load_profile(profile_hash)
+        vibe = _calculate_monthly_vibe(profile)
+        
+        # Canvas Setup
+        W, H = 1080, 1920 # Instagram Story Aspect Ratio
+        img = Image.new('RGBA', (W, H), color=vibe['palette'][0])
+        draw = ImageDraw.Draw(img)
+        
+        # --- 1. PROCEDURAL BACKGROUND ART ---
+        # Draw random orbs using the palette to create an abstract "Aura"
+        for _ in range(5):
+            color = random.choice(vibe['palette'])
+            x = random.randint(-200, W)
+            y = random.randint(-200, H)
+            size = random.randint(400, 900)
+            # Draw semi-transparent circle
+            overlay = Image.new('RGBA', (W, H), (0,0,0,0))
+            draw_overlay = ImageDraw.Draw(overlay)
+            draw_overlay.ellipse((x, y, x+size, y+size), fill=color)
+            # Blend it
+            img = Image.alpha_composite(img, overlay)
+            
+        draw = ImageDraw.Draw(img) # Refresh draw object for text
+        
+        # --- 2. TEXT ASSETS ---
+        try:
+            font_path = os.path.join('static', 'fonts', 'Poppins-Bold.ttf')
+            title_font = ImageFont.truetype(font_path, 120)
+            vibe_font = ImageFont.truetype(font_path, 90)
+            stat_font = ImageFont.truetype(font_path, 60)
+        except:
+            title_font = ImageFont.load_default()
+            vibe_font = ImageFont.load_default()
+            stat_font = ImageFont.load_default()
+
+        # --- 3. DRAW CONTENT ---
+        # Avatar is drawn at Y=100 and height is 200, so it ends at Y=300.
+        # We need to start text BELOW Y=300.
+        
+        # User Name (Moved down to 360 to clear avatar)
+        draw.text((W//2, 360), f"{name}'s", font=title_font, fill="white", anchor="ms")
+        
+        # "Health Aura" label (Moved down to 450)
+        draw.text((W//2, 450), "HEALTH AURA", font=stat_font, fill="white", anchor="ms")
+        
+        # The Vibe Title (Centerpiece)
+        # FIX: Wrap the title text so "MAIN CHARACTER ENERGY" doesn't cut off
+        # width=12 characters usually breaks "Main Character" nicely
+        wrapped_title = textwrap.fill(vibe['title'].upper(), width=12)
+        draw.multiline_text((W//2, H//2), wrapped_title, font=vibe_font, fill="white", anchor="mm", align="center", spacing=20)
+        
+        # The Stat (Moved down slightly to accommodate multi-line title)
+        draw.text((W//2, H//2 + 250), vibe['stat_text'], font=stat_font, fill="white", anchor="mm")
+        
+        # Tyra Footer
+        draw.text((W//2, H - 150), "Generated by Tyra", font=stat_font, fill=(255, 255, 255, 180), anchor="ms")
+        
+        # --- 4. AVATAR COMPOSITE ---
         avatar_path = os.path.join('static', 'images', 'tyra_avatar.png')
-        font_path = os.path.join('static', 'fonts', 'Poppins-Bold.ttf')
-        
-        IMAGE_WIDTH = 1000
-        AVATAR_SIZE = 180
-        
-        # --- Load assets ---
-        base_img = Image.open(template_path).convert("RGBA")
-        avatar_img = Image.open(avatar_path).convert("RGBA")
-        
-        # --- Create circular avatar ---
-        avatar_img = avatar_img.resize((AVATAR_SIZE, AVATAR_SIZE))
-        mask = Image.new("L", (AVATAR_SIZE, AVATAR_SIZE), 0)
-        draw_mask = ImageDraw.Draw(mask)
-        draw_mask.ellipse((0, 0, AVATAR_SIZE, AVATAR_SIZE), fill=255)
-        
-        # --- Composite avatar onto base image ---
-        avatar_pos = ((IMAGE_WIDTH - AVATAR_SIZE) // 2, 100)
-        base_img.paste(avatar_img, avatar_pos, mask)
-        
-        # --- Prepare for text drawing ---
-        draw = ImageDraw.Draw(base_img)
-        title_font = ImageFont.truetype(font_path, 60)
-        text_font = ImageFont.truetype(font_path, 50)
-        brand_font = ImageFont.truetype(font_path, 30)
-        
-        # --- Wrap and draw insight text ---
-        wrapped_text = textwrap.fill(insight_text, width=30)
-        
-        # --- Define text and positions ---
-        title_text = f"{name}'s Weekly Insight"
-        brand_text = "Generated by Tyra | tribher.com"
-        
-        # --- Draw text on image with new positions ---
-        draw.text((IMAGE_WIDTH / 2, 320), title_text, font=title_font, fill="white", anchor="ms")
-        draw.multiline_text((IMAGE_WIDTH / 2, 500), wrapped_text, font=text_font, fill="white", anchor="mm", align="center", spacing=15)
-        draw.text((IMAGE_WIDTH / 2, 900), brand_text, font=brand_font, fill=(255, 255, 255, 200), anchor="ms")
-        
-        # --- Save the image ---
-        filename = f"insight_{uuid.uuid4().hex[:8]}.png"
+        if os.path.exists(avatar_path):
+            avatar = Image.open(avatar_path).convert("RGBA").resize((200, 200))
+            mask = Image.new("L", (200, 200), 0)
+            ImageDraw.Draw(mask).ellipse((0, 0, 200, 200), fill=255)
+            img.paste(avatar, ((W - 200)//2, 100), mask)
+
+        # Save
+        filename = f"wrapped_{uuid.uuid4().hex[:8]}.png"
         save_path = os.path.join(SHARED_INSIGHTS_DIR, filename)
-        base_img.save(save_path)
+        img.save(save_path)
         
-        # Return the public-facing URL
         return url_for('shared_insight', filename=filename, _external=False)
+
     except Exception as e:
-        print(f"!!! ERROR generating insight image: {e}")
+        print(f"!!! ERROR generating Wrapped image: {e}")
         return None
 
 if __name__ == '__main__':

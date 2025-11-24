@@ -477,3 +477,63 @@ We will add a "🔄 Cycle Sync" toggle to the Settings menu. When enabled, the a
 
 *   **Backend (`user_profiler.py`):**
     *   Update the system prompt (`ui_context`) to make Tyra "self-aware" of this new feature so she can explain it to users.
+
+
+### **7: "Spotify Wrapped" Style Graphic Generation (Health Aura)**
+**Complexity:** ⭐⭐⭐⭐⭐ (High - Advanced Python Image Processing + Data Aggregation)
+**Impact:** ⭐⭐⭐⭐⭐ (Viral - The primary driver for social sharing and user acquisition).
+
+### **Why this is next:**
+1.  **The "Shareability" Gap:** Currently, Tyra provides text answers. Text is useful, but it isn't posted on Instagram Stories. To reach a younger demographic, the output must be **visual, aesthetic, and identity-affirming**.
+2.  **Gamification of Self:** Users love seeing their behaviors reflected back to them as a "personality type" (e.g., MBTI, Astrology, Spotify Wrapped). It turns boring health logs into a "Vibe."
+3.  **Technical Foundation Ready:** We have the `PIL` (Pillow) library installed and a basic image route from v117.0. Now we upgrade it from a static template to a **Procedural Art Engine**.
+
+---
+
+### **Implementation Plan for v119.8**
+We will transform the "Weekly Summary" into a **"Health Aura" Generator**. Instead of a generic card, Tyra will generate a unique, abstract piece of art based on the user's recent logs.
+
+#### **1. The "Auras" (Logic Mapping)**
+We will analyze the last 30 days of logs (`mood`, `sleep`, `stress`) to assign one of three dominant "Vibes."
+
+*   🔮 **Chaos Coordinator**
+    *   *Triggers:* High stress, poor sleep, anxious mood.
+    *   *Visuals:* Deep Purple, Dark Red, Neon Violet.
+    *   *Tagline:* "Survived [N] logs this month."
+*   ✨ **Main Character Energy**
+    *   *Triggers:* Energetic mood, good sleep, consistent activity.
+    *   *Visuals:* Bright Orange, Hot Pink, Coral (Sunset gradients).
+    *   *Tagline:* "Radiating good vibes."
+*   🌿 **Zen Master**
+    *   *Triggers:* Calm mood, low stress, "good" sleep.
+    *   *Visuals:* Sage Green, Teal, Soft Blue.
+    *   *Tagline:* "Unbothered & flourishing."
+
+#### **2. Technical Changes**
+
+**Backend (`app.py`):**
+*   **New Logic Function:** Implement `_calculate_monthly_vibe(profile)`.
+    *   It must filter `health_logs` for the last 30 days.
+    *   It counts frequencies of specific values (e.g., "anxious", "energetic") to determine the dominant Aura.
+    *   It returns a **Color Palette** (List of 3 Hex codes) and a **Title** string.
+*   **Procedural Art Engine:** Upgrade `_generate_insight_image`:
+    *   **Canvas:** Create a 1080x1920 (Story size) blank canvas using `PIL.Image.new`.
+    *   **Background:** Instead of loading a static image, use `ImageDraw.ellipse` to draw 5-7 semi-transparent "Orbs" at random X/Y coordinates.
+    *   **Coloring:** Fill these orbs using the specific **Color Palette** returned by the logic function.
+    *   **Typography:** Use `textwrap` to center and bold the Aura Title (e.g., "MAIN / CHARACTER / ENERGY") so it looks like a poster.
+
+**Frontend (`tyra_widget.js`):**
+*   **Conversation Trigger:** The feature is triggered conversationally ("show my summary").
+*   **UI Component:** Render the `weekly_insight_card`.
+*   **Download Logic:** Ensure the "Download Image" button handles the binary blob correctly so the user saves a high-quality `.png` to their phone's gallery, ready for Instagram/TikTok.
+
+---
+
+### **Visual Concept (Code vs. Result)**
+
+| Aspect | v117.0 (Old MVP) | v119.8 (New Wrapped Engine) |
+| :--- | :--- | :--- |
+| **Background** | Static `.png` file loaded from disk. | **Dynamic:** Python draws random shapes every time. |
+| **Color** | Always Purple/White. | **Adaptive:** Changes based on user's stress/mood. |
+| **Text** | Simple paragraph summary. | **Poster Style:** Huge, bold typography ("CHAOS COORDINATOR"). |
+| **Format** | Square (1:1) | **Story (9:16)** - Full screen mobile. |
