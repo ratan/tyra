@@ -1,5 +1,4 @@
-
-# app.py (v119.5 - Added Cycle-Synced Interface Logic)
+# app.py (v120.1 - Fixed Pregnancy Data Persistence & Back-Calculation)
 import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets, random, requests
 from datetime import datetime, timedelta, timezone, date
 from flask import Flask, Response, render_template, request, jsonify, session, redirect, url_for, send_from_directory, g
@@ -43,6 +42,7 @@ MAX_CHAT_LOG_ENTRIES = 50 # NEW in v108.0: Limit size of persisted chat log
 MEMORY_CHECK_IN_WINDOW_DAYS = 14 # NEW in v115.0: Window for proactive memory check-ins
 INSIGHT_COOLDOWN_DAYS = 7 # NEW in v117.0
 BURN_WINDOW_HOURS = 24 # NEW in v119.1: Time window for Burner Mode
+PROACTIVE_GREET_COOLDOWN_HOURS = 2 # NEW in v120.0: Anti-spam cooldown for proactive greeting
 
 # NEW in v105.4: Define an ordered list of models for fallback on rate limiting.
 GEMINI_MODEL_CASCADE_LIST = [
@@ -73,6 +73,7 @@ ALLOWED_ORIGINS = [
 ]
 
 # --- Feature Flags ---
+ENABLE_PROACTIVE_GREETING = True # NEW in v120.0: Enables the system to initiate conversation.
 ENABLE_CYCLE_SYNCED_UI = True # NEW in v119.5: Enables automatic theme switching based on cycle phase.
 ENABLE_NATIVE_APP_AUTH = True # NEW in v118.0: Enables a secure endpoint for an authenticated native app to get a token.
 ENABLE_SHAREABLE_INSIGHTS = True # NEW in v117.0
@@ -131,6 +132,7 @@ app.config['ENABLE_EMAIL_OTP_VERIFICATION'] = ENABLE_EMAIL_OTP_VERIFICATION
 app.config['ENABLE_EMAIL_OTP_API_VERIFICATION'] = ENABLE_EMAIL_OTP_API_VERIFICATION
 app.config['ENABLE_CONVERSATIONAL_ONBOARDING'] = ENABLE_CONVERSATIONAL_ONBOARDING # NEW in v103.0
 app.config['ENABLE_NATIVE_APP_AUTH'] = ENABLE_NATIVE_APP_AUTH # NEW in v118.0
+app.config['ENABLE_PROACTIVE_GREETING'] = ENABLE_PROACTIVE_GREETING # NEW in v120.0
 
 # --- DUAL-BACKEND PERSISTENT STORAGE CONFIGURATION (v101.4) ---
 # Check for a persistent storage path from an environment variable (set in Render).
@@ -468,7 +470,7 @@ def normalize_date_string(date_str: str) -> str:
     parsed_date = dateparser.parse(date_str, settings={'PREFER_DATES_FROM': 'past'})
     return parsed_date.strftime("%Y-%m-%d") if parsed_date else datetime.now().strftime("%Y-%m-%d")
 
-# MODIFIED in v117.0: Add `accept_weekly_insight` intent.
+# MODIFIED in v120.1: Enhanced Intent Recognition for Pregnancy Updates
 def get_conversation_summary(user_message):
     today_date = datetime.now().strftime('%Y-%m-%d')
     summary_prompt = f"""
@@ -477,22 +479,29 @@ Your output MUST be a single, raw, valid JSON object.
 Today's date is {today_date}. Resolve all relative dates to 'YYYY-MM-DD' format.
 
 **CRITICAL RULES & INTENTS (In Order of Priority):**
-1.  **ACCEPT WEEKLY INSIGHT (Highest Priority):** If the user agrees to see their weekly summary (e.g., "yes show me", "sure", "show me my summary"), return `accept_weekly_insight`.
-2.  **REAL TALK:** For phrases indicating a desire for a frank or confidential chat (e.g., "can I ask something personal", "real talk"), return a `request_real_talk` intent.
-3.  **LIFE EVENT UPDATE:** If the user announces a new life stage like pregnancy or perimenopause, or the end of one (giving birth), return a `life_event_update` intent.
-4.  **PROVIDE DOB:** If the user explicitly states their date of birth ("my dob is", "I was born on"), you MUST return a `provide_dob` intent.
-5.  **REMINDERS & MEMORIES:** For future events mentioned conversationally (e.g., "I have an appointment on Friday", "I have a huge exam next week"), you MUST include BOTH of the following:
+1.  **UPDATE PREGNANCY (Highest Priority):** If the user states exactly how many weeks pregnant they are (e.g., "I am 32 weeks pregnant", "32 weeks", "I'm 10 weeks along"), you MUST return an `update_pregnancy_weeks` type inside `life_event_update`.
+2.  **ACCEPT WEEKLY INSIGHT:** If the user agrees to see their summary (e.g., "yes show me", "sure", "show me my summary"), return `accept_weekly_insight`.
+3.  **REAL TALK:** For phrases indicating a desire for a frank or confidential chat (e.g., "can I ask something personal", "real talk"), return a `request_real_talk` intent.
+4.  **LIFE EVENT UPDATE:** If the user announces a new life stage like pregnancy or perimenopause, or the end of one (giving birth), return a `life_event_update` intent.
+5.  **PROVIDE DOB:** If the user explicitly states their date of birth ("my dob is", "I was born on"), you MUST return a `provide_dob` intent.
+6.  **REMINDERS & MEMORIES:** For future events mentioned conversationally (e.g., "I have an appointment on Friday", "I have a huge exam next week"), you MUST include BOTH of the following:
     a. A `potential_reminder` object with `text` and `date`.
     b. A `suggested_memory` string containing the full fact (e.g., "User has an appointment on Friday").
-6.  **CHARTING OVERRIDE:** If the message contains 'chart', 'calendar', 'graph', or 'visualize', you MUST return a `query_chart` intent.
-7.  **SET GOAL:** For phrases like "my goal is..." or "I want to start...", return a `set_goal` intent.
-8.  **MEDICATION LOG:** For phrases about taking or logging medicine, return `medication_log`.
-9.  **REMINDERS (EXPLICIT):** For command-like phrases ("remind me to", "set a reminder"), return `reminder_action`.
-10. **OTHER ACTIONS:** Process `health_log`, `period_action`, or `ambiguous_log` as normal.
-11. **GENERAL CHAT / QUESTIONS:** For anything else, return an empty JSON object `{{}}`.
+7.  **CHARTING OVERRIDE:** If the message contains 'chart', 'calendar', 'graph', or 'visualize', you MUST return a `query_chart` intent.
+8.  **SET GOAL:** For phrases like "my goal is..." or "I want to start...", return a `set_goal` intent.
+9.  **MEDICATION LOG:** For phrases about taking or logging medicine, return `medication_log`.
+10. **REMINDERS (EXPLICIT):** For command-like phrases ("remind me to", "set a reminder"), return `reminder_action`.
+11. **OTHER ACTIONS:** Process `health_log`, `period_action`, or `ambiguous_log` as normal.
+12. **GENERAL CHAT / QUESTIONS:** For anything else, return an empty JSON object `{{}}`.
 
 
 --- EXAMPLES ---
+User: 'I am 32 weeks pregnant'
+{{"life_event_update": {{"type": "update_pregnancy_weeks", "weeks": 32}}}}
+
+User: 'I think I am about 10 weeks pregnant'
+{{"life_event_update": {{"type": "update_pregnancy_weeks", "weeks": 10}}}}
+
 User: 'yes, show me my summary'
 {{"accept_weekly_insight": true}}
 
@@ -1022,6 +1031,17 @@ def get_program_suggestion(profile, user_message):
 
 def calculate_trimester(profile):
     details = profile.get("secondary_details", {})
+    
+    # v120.1 FIX: Check if we have weeks directly first, before relying on LMP
+    if details.get("weeks_gestation") and details.get("is_pregnant"):
+        weeks = details.get("weeks_gestation")
+        trimester = "TR1" if weeks <= 13 else "TR2" if 14 <= weeks <= 27 else "TR3"
+        # Only update if changed
+        if details.get("current_trimester") != trimester:
+            details["current_trimester"] = trimester
+            return True
+        return False
+        
     lmp_str = details.get("lmp_date")
     if not lmp_str or not details.get("is_pregnant"): return False
     try:
@@ -1681,11 +1701,28 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
     if not action_response and not special_context and insights.get('provide_dob'):
         profile, action_response, new_pending_question = _handle_dob_update(insights['provide_dob'], profile)
             
+    # --- v120.1: ROBUST PREGNANCY UPDATE HANDLER ---
     if not action_response and not special_context and insights.get('life_event_update'):
         event_data = insights.pop('life_event_update')
         event_type = event_data.get('type')
 
-        if event_type == 'start_pregnancy' and not profile.get('secondary_details', {}).get('is_pregnant'):
+        if event_type == 'update_pregnancy_weeks':
+            weeks = event_data.get('weeks')
+            if weeks:
+                profile.setdefault('secondary_details', {})
+                profile['secondary_details']['is_pregnant'] = True
+                profile['secondary_details']['weeks_gestation'] = weeks
+                
+                # MATHEMATICAL BACK-CALCULATION of LMP
+                # LMP = Today - (Weeks * 7) days
+                estimated_lmp = datetime.now() - timedelta(weeks=weeks)
+                profile['secondary_details']['lmp_date'] = estimated_lmp.strftime('%Y-%m-%d')
+                
+                calculate_trimester(profile) # Update trimester immediately
+                
+                action_response = f"Got it! I've updated your profile to **{weeks} weeks pregnant**. (I've estimated your start date based on this so I can keep tracking for you!)"
+        
+        elif event_type == 'start_pregnancy' and not profile.get('secondary_details', {}).get('is_pregnant'):
             session['pending_question'] = 'confirm_start_pregnancy'
             action_response = "That's wonderful news! To help me provide the most relevant information, may I update your profile to reflect that you are pregnant?"
         elif event_type == 'start_perimenopause' and not profile.get('secondary_details', {}).get('is_perimenopausal'):
@@ -1697,6 +1734,7 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
             action_response = "That's wonderful news! It sounds like you've welcomed your baby. Shall I update your profile to reflect that you are now parenting?"
         else:
              action_response = None
+    # -----------------------------------------------
 
     if not action_response and not special_context and ENABLE_CONTEXTUAL_REMINDERS and insights.get('potential_reminder'):
         potential_reminder_data = insights.pop('potential_reminder')
@@ -2169,6 +2207,61 @@ if app.config['ENABLE_WIDGET_MODE']:
             return jsonify([]) # Guests have no server-side history
         chat_log = g.profile.get('chat_log', [])
         return jsonify(chat_log)
+
+    # --- NEW in v120.0: Proactive Greeting Endpoint ---
+    @app.route('/api/v1/greet', methods=['POST'])
+    @token_required
+    def api_greet():
+        if not ENABLE_PROACTIVE_GREETING:
+            return jsonify({"status": "no_greet", "reason": "disabled"})
+            
+        if g.is_guest:
+            # Guests don't have enough data for a personalized greeting usually
+            return jsonify({"status": "no_greet", "reason": "guest_mode"})
+
+        profile = g.profile
+        proactive_data = profile.setdefault("proactive_assistance", {})
+        last_greet_str = proactive_data.get("last_proactive_greet_ts")
+        
+        # 1. Spam Check: Don't greet if we greeted (or user chatted) recently
+        now = datetime.now(timezone.utc)
+        
+        # Also check last interaction time to avoid greeting someone who just spoke
+        interaction_log = profile.get("interaction_log", [])
+        if interaction_log:
+            last_interaction_str = interaction_log[0].get("timestamp")
+            try:
+                last_interaction_dt = dateparser.parse(last_interaction_str)
+                # Normalize naive/aware datetimes
+                if last_interaction_dt.tzinfo is None: last_interaction_dt = last_interaction_dt.replace(tzinfo=timezone.utc)
+                
+                # If user spoke within the window, don't interrupt
+                if (now - last_interaction_dt).total_seconds() < (PROACTIVE_GREET_COOLDOWN_HOURS * 3600):
+                    return jsonify({"status": "no_greet", "reason": "recent_interaction"})
+            except: pass
+
+        if last_greet_str:
+            try:
+                last_greet_dt = dateparser.parse(last_greet_str)
+                if last_greet_dt.tzinfo is None: last_greet_dt = last_greet_dt.replace(tzinfo=timezone.utc)
+                if (now - last_greet_dt).total_seconds() < (PROACTIVE_GREET_COOLDOWN_HOURS * 3600):
+                    return jsonify({"status": "no_greet", "reason": "cooldown"})
+            except: pass
+
+        # 2. Generate Greeting
+        greeting_text = _process_proactive_greeting(profile)
+        
+        # 3. Update State
+        proactive_data["last_proactive_greet_ts"] = now.isoformat()
+        
+        # 4. Save to Chat Log (so it persists in history)
+        rendered_reply = md.render(greeting_text)
+        profile.setdefault("chat_log", []).append({'role': 'assistant', 'content': rendered_reply})
+        profile['chat_log'] = profile['chat_log'][-MAX_CHAT_LOG_ENTRIES:]
+        
+        save_profile(g.profile_hash, profile)
+        
+        return jsonify({"status": "success", "reply": rendered_reply})
 
     # --- NEW API ENDPOINTS FOR FULL-FEATURED WIDGET ---
     @app.route('/api/v1/upload', methods=['POST'])
@@ -3410,6 +3503,27 @@ def _generate_and_save_insight_image(profile):
     insight_text, _ = _analyze_last_7_days(profile)
     image_url = _generate_insight_image(name, insight_text)
     return insight_text, image_url
+
+# --- NEW in v120.0: Proactive Greeting Logic ---
+def _process_proactive_greeting(profile):
+    """Generates the greeting using the logic tree and LLM."""
+    # This formats the prompt with the is_proactive_greeting=True flag, 
+    # which tells user_profiler.py to generate the specific 'hook' instruction.
+    context_prompt = format_profile_for_prompt(
+        profile,
+        chatbot_name=CHATBOT_NAME,
+        is_proactive_greeting=True 
+    )
+    
+    # We pass an empty string as user message because Tyra is speaking first
+    # The prompt already contains the "Initiate conversation" instruction.
+    response = _call_llm_with_fallback(f"{context_prompt}")
+    
+    if response is None:
+        # Fallback if LLM fails
+        return "Hello! How are you doing today?"
+        
+    return response.text.strip()
 
 # --- UPGRADED "WRAPPED" ENGINE (v119.8) ---
 def _calculate_monthly_vibe(profile):

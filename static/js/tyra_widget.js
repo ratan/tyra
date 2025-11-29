@@ -1,4 +1,4 @@
-// static/js/tyra_widget.js (v119.7 - Renamed 'Sync Vibe' to 'Cycle Sync' for clarity)
+// static/js/tyra_widget.js (v120.0 - Golden Master: Proactive Engagement + Cycle Sync + Health Wrapped)
 (function() {
     'use strict';
 
@@ -98,8 +98,7 @@
         // MODIFIED in v119.0: Add Data Theme Attribute & Change Theme Button
         // MODIFIED in v119.1: Add Burn History Button
         // MODIFIED in v119.2: Added "Change Vibe" button
-        // MODIFIED in v119.5: Added "Sync Vibe" toggle button
-        // MODIFIED in v119.7: Renamed "Sync Vibe" to "Cycle Sync"
+        // MODIFIED in v119.5: Added "Cycle Sync" toggle button
         widgetShell: (title) => {
             // Logic to pick the correct icon for the header
             const iconKey = state.launcherIconKey || 'default';
@@ -108,7 +107,6 @@
             const fullUrl = iconPath.startsWith('http') ? iconPath : `${state.apiUrl}/${iconPath}`;
             
             // Determine toggle text based on state
-            // MODIFIED v119.7: Use "Cycle Sync"
             const syncToggleText = state.syncThemeToCycle ? "🔄 Cycle Sync: ON" : "🔄 Cycle Sync: OFF";
 
             return `
@@ -126,7 +124,7 @@
                             <a href="https://fitcommunity.in/privacyPolicy.php" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
                             <div class="tyra-settings-separator"></div>
                             <button id="tyra-change-theme-btn">🎨 Change Theme</button>
-                            <button id="tyra-sync-theme-btn" title="Auto-match theme to your cycle">${syncToggleText}</button> <!-- NEW v119.7 -->
+                            <button id="tyra-sync-theme-btn" title="Auto-match theme to your cycle">${syncToggleText}</button>
                             <button id="tyra-change-icon-btn">🎭 Change Icon</button>
                             <button id="tyra-change-persona-btn">✨ Change Vibe</button>
                             <div class="tyra-settings-separator"></div>
@@ -1233,6 +1231,7 @@
     // MODIFIED in v116.0: Fetch and store streak data
     // MODIFIED in v119.2: Update state.persona from config
     // MODIFIED in v119.5: Check phase and auto-sync theme
+    // MODIFIED in v120.0: Trigger Proactive Greeting
     async function initializeAuthenticatedSession() {
         try {
             const config = await api.get('config');
@@ -1258,9 +1257,33 @@
             }
 
             render();
+            
+            // --- NEW in v120.0: Proactive Greeting Hook ---
+            triggerProactiveGreeting();
+
         } catch (e) {
             console.error("Failed to load config for authenticated user:", e);
             render(); 
+        }
+    }
+    
+    // NEW in v120.0: Proactive Greeting Logic
+    async function triggerProactiveGreeting() {
+        // Only trigger if we are in chat view and not onboarding
+        if (state.currentView !== 'chat' || state.onboardingToken) return;
+
+        try {
+            const { ok, data } = await api.post('greet', {});
+            
+            if (ok && data.status === 'success' && data.reply) {
+                // Add a small delay to simulate "thinking" or "typing"
+                setTimeout(() => {
+                    addMessage(data.reply, 'ai', {}, true);
+                }, 1200); 
+            }
+            // If status is 'no_greet', we do nothing (silent fail is intended)
+        } catch (e) {
+            console.warn("Proactive greeting check failed (non-critical):", e);
         }
     }
     

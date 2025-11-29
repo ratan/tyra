@@ -177,6 +177,33 @@
         }
         /* End of v107.0 Styles */
 
+        /* NEW in v117.0: Weekly Insight Card Styles */
+        .tyra-insight-card {
+            margin-top: 10px;
+            background: #fff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .tyra-insight-card img {
+            width: 100%;
+            display: block;
+            height: auto;
+        }
+        .tyra-download-insight-btn {
+            background-color: var(--primary-color-solid);
+            color: white;
+            border: none;
+            padding: 10px;
+            width: 100%;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .tyra-download-insight-btn:hover {
+            background-color: #7b418a;
+        }
 
         .language-picker-container {
             margin-top: 10px;
@@ -865,6 +892,66 @@ document.addEventListener('DOMContentLoaded', function() {
                 videoContainer.appendChild(iframe);
                 div.appendChild(videoContainer);
             }
+            
+            // --- NEW in v117.4: Handle Weekly Insight Card ---
+            else if (uiComponent === 'weekly_insight_card') {
+                const card = document.createElement('div');
+                // Reuse style from widget.js or define here inline if needed, but better to use existing classes
+                // Since this is the Monolith template, we can add a specific class in the <style> block or inline
+                card.style.marginTop = '10px';
+                card.style.background = '#fff';
+                card.style.borderRadius = '12px';
+                card.style.overflow = 'hidden';
+                card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+                card.style.textAlign = 'center';
+                
+                const img = document.createElement('img');
+                img.src = responseData.data.image_url; 
+                img.alt = "Your weekly insight";
+                img.style.width = '100%';
+                img.style.display = 'block';
+                img.style.height = 'auto';
+                
+                const btn = document.createElement('button');
+                btn.textContent = 'Download Image';
+                btn.style.backgroundColor = '#8B4A9C';
+                btn.style.color = 'white';
+                btn.style.border = 'none';
+                btn.style.padding = '10px';
+                btn.style.width = '100%';
+                btn.style.fontWeight = 'bold';
+                btn.style.cursor = 'pointer';
+                
+                btn.addEventListener('click', async (e) => {
+                    const b = e.target;
+                    b.textContent = 'Downloading...';
+                    b.disabled = true;
+                    try {
+                        const response = await fetch(responseData.data.image_url);
+                        const blob = await response.blob();
+                        const objectUrl = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = objectUrl;
+                        link.download = `tyra-weekly-insight.png`;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        URL.revokeObjectURL(objectUrl);
+                    } catch (err) {
+                        console.error("Download failed:", err);
+                        b.textContent = 'Download Failed';
+                    } finally {
+                        setTimeout(() => {
+                            b.textContent = 'Download Image';
+                            b.disabled = false;
+                        }, 2000);
+                    }
+                });
+                
+                card.appendChild(img);
+                card.appendChild(btn);
+                div.appendChild(card);
+            }
         }
 
         inputs.chatLog.appendChild(div);
@@ -1028,6 +1115,25 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // --- NEW in v120.0: Proactive Greeting Hook for Monolith ---
+    async function triggerProactiveGreeting() {
+        try {
+            const response = await fetch('/proactive_greet', { method: 'POST' });
+            if (response.ok) {
+                const data = await response.json();
+                if (data.status === 'success' && data.reply) {
+                    // Simulate thinking delay
+                    setTimeout(() => {
+                        appendMessage(data.reply, 'ai', {}, true);
+                    }, 1200);
+                }
+                // If status is 'no_greet', we do nothing
+            }
+        } catch (e) {
+            console.warn("Proactive greeting check failed (non-critical):", e);
+        }
+    }
+
     // --- INITIAL PAGE LOAD LOGIC ---
     if (!CONFIG.ENABLE_CONVERSATIONAL_ONBOARDING && forms.profile) {
         populateAndInitializeForm(forms.profile, '');
@@ -1101,6 +1207,10 @@ document.addEventListener('DOMContentLoaded', function() {
     if (IS_SESSION_ACTIVE) {
         showSection('chat');
         loadChatHistory(); // MODIFIED in v108.0
+        
+        // Trigger the Proactive Greeting check after history loads
+        // NEW in v120.0
+        setTimeout(triggerProactiveGreeting, 500); 
     } else {
         showSection('identifier');
     }

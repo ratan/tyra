@@ -537,3 +537,68 @@ We will analyze the last 30 days of logs (`mood`, `sleep`, `stress`) to assign o
 | **Color** | Always Purple/White. | **Adaptive:** Changes based on user's stress/mood. |
 | **Text** | Simple paragraph summary. | **Poster Style:** Huge, bold typography ("CHAOS COORDINATOR"). |
 | **Format** | Square (1:1) | **Story (9:16)** - Full screen mobile. |
+
+
+Here is the structured detail for the new **Feature #7: Proactive Engagement Engine**.
+
+***
+
+### **8: "Proactive Engagement Engine" (Context-Aware Greeting)**
+**Complexity:** ⭐⭐⭐ (Moderate - Backend Logic Tree + Frontend Hooks)
+**Impact:** ⭐⭐⭐⭐⭐ (Retention - Transforms the bot from "reactive tool" to "caring companion").
+
+### **Why this is next:**
+1.  **Breaking the "Empty Chat" Syndrome:** Currently, Tyra waits for the user to speak. This puts the cognitive load on the user. A proactive greeting ("Hi Sarah, how did that exam go?") removes friction and invites interaction.
+2.  **Emotional Continuity:** Users feel "heard" when a bot remembers their state from yesterday (e.g., high stress) and follows up. This builds trust faster than any feature.
+3.  **Life-Stage Relevance:** A teenager needs a different opening line ("How's school?") than a pregnant woman in her third trimester ("Time for a breathing exercise?"). This makes the app feel bespoke to every user segment.
+
+---
+
+### **Implementation Plan for v120.0**
+We will implement a **Decision Tree Logic** that runs *before* the user types anything. When the widget opens, Tyra will "think" and generate a custom opening line.
+
+#### **1. The Logic Tree (Priority Hierarchy)**
+The engine evaluates conditions in this strict order. The first match determines the greeting.
+
+1.  🔴 **Safety/Continuity (Highest Priority)**
+    *   *Trigger:* User logged "High Stress," "Severe Pain," or "Depression" in the last 24 hours.
+    *   *Action:* Gentle, empathetic follow-up. *"I know yesterday was tough. How are you holding up?"*
+2.  📅 **Weekly "Value Add" (Once/Week)**
+    *   *Trigger:* >7 days since last "Growth" event.
+    *   *Action:* Delivers a specific nugget based on persona.
+        *   *Pregnant:* "Week 32 Update: Baby is the size of a squash!"
+        *   *Teen:* "Myth Buster: Periods don't sync!"
+        *   *General:* "Weekly Growth: What's one small win you had?"
+3.  👶 **Life Stage Context (The "Care" Layer)**
+    *   *Teen:* School/Social check-in.
+    *   *Pregnant (30+ wks):* Immediate suggestion for **Physical Relief** (Breathing/Pelvic tilt).
+    *   *Menopause:* Check for **Sleep/Hot Flashes**.
+    *   *Senior:* Check for **Mobility/Joints**.
+4.  🔄 **Cycle Phase (The "Living UI" Hook)**
+    *   *Trigger:* None of the above apply, but tracking is enabled.
+    *   *Action:* Phase-specific advice. (e.g., Luteal = "Be gentle with yourself today.").
+5.  ☀️ **Time of Day (Fallback)**
+    *   *Trigger:* No data available.
+    *   *Action:* "Good morning/evening."
+
+#### **2. Technical Changes**
+
+**Backend (`app.py`):**
+*   **New Route:** `/api/v1/greet` (POST).
+*   **New Logic Function:** `_get_proactive_instruction(profile)`. This implements the Decision Tree above and returns a specific *System Instruction string*.
+*   **LLM Integration:** The route injects this instruction into a specialized prompt: *"You are initiating the conversation. GOAL: [Instruction]. Keep it under 2 sentences."*
+*   **Spam Prevention:** The route checks the last interaction timestamp. If `< 2 hours`, it returns `no_greet_needed` to avoid annoying the user.
+
+**Frontend (`tyra_widget.js`):**
+*   **Trigger Hook:** Inside `initSession()` (which runs on load), add a call to `triggerProactiveGreeting()`.
+*   **Delay:** Add a `setTimeout(1000ms)` so the chat window opens *before* the message appears, simulating a "typing" effect.
+
+---
+
+### **User Experience (Before vs. After)**
+
+| Scenario | v119.8 (Reactive) | v120.0 (Proactive Engine) |
+| :--- | :--- | :--- |
+| **High Stress Yesterday** | *User opens app.*<br>(Silence)<br>**User:** "I'm still stressed." | *User opens app.*<br>**Tyra:** "Hey. I know yesterday was really heavy for you. How are you feeling this morning? 💜" |
+| **34 Weeks Pregnant** | *User opens app.*<br>(Silence)<br>**User:** "Back hurts." | *User opens app.*<br>**Tyra:** "Hi [Name]! At 34 weeks, that pressure is real. Shall we do a quick 60-second breathing reset together?" |
+| **Teenager (Morning)** | *User opens app.*<br>(Silence) | *User opens app.*<br>**Tyra:** "Good morning! ☀️ Ready to slay the day, or do we need a vibe check first?" |
