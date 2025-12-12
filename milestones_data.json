@@ -1,42 +1,298 @@
 {
   "pregnancy_by_week": {
-    "10": "You've reached 10 weeks, and your little one is now officially a fetus! This is a major milestone as all their essential organs have formed. Many people find their early pregnancy symptoms start to ease up around now.",
-    "11": "Your baby is about the size of a fig, and tiny fingernails are starting to form. They're already moving around, but you probably won't feel it for a few more weeks.",
-    "12": "You've reached the end of the first trimester! Your baby's reflexes are developing, and they can now open and close their hands and curl their toes.",
-    "13": "Welcome to the second trimester! Many people find their energy levels start to return and morning sickness subsides. Your baby's vocal cords are now developing.",
-    "14": "Your baby is starting to grow fine hair, called lanugo, all over their body, which helps keep them warm. They can also make facial expressions now, like squinting and frowning.",
-    "15": "Your baby can now sense light. If you were to shine a flashlight on your belly, they might move away from the beam. Their taste buds are also forming.",
-    "16": "Your baby's sensory development is kicking into high gear. They can now make sucking motions with their mouth, and their tiny ears are in their final position.",
-    "17": "The skeleton is starting to harden from soft cartilage to bone. You might start feeling the first flutters of movement, often called 'quickening,' around this time!",
-    "18": "Your baby's unique fingerprints and toe prints are now forming. Their nervous system is also maturing rapidly, allowing for more coordinated movements.",
-    "19": "A waxy, protective coating called vernix caseosa is beginning to form on your baby's skin. This coating protects them from the amniotic fluid.",
-    "20": "Congratulations, you're halfway there! The 20-week anatomy scan is often performed around this time. It's a great opportunity to discuss your baby's growth with your doctor.",
-    "21": "Your baby is regularly swallowing amniotic fluid, which is great practice for their digestive system. You're likely feeling their kicks and jabs more consistently now.",
-    "22": "Your baby now looks like a miniature newborn. Their senses of sight and hearing are continuing to improve, and they can even perceive your touch through the uterine wall.",
-    "23": "Your baby's hearing is getting much better. They can now hear your heartbeat, your voice, and other sounds from outside. This is a perfect time to talk and sing to them!",
-    "24": "A major milestone in lung development is happening this week as the branches of the respiratory 'tree' and surfactant production begin, making viability outside the womb a possibility.",
-    "25": "Your baby is getting plumper as they gain more fat, which is making their skin less translucent. They may even be able to respond to your voice with movement.",
-    "26": "At 26 weeks, your baby's eyes are starting to open and they are becoming more sensitive to sound. It's a good time to discuss the upcoming glucose screening test with your doctor.",
-    "27": "You've reached the end of the second trimester! Your baby is practicing breathing by inhaling and exhaling amniotic fluid, and they may even have a regular sleep-wake cycle.",
-    "28": "Welcome to the third trimester, the home stretch! Your baby's brain is developing rapidly, and they can now experience REM sleep, which means they might be dreaming.",
-    "29": "Your baby is demanding a lot of nutrients, especially calcium for their hardening bones. This is a great time to focus on calcium-rich foods to support their growth.",
-    "30": "Your baby is growing fast and gaining about half a pound a week from here on out. Their eyesight is continuing to develop, though their vision is still quite blurry.",
-    "31": "All five of your baby's senses are now fully functional. They are busy processing information from all the sights, sounds, and tastes they are experiencing.",
-    "32": "Your baby is likely getting into the head-down position in preparation for birth. Their skin is becoming soft and smooth as they continue to plump up.",
-    "33": "Your baby's bones are hardening, but their skull remains soft and flexible. This allows the plates to overlap slightly, which helps them fit through the birth canal.",
-    "34": "Your baby's lungs are nearly fully developed, and the protective vernix caseosa coating on their skin is getting thicker. They are getting ready for their big debut!",
-    "35": "It's getting a bit crowded in there! Your baby doesn't have as much room to do somersaults, but you'll still feel plenty of strong kicks, jabs, and stretches.",
-    "36": "Your baby may 'drop' into your pelvis around this time, a process called lightening or engagement. Be sure to discuss the signs of labor with your healthcare provider.",
-    "37": "Congratulations, you've reached full term! This means your baby is developed enough to be born at any time from this week forward. Their lungs are mature and ready for the outside world.",
-    "38": "Your baby is continuing to build a layer of fat to help them regulate their body temperature after birth. They are also shedding most of the fine lanugo hair that covered their body.",
-    "39": "Your baby's brain is still developing at an incredible pace. It's one of the last organs to finish maturing, so every extra day inside helps them prepare for life outside.",
-    "40": "You've reached your official due date! While this is the day everyone focuses on, remember that many babies arrive a little earlier or later. Don't worry if they're taking their time.",
-    "default": "While I don't have a specific update for this week, development is happening every day! It's always best to discuss your baby's specific progress with your healthcare provider."
+    "10": {
+      "description": "You've reached 10 weeks, and your little one is now officially a fetus! This is a major milestone as all their essential organs have formed. Many people find their early pregnancy symptoms start to ease up around now.",
+      "baby_size": "a Strawberry",
+      "mom_tip": "If nausea is fading, try reintroducing healthy proteins."
+    },
+    "11": {
+      "description": "Your baby is about the size of a fig, and tiny fingernails are starting to form. They're already moving around, but you probably won't feel it for a few more weeks.",
+      "baby_size": "a Fig",
+      "mom_tip": "Hydration is key—try coconut water if plain water is boring."
+    },
+    "12": {
+      "description": "You've reached the end of the first trimester! Your baby's reflexes are developing, and they can now open and close their hands and curl their toes.",
+      "baby_size": "a Lime",
+      "mom_tip": "Celebrate finishing the first trimester with some self-care!"
+    },
+    "13": {
+      "description": "Welcome to the second trimester! Many people find their energy levels start to return and morning sickness subsides. Your baby's vocal cords are now developing.",
+      "baby_size": "a Lemon",
+      "mom_tip": "Use that returning energy for gentle walks or prenatal yoga."
+    },
+    "14": {
+      "description": "Your baby is starting to grow fine hair, called lanugo, all over their body, which helps keep them warm. They can also make facial expressions now, like squinting and frowning.",
+      "baby_size": "a Nectarine",
+      "mom_tip": "Constipation is common now; increase fiber intake."
+    },
+    "15": {
+      "description": "Your baby can now sense light. If you were to shine a flashlight on your belly, they might move away from the beam. Their taste buds are also forming.",
+      "baby_size": "an Apple",
+      "mom_tip": "Sleeping on your side is safer now than on your back."
+    },
+    "16": {
+      "description": "Your baby's sensory development is kicking into high gear. They can now make sucking motions with their mouth, and their tiny ears are in their final position.",
+      "baby_size": "an Avocado",
+      "mom_tip": "Back pain starting? Look into a pregnancy pillow."
+    },
+    "17": {
+      "description": "The skeleton is starting to harden from soft cartilage to bone. You might start feeling the first flutters of movement, often called 'quickening,' around this time!",
+      "baby_size": "a Turnip",
+      "mom_tip": "Those flutters are real! It's bonding time."
+    },
+    "18": {
+      "description": "Your baby's unique fingerprints and toe prints are now forming. Their nervous system is also maturing rapidly, allowing for more coordinated movements.",
+      "baby_size": "a Bell Pepper",
+      "mom_tip": "Dizziness can happen; stand up slowly."
+    },
+    "19": {
+      "description": "A waxy, protective coating called vernix caseosa is beginning to form on your baby's skin. This coating protects them from the amniotic fluid.",
+      "baby_size": "a Mango",
+      "mom_tip": "Leg cramps? Stretching calves before bed helps."
+    },
+    "20": {
+      "description": "Congratulations, you're halfway there! The 20-week anatomy scan is often performed around this time. It's a great opportunity to discuss your baby's growth with your doctor.",
+      "baby_size": "a Banana",
+      "mom_tip": "Halfway mark! Time to schedule that anatomy scan."
+    },
+    "21": {
+      "description": "Your baby is regularly swallowing amniotic fluid, which is great practice for their digestive system. You're likely feeling their kicks and jabs more consistently now.",
+      "baby_size": "a Carrot",
+      "mom_tip": "Varicose veins may appear; elevate your legs when possible."
+    },
+    "22": {
+      "description": "Your baby now looks like a miniature newborn. Their senses of sight and hearing are continuing to improve, and they can even perceive your touch through the uterine wall.",
+      "baby_size": "a Spaghetti Squash",
+      "mom_tip": "Talk to your baby—they can hear you now!"
+    },
+    "23": {
+      "description": "Your baby's hearing is getting much better. They can now hear your heartbeat, your voice, and other sounds from outside. This is a perfect time to talk and sing to them!",
+      "baby_size": "a Large Mango",
+      "mom_tip": "Braxton Hicks contractions might start—stay hydrated."
+    },
+    "24": {
+      "description": "A major milestone in lung development is happening this week as the branches of the respiratory 'tree' and surfactant production begin, making viability outside the womb a possibility.",
+      "baby_size": "an Ear of Corn",
+      "mom_tip": "Glucose screening test is usually coming up soon."
+    },
+    "25": {
+      "description": "Your baby is getting plumper as they gain more fat, which is making their skin less translucent. They may even be able to respond to your voice with movement.",
+      "baby_size": "a Rutabaga",
+      "mom_tip": "Restless legs? Try a warm bath and magnesium."
+    },
+    "26": {
+      "description": "At 26 weeks, your baby's eyes are starting to open and they are becoming more sensitive to sound. It's a good time to discuss the upcoming glucose screening test with your doctor.",
+      "baby_size": "a Scallion",
+      "mom_tip": "Swelling? Reduce salt and keep feet up."
+    },
+    "27": {
+      "description": "You've reached the end of the second trimester! Your baby is practicing breathing by inhaling and exhaling amniotic fluid, and they may even have a regular sleep-wake cycle.",
+      "baby_size": "a Cauliflower",
+      "mom_tip": "Second trimester is ending; prepare for the final stretch."
+    },
+    "28": {
+      "description": "Welcome to the third trimester, the home stretch! Your baby's brain is developing rapidly, and they can now experience REM sleep, which means they might be dreaming.",
+      "baby_size": "an Eggplant",
+      "mom_tip": "Welcome to the 3rd Trimester! Count those kicks."
+    },
+    "29": {
+      "description": "Your baby is demanding a lot of nutrients, especially calcium for their hardening bones. This is a great time to focus on calcium-rich foods to support their growth.",
+      "baby_size": "a Butternut Squash",
+      "mom_tip": "Baby needs calcium; yogurt or leafy greens are great."
+    },
+    "30": {
+      "description": "Your baby is growing fast and gaining about half a pound a week from here on out. Their eyesight is continuing to develop, though their vision is still quite blurry.",
+      "baby_size": "a Cabbage",
+      "mom_tip": "Heartburn is common; try smaller, frequent meals."
+    },
+    "31": {
+      "description": "All five of your baby's senses are now fully functional. They are busy processing information from all the sights, sounds, and tastes they are experiencing.",
+      "baby_size": "a Coconut",
+      "mom_tip": "Shortness of breath happens as baby pushes up; sit tall."
+    },
+    "32": {
+      "description": "Your baby is likely getting into the head-down position in preparation for birth. Their skin is becoming soft and smooth as they continue to plump up.",
+      "baby_size": "a Kale Bunch",
+      "mom_tip": "Practice pelvic tilts to ease back pressure."
+    },
+    "33": {
+      "description": "Your baby's bones are hardening, but their skull remains soft and flexible. This allows the plates to overlap slightly, which helps them fit through the birth canal.",
+      "baby_size": "a Pineapple",
+      "mom_tip": "Waddling is normal; your pelvis is widening."
+    },
+    "34": {
+      "description": "Your baby's lungs are nearly fully developed, and the protective vernix caseosa coating on their skin is getting thicker. They are getting ready for their big debut!",
+      "baby_size": "a Cantaloupe",
+      "mom_tip": "Hospital bag packed yet? Good time to start."
+    },
+    "35": {
+      "description": "It's getting a bit crowded in there! Your baby doesn't have as much room to do somersaults, but you'll still feel plenty of strong kicks, jabs, and stretches.",
+      "baby_size": "a Honeydew Melon",
+      "mom_tip": "Frequent urination returns; baby is sitting low."
+    },
+    "36": {
+      "description": "Your baby may 'drop' into your pelvis around this time, a process called lightening or engagement. Be sure to discuss the signs of labor with your healthcare provider.",
+      "baby_size": "a Romaine Lettuce",
+      "mom_tip": "Breathing might get easier as baby drops."
+    },
+    "37": {
+      "description": "Congratulations, you've reached full term! This means your baby is developed enough to be born at any time from this week forward. Their lungs are mature and ready for the outside world.",
+      "baby_size": "a Swiss Chard",
+      "mom_tip": "You are full term! Rest whenever you can."
+    },
+    "38": {
+      "description": "Your baby is continuing to build a layer of fat to help them regulate their body temperature after birth. They are also shedding most of the fine lanugo hair that covered their body.",
+      "baby_size": "a Leek",
+      "mom_tip": "Look for the mucus plug; labor could be soon."
+    },
+    "39": {
+      "description": "Your baby's brain is still developing at an incredible pace. It's one of the last organs to finish maturing, so every extra day inside helps them prepare for life outside.",
+      "baby_size": "a Watermelon",
+      "mom_tip": "Contractions? Time them. 5-1-1 rule is standard."
+    },
+    "40": {
+      "description": "You've reached your official due date! While this is the day everyone focuses on, remember that many babies arrive a little earlier or later. Don't worry if they're taking their time.",
+      "baby_size": "a Pumpkin",
+      "mom_tip": "Happy Due Date! Relax, baby comes when ready."
+    },
+    "default": {
+      "description": "While I don't have a specific update for this week, development is happening every day! It's always best to discuss your baby's specific progress with your healthcare provider.",
+      "baby_size": "Growing",
+      "mom_tip": "Listen to your body and rest when needed."
+    }
   },
   "cycle_phases": {
-    "menstruation": "Your cycle has begun. It's a great time to focus on rest, gentle movement, and nourishing foods.",
-    "follicular": "As your energy returns after your period, you might find it's a great time for more active workouts.",
-    "ovulation": "You might be feeling a peak in your energy and mood around now. This is the fertile window of your cycle.",
-    "luteal": "As your body prepares for your next period, you might notice PMS symptoms. Gentle exercise and mindfulness can be very helpful now."
+    "menstruation": {
+      "description": "Your cycle has begun. It's a great time to focus on rest, gentle movement, and nourishing foods.",
+      "hormonal_focus": "Low Hormones",
+      "proactive_greeting": "Cycle Day 1-5. It's perfectly okay to cancel plans and rest."
+    },
+    "follicular": {
+      "description": "As your energy returns after your period, you might find it's a great time for more active workouts.",
+      "hormonal_focus": "Rising Estrogen",
+      "proactive_greeting": "Your energy is building! Great time to tackle creative projects."
+    },
+    "ovulation": {
+      "description": "You might be feeling a peak in your energy and mood around now. This is the fertile window of your cycle.",
+      "hormonal_focus": "Peak Estrogen",
+      "proactive_greeting": "You're at peak energy today! Social vibes are high."
+    },
+    "luteal": {
+      "description": "As your body prepares for your next period, you might notice PMS symptoms. Gentle exercise and mindfulness can be very helpful now.",
+      "hormonal_focus": "High Progesterone",
+      "proactive_greeting": "Nesting mode might be kicking in. Be gentle with yourself."
+    }
+  },
+  "postnatal_by_age": {
+    "0-4_weeks": {
+      "title": "Newborn (0–28 days)",
+      "feeding": "Only breastmilk (colostrum → mature milk). 8–12 feeds/24 hrs, 10–20 min each side.",
+      "sleep": "16–20 hours/day, no day-night difference yet.",
+      "weight_gain": "Loses 7–10% in first week → regains birth weight by day 10–14.",
+      "poop_pee": "Day 1–2: Meconium. Day 3–4: 6–8 wet diapers + 3–4 yellow stools daily.",
+      "milestones": "Reflexes only (rooting, sucking, Moro). Brief alert periods, tracks light/red objects.",
+      "red_flags": "Jaundice after day 4, no wet diaper >8 hrs, fever >38°C.",
+      "vaccinations": ["BCG", "OPV-0", "Hepatitis B birth dose (within 24 hrs, latest by 2 weeks)"],
+      "mom_recovery": "Focus on healing. Bleeding (Lochia) is normal. Sleep when baby sleeps is a cliché but true.",
+      "proactive_greeting": "Welcome to the newborn bubble! ❤️ Remember, feeding 8-12 times a day is normal right now. Have you checked for 6+ wet diapers today?"
+    },
+    "1-3_months": {
+      "title": "Infant (1–3 months)",
+      "feeding": "Still exclusive breastfeeding / formula. 7–9 feeds/day.",
+      "sleep": "15–17 hrs total. First stretches of 4–5 hrs at night start around 6–10 weeks.",
+      "weight_gain": "25–30 g per day.",
+      "milestones": "Social smile (5–8 weeks), lifts head 45° when on tummy, coos, follows moving objects 180°.",
+      "new_things": "6-week growth spurt, peak fussiness at 6–7 weeks (PURPLE crying period).",
+      "vaccinations": [
+        "6 weeks: Pentavalent-1, IPV-1, Rotavirus-1, PCV-1",
+        "10 weeks: Pentavalent-2, Rotavirus-2, PCV-2"
+      ],
+      "red_flags": "No smile by 8 weeks, poor head control, not calming with feeding/rocking.",
+      "mom_recovery": "You might be cleared for gentle exercise at 6 weeks. Watch for postpartum hair loss (Telogen Effluvium) - it's temporary!",
+      "proactive_greeting": "Baby is getting stronger! Have you seen that first social smile yet? Also, don't forget the 6-week vaccination appointment."
+    },
+    "4-6_months": {
+      "title": "Infant (4–6 months)",
+      "feeding": "Exclusive breastmilk/formula. Some doctors start dal water/rice water at 6 months (new IAP advisory).",
+      "sleep": "14–15 hrs. 4-month sleep regression common. Many do 6–8 hr stretch at night.",
+      "milestones": "Rolls over both ways, laughs out loud, reaches & grabs toys, bears weight on legs, raking grasp.",
+      "new_things": "Drooling & hand chewing starts (early teething in some).",
+      "vaccinations": [
+        "14 weeks: Pentavalent-3, IPV-2, Rotavirus-3, PCV-3"
+      ],
+      "red_flags": "Not reaching for objects, stiff legs/crossed legs.",
+      "mom_recovery": "Your sleep might get disrupted again by the 4-month regression. This is a survival phase, not a failure.",
+      "proactive_greeting": "If sleep has gone haywire, blame the 4-month regression! 😴 Also, is baby trying to roll over yet?"
+    },
+    "6_months": {
+      "title": "Half-Birthday Milestone",
+      "feeding": "First complementary food! Most Indian families start mashed rice/dal or ragi porridge. Continue milk.",
+      "milestones": "Sitting with support, tasting solids.",
+      "vaccinations": ["(See 14 weeks if missed)"],
+      "mom_recovery": "As baby starts solids, your breastfeeding rhythm might change. Stay hydrated.",
+      "proactive_greeting": "Happy half-birthday! 🎂 Is today the big day for starting solids? Mashed dal or rice is a great first step."
+    },
+    "7-9_months": {
+      "title": "Crawler (7–9 months)",
+      "feeding": "3 solid meals + breastmilk/formula. Finger foods, sippy cup introduction.",
+      "sleep": "13–14 hrs. 8–10 month sleep regression very common. Usually 2 naps.",
+      "milestones": "Sits without support, crawls/commando crawls, pincer grasp, waves bye-bye, says 'mama/dada' (non-specific).",
+      "new_things": "Stranger anxiety + separation anxiety peaks. Teething pain common.",
+      "vaccinations": [
+        "9 months: MMR-1 (or MR) + JE-1 (in endemic states)"
+      ],
+      "red_flags": "Not sitting by 9 months, no babbling, not transferring toys hand-to-hand.",
+      "mom_recovery": "Back pain is common from lifting a heavier baby. Watch your posture.",
+      "proactive_greeting": "Separation anxiety peaking? It's a sign of healthy attachment! 💜 Also, don't forget the MMR vaccine due at 9 months."
+    },
+    "10-12_months": {
+      "title": "Cruiser (10–12 months)",
+      "feeding": "3 meals + 2 snacks + milk. Family foods mashed/chopped.",
+      "sleep": "13–14 hrs. 1–2 naps. Many stand and cruise.",
+      "milestones": "Pulls to stand, cruises, may take first steps, says 1–3 clear words, points, follows simple commands.",
+      "vaccinations": [
+        "12 months: PCV booster, Hepatitis A-1 (some brands need 2 doses)"
+      ],
+      "celebration": "First birthday – cake smash photos!",
+      "red_flags": "Not pointing to objects, losing skills they had before.",
+      "mom_recovery": "You made it to one year! It's time to schedule your own annual health check-up too.",
+      "proactive_greeting": "Almost one! 🎈 Is baby cruising or standing yet? It's a great time to baby-proof those sharp corners."
+    },
+    "13-15_months": {
+      "title": "Toddler (13–15 months)",
+      "feeding": "Almost full family food (soft). Whole cow milk can start.",
+      "sleep": "12–14 hrs. Moving to 1 nap (many still on 2 naps).",
+      "milestones": "Walks independently, climbs stairs with help, 4–10 words, stacks 2 blocks.",
+      "new_things": "Temper tantrums start.",
+      "vaccinations": [
+        "15 months: MMR-2 (or MR + Measles), Varicella-1, PCV booster, Hepatitis A-2 (if needed)"
+      ],
+      "mom_recovery": "Chasing a walker is a workout! Ensure you are wearing comfortable footwear at home.",
+      "proactive_greeting": "Welcome to the toddler years! 🏃‍♀️ Walking yet? Also, brace yourself—tantrums are a normal part of this new independence."
+    },
+    "16-18_months": {
+      "title": "Toddler (16–18 months)",
+      "feeding": "Eats with family, uses spoon (messy), drinks from open glass.",
+      "sleep": "12–13 hrs + 1 afternoon nap.",
+      "milestones": "Runs, kicks ball, 10–50 words, points to 4–6 body parts, removes socks/shoes.",
+      "new_things": "Potty training interest in some kids.",
+      "vaccinations": [
+        "16–18 months: DPT booster-1, IPV booster, Hib booster (if Pentavalent was used)"
+      ],
+      "mom_recovery": "Mental load increases as they get more active. Take 5 minutes for yourself today.",
+      "proactive_greeting": "Is your little one running around now? 🌪️ It's also time for the DPT and IPV boosters if you haven't done them yet."
+    },
+    "19-24_months": {
+      "title": "Toddler (19–24 months)",
+      "feeding": "Eats everything family eats (mild spices ok).",
+      "sleep": "11–13 hrs + 1 nap (many drop nap around 2–2.5 yrs).",
+      "milestones": "Jumps, speaks 50+ words & 2-word sentences, undresses self, parallel play.",
+      "vaccinations": [
+        "18–24 months: Typhoid conjugate vaccine (TCV), Hepatitis A, Varicella-2, DPT booster-2 (at 2 yrs)"
+      ],
+      "big_milestone": "Turns 2 years – annual health check + vision/hearing screening.",
+      "mom_recovery": "Two years of parenting! Celebrate your resilience. 💪",
+      "proactive_greeting": "Two-word sentences often start now! 'Mama, up!' 🗣️ Don't forget the Typhoid and Hepatitis A vaccines due in this window."
+    }
   }
 }

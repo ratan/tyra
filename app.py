@@ -1,4 +1,4 @@
-# app.py (v120.1 - Fixed Pregnancy Data Persistence & Back-Calculation)
+# app.py (v121.0 - Lifecycle Companion: Deep Postnatal & Granular Proactive Logic)
 import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets, random, requests
 from datetime import datetime, timedelta, timezone, date
 from flask import Flask, Response, render_template, request, jsonify, session, redirect, url_for, send_from_directory, g
@@ -73,6 +73,7 @@ ALLOWED_ORIGINS = [
 ]
 
 # --- Feature Flags ---
+ENABLE_DEEP_LIFECYCLE_ENGINE = True # NEW in v121.0: Enables granular postnatal & age-specific logic (Vaccines, Indian context)
 ENABLE_PROACTIVE_GREETING = True # NEW in v120.0: Enables the system to initiate conversation.
 ENABLE_CYCLE_SYNCED_UI = True # NEW in v119.5: Enables automatic theme switching based on cycle phase.
 ENABLE_NATIVE_APP_AUTH = True # NEW in v118.0: Enables a secure endpoint for an authenticated native app to get a token.
@@ -491,11 +492,23 @@ Today's date is {today_date}. Resolve all relative dates to 'YYYY-MM-DD' format.
 8.  **SET GOAL:** For phrases like "my goal is..." or "I want to start...", return a `set_goal` intent.
 9.  **MEDICATION LOG:** For phrases about taking or logging medicine, return `medication_log`.
 10. **REMINDERS (EXPLICIT):** For command-like phrases ("remind me to", "set a reminder"), return `reminder_action`.
-11. **OTHER ACTIONS:** Process `health_log`, `period_action`, or `ambiguous_log` as normal.
-12. **GENERAL CHAT / QUESTIONS:** For anything else, return an empty JSON object `{{}}`.
+11. **INTERACTIVE TOOLS (NEW):**
+    a. If the user feels "overwhelmed", "panicked", "stressed", or asks to "breathe" or "calm down", return `request_breathing_tool`.
+    b. If the user explicitly asks for a "list" or "checklist" (e.g., "checklist for vaccines", "hospital bag list"), return `request_checklist` with a `topic`.
+12. **OTHER ACTIONS:** Process `health_log`, `period_action`, or `ambiguous_log` as normal.
+13. **GENERAL CHAT / QUESTIONS:** For anything else, return an empty JSON object `{{}}`.
 
 
 --- EXAMPLES ---
+User: 'I am feeling incredibly overwhelmed and stressed right now.'
+{{"request_breathing_tool": true, "health_log": {{"category": "stress", "value": "high"}}}}
+
+User: 'Can you give me a list of the vaccines due now?'
+{{"request_checklist": {{"topic": "vaccines due now"}}}}
+
+User: 'Create a checklist for my hospital bag.'
+{{"request_checklist": {{"topic": "hospital bag"}}}}
+
 User: 'I am 32 weeks pregnant'
 {{"life_event_update": {{"type": "update_pregnancy_weeks", "weeks": 32}}}}
 
@@ -705,7 +718,12 @@ def handle_milestone_query(action, profile):
     pregnancy_milestones = MILESTONES_DATA.get("pregnancy_by_week", {})
     milestone_text = pregnancy_milestones.get(str(weeks), pregnancy_milestones.get("default"))
     if milestone_text:
-        response = f"Of course! At {weeks} weeks pregnant, here's a typical milestone: {milestone_text}"
+        # Check if it's a simple string or a dictionary (v121.0 structure)
+        if isinstance(milestone_text, dict):
+             description = milestone_text.get('description', '')
+             response = f"Of course! At {weeks} weeks pregnant: {description}"
+        else:
+             response = f"Of course! At {weeks} weeks pregnant, here's a typical milestone: {milestone_text}"
     else:
         response = f"I don't have a specific milestone recorded for week {weeks}."
     return profile, response, None
@@ -1314,7 +1332,8 @@ def _process_quick_log_response(profile, category, value):
     context_prompt = format_profile_for_prompt(
         profile,
         chatbot_name=CHATBOT_NAME,
-        special_context=special_context
+        special_context=special_context,
+        milestones_data=MILESTONES_DATA # NEW in v121.0: Ensure persona has full context
     )
     
     # We pass a simple placeholder message as the user input is implicit (the button click)
@@ -1692,6 +1711,72 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
         save_profile(profile_hash, profile)
         return jsonify(response_payload)
 
+    # --- NEW v121.0: Interactive Tool Handlers ---
+    if not action_response and insights.get('request_breathing_tool'):
+        # 1. Immediate Empathy via LLM
+        context_prompt = format_profile_for_prompt(profile, chatbot_name=CHATBOT_NAME, special_context={"type": "dynamic_confirmation", "log_details": {"category": "stress", "value": "high"}, "is_negative": True}, milestones_data=MILESTONES_DATA)
+        response = _call_llm_with_fallback(f"{context_prompt}\nUser says: '{user_message}'. Respond with deep empathy, then invite them to follow the breathing bubble.")
+        reply_text = response.text.strip() if response else "I hear you. Let's take a moment to breathe together."
+        
+        response_payload = {
+            "reply": md.render(reply_text),
+            "ui_component": "breathing_tool" # This triggers the JS animation
+        }
+        
+        # Save to logs and return
+        profile.setdefault("chat_log", []).extend([
+            {'role': 'user', 'content': user_message},
+            {'role': 'assistant', 'content': response_payload['reply']}
+        ])
+        profile['chat_log'] = profile['chat_log'][-MAX_CHAT_LOG_ENTRIES:]
+        save_profile(profile_hash, profile)
+        return jsonify(response_payload)
+
+    elif not action_response and insights.get('request_checklist'):
+        topic = insights['request_checklist'].get('topic', 'checklist')
+        checklist_items = []
+        checklist_title = f"{topic.title()} Checklist"
+
+        # Special Case: Vaccines (Pull from Data)
+        if "vaccine" in topic.lower() or "shot" in topic.lower():
+            # Try to get age-specific vaccines
+            from user_profiler import calculate_baby_age_details
+            age_details = calculate_baby_age_details(profile)
+            if age_details and MILESTONES_DATA:
+                bucket_data = MILESTONES_DATA.get("postnatal_by_age", {}).get(age_details['bucket_key'])
+                if bucket_data and bucket_data.get('vaccinations'):
+                    checklist_items = bucket_data['vaccinations']
+                    checklist_title = f"Vaccines due at {bucket_data.get('title')}"
+
+        # General Case: Ask LLM to generate list items
+        if not checklist_items:
+            list_prompt = f"Generate a concise list of 5-10 essential items for a '{topic}'. Return ONLY a raw JSON list of strings. Example: [\"Item 1\", \"Item 2\"]."
+            list_response = _call_llm_with_fallback(list_prompt)
+            try:
+                cleaned_list = list_response.text.strip().lstrip("```json").rstrip("```").strip()
+                checklist_items = json.loads(cleaned_list)
+            except:
+                checklist_items = ["Notebook", "Water", "Essentials"] # Fallback
+
+        response_payload = {
+            "reply": f"Here is a checklist for **{topic}**. You can check them off as you go!",
+            "ui_component": "checklist",
+            "data": {
+                "title": checklist_title,
+                "items": checklist_items
+            }
+        }
+        
+        # Save and return
+        profile.setdefault("chat_log", []).extend([
+            {'role': 'user', 'content': user_message},
+            {'role': 'assistant', 'content': response_payload['reply']}
+        ])
+        profile['chat_log'] = profile['chat_log'][-MAX_CHAT_LOG_ENTRIES:]
+        save_profile(profile_hash, profile)
+        return jsonify(response_payload)
+    # ---------------------------------------------
+
     if not special_context:
         for action_type, handler in action_handlers.items():
             if insights.get(action_type):
@@ -1826,10 +1911,13 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
 
 
     proactive_context = get_proactive_context(profile)
+    
+    # MODIFIED in v121.0: Added milestones_data to prompt
     context_prompt = format_profile_for_prompt(
         profile, chatbot_name=CHATBOT_NAME, proactive_context=proactive_context, suggested_program_object=suggested_program_object, is_follow_up=is_follow_up,
         last_discussed_program_context=last_discussed_program_context, enable_ovulation_tracker=ENABLE_OVULATION_TRACKER, enable_realtime_log_context=ENABLE_REALTIME_LOG_CONTEXT,
-        is_summary_request=is_summary_request, special_context=special_context, education_tidbit=education_tidbit
+        is_summary_request=is_summary_request, special_context=special_context, education_tidbit=education_tidbit,
+        milestones_data=MILESTONES_DATA # NEW in v121.0
     )
     
     # If an action response was generated, use it. Otherwise, call the LLM.
@@ -1843,7 +1931,7 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
         response = _call_llm_with_fallback(f"{context_prompt}\n{user_message}")
 
         if response is None:
-            reply = "I'm sorry, but I'm currently unable to process your request due to high demand. Please try again in a moment."
+            reply = "I'm sorry, but I'm currently unable to process your request right now. Please try again in a moment."
         else:
             raw_reply = response.text
             memory_match = re.search(r"\[SUGGEST_MEMORY:\s*(.*?)\]", raw_reply)
@@ -3512,7 +3600,8 @@ def _process_proactive_greeting(profile):
     context_prompt = format_profile_for_prompt(
         profile,
         chatbot_name=CHATBOT_NAME,
-        is_proactive_greeting=True 
+        is_proactive_greeting=True,
+        milestones_data=MILESTONES_DATA # NEW in v121.0
     )
     
     # We pass an empty string as user message because Tyra is speaking first

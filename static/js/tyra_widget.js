@@ -1,4 +1,4 @@
-// static/js/tyra_widget.js (v120.0 - Golden Master: Proactive Engagement + Cycle Sync + Health Wrapped)
+// static/js/tyra_widget.js (v121.0 - Lifecycle Companion: Interactive Checklists & Tools)
 (function() {
     'use strict';
 
@@ -456,6 +456,7 @@
     }
     
     // MODIFIED in v117.4: Handle weekly insight card and robust download
+    // MODIFIED in v121.0: Added checklist and tool support
     function addMessage(htmlContent, sender, responseData = {}, doAutoScroll = true) {
         const chatLog = state.targetElement.querySelector('.tyra-chat-log');
         if (!chatLog) return;
@@ -475,7 +476,69 @@
             mainText.innerHTML = htmlContent;
             messageDiv.appendChild(mainText);
             
-            if (uiComponent === 'language_picker') {
+            // --- NEW in v121.0: Interactive Checklist (e.g. Vaccinations) ---
+            if (uiComponent === 'checklist') {
+                const card = document.createElement('div');
+                card.className = 'tyra-checklist-card';
+                if(responseData.data.title) {
+                    const title = document.createElement('h4');
+                    title.textContent = responseData.data.title;
+                    card.appendChild(title);
+                }
+                
+                responseData.data.items.forEach(item => {
+                    const row = document.createElement('label');
+                    row.className = 'tyra-checklist-item';
+                    row.style.display = 'flex'; // Ensure generic styling works
+                    row.style.alignItems = 'center';
+                    row.style.gap = '10px';
+                    row.style.marginTop = '5px';
+                    
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    const span = document.createElement('span');
+                    span.textContent = item;
+                    
+                    row.appendChild(checkbox);
+                    row.appendChild(span);
+                    card.appendChild(row);
+                });
+                messageDiv.appendChild(card);
+            }
+            // --- NEW in v121.0: Breathing Tool (Simple Animation) ---
+            else if (uiComponent === 'breathing_tool') {
+                const bubble = document.createElement('div');
+                bubble.className = 'tyra-breathing-tool';
+                // Inline styles for surgical addition
+                bubble.style.width = '100px';
+                bubble.style.height = '100px';
+                bubble.style.borderRadius = '50%';
+                bubble.style.backgroundColor = '#8B4A9C';
+                bubble.style.margin = '10px auto';
+                bubble.style.animation = 'tyra-breathe 4s infinite ease-in-out';
+                
+                // Add keyframes dynamically if not present
+                if (!document.getElementById('tyra-breathing-style')) {
+                    const style = document.createElement('style');
+                    style.id = 'tyra-breathing-style';
+                    style.innerHTML = `
+                        @keyframes tyra-breathe {
+                            0%, 100% { transform: scale(0.8); opacity: 0.7; }
+                            50% { transform: scale(1.2); opacity: 1; }
+                        }
+                    `;
+                    document.head.appendChild(style);
+                }
+                
+                const label = document.createElement('div');
+                label.textContent = "Breathe In... Breathe Out...";
+                label.style.textAlign = 'center';
+                label.style.fontSize = '0.9em';
+                
+                messageDiv.appendChild(bubble);
+                messageDiv.appendChild(label);
+            }
+            else if (uiComponent === 'language_picker') {
                 const pickerContainer = document.createElement('div');
                 pickerContainer.className = 'tyra-language-picker-container';
                 const select = document.createElement('select');

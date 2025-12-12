@@ -1,7 +1,8 @@
-# user_profiler.py (v120.1 - Refined Logic Tree for Pregnancy)
+# user_profiler.py (v121.0 - Lifecycle Companion Engine)
 from datetime import datetime, timedelta
 import dateparser 
 import random 
+import json # NEW in v121.0: Needed for deep data lookup
 
 PROMPT_HISTORY_LIMIT = 5
 RECENT_LOG_LIMIT = 7
@@ -112,30 +113,98 @@ def format_program_for_prompt(program_object):
             for plan in sub.get('pricing_plans', []): lines.append(f"  - {plan['plan_title']}: {plan['price']}")
     return "\n".join(lines)
 
-# --- NEW in v120.0: Proactive Logic Tree ---
-def generate_proactive_instruction(profile):
+# --- NEW in v121.0: Child Age Calculator ---
+def calculate_baby_age_details(profile):
+    """
+    Calculates the exact age of the youngest child in weeks and months.
+    Returns: { 'days': int, 'weeks': int, 'months': int, 'bucket_key': str } or None
+    """
+    details = profile.get("secondary_details", {})
+    if not details.get("is_parent") or not details.get("child_dobs"):
+        return None
+        
+    try:
+        # Get youngest child
+        dobs = [datetime.strptime(d, "%Y-%m-%d") for d in details["child_dobs"]]
+        youngest_dob = max(dobs)
+        now = datetime.now()
+        
+        age_days = (now - youngest_dob).days
+        if age_days < 0: return None # Future date error
+        
+        age_weeks = age_days // 7
+        # Rough month calc for bucket selection
+        age_months = int(age_days / 30.44) 
+        
+        # Determine the data bucket key for milestones_data.json
+        bucket_key = None
+        if age_days <= 28: bucket_key = "0-4_weeks"
+        elif 1 <= age_months <= 3: bucket_key = "1-3_months"
+        elif 4 <= age_months <= 6: bucket_key = "4-6_months"
+        # Special check for exactly 6 months transition? Handle in logic.
+        elif 7 <= age_months <= 9: bucket_key = "7-9_months"
+        elif 10 <= age_months <= 12: bucket_key = "10-12_months"
+        elif 13 <= age_months <= 15: bucket_key = "13-15_months"
+        elif 16 <= age_months <= 18: bucket_key = "16-18_months"
+        elif 19 <= age_months <= 24: bucket_key = "19-24_months"
+        
+        return {
+            "days": age_days,
+            "weeks": age_weeks,
+            "months": age_months,
+            "bucket_key": bucket_key
+        }
+    except (ValueError, TypeError):
+        return None
+
+# --- NEW in v121.0: Postnatal Context Fetcher ---
+def get_postnatal_context_block(profile, milestones_data):
+    """Generates the hidden context block for the LLM based on child age."""
+    if not milestones_data: return ""
+    
+    age_details = calculate_baby_age_details(profile)
+    if not age_details or not age_details.get("bucket_key"):
+        return ""
+        
+    postnatal_data = milestones_data.get("postnatal_by_age", {})
+    bucket_data = postnatal_data.get(age_details["bucket_key"])
+    
+    if not bucket_data: return ""
+    
+    context_lines = [
+        f"\n--- CURRENT CHILD CONTEXT (Age: {age_details['weeks']} Weeks / {age_details['months']} Months) ---",
+        f"Stage: {bucket_data.get('title', 'Postnatal')}",
+        f"Feeding Guideline: {bucket_data.get('feeding', 'N/A')}",
+        f"Sleep Expectation: {bucket_data.get('sleep', 'N/A')}",
+        f"Recent/Upcoming Vaccinations: {', '.join(bucket_data.get('vaccinations', []))}",
+        f"Milestones to Watch: {bucket_data.get('milestones', 'N/A')}",
+        f"Red Flags (Medical Attention): {bucket_data.get('red_flags', 'N/A')}",
+        f"Mother's Recovery Focus: {bucket_data.get('mom_recovery', 'N/A')}"
+    ]
+    
+    if "new_things" in bucket_data:
+        context_lines.append(f"New Phases/Issues: {bucket_data['new_things']}")
+        
+    return "\n".join(context_lines)
+
+# --- MODIFIED in v121.0: Enhanced Proactive Logic Tree ---
+def generate_proactive_instruction(profile, milestones_data=None):
     """
     Analyzes the user profile to determine the 'hook' for a proactive greeting.
-    Returns a string instruction for the LLM.
-    v120.1 Update: Fixed pregnancy check to rely on weeks_gestation > 0.
+    v121.0 Update: Integrated deep postnatal/child development logic.
     """
     now = datetime.now()
     details = profile.get("secondary_details", {})
     health_logs = profile.get("health_logs", [])
     
-    # 1. SAFETY/CONTINUITY (Highest Priority)
-    # Check for negative logs in the last 24 hours
+    # 1. SAFETY/CONTINUITY (Highest Priority - Preserved)
     one_day_ago = now - timedelta(days=1)
     recent_negative_logs = []
     for log in health_logs:
         try:
             log_dt = dateparser.parse(log['timestamp'])
-            # Normalize naive/aware datetimes
-            if log_dt and log_dt.tzinfo is None and now.tzinfo: 
-                log_dt = log_dt.replace(tzinfo=now.tzinfo)
-            if log_dt and now.tzinfo is None and log_dt.tzinfo:
-                log_dt = log_dt.replace(tzinfo=None)
-
+            if log_dt and log_dt.tzinfo is None and now.tzinfo: log_dt = log_dt.replace(tzinfo=now.tzinfo)
+            if log_dt and now.tzinfo is None and log_dt.tzinfo: log_dt = log_dt.replace(tzinfo=None)
             if log_dt and log_dt > one_day_ago:
                 val = log.get('value', '').lower()
                 cat = log.get('category', '').lower()
@@ -146,32 +215,57 @@ def generate_proactive_instruction(profile):
     if recent_negative_logs:
         return f"The user recently logged: {', '.join(recent_negative_logs[:2])}. Your GOAL is to gently and empathetically check in on how they are feeling now compared to earlier. Do not be alarmist, be supportive."
 
-    # 2. LIFE STAGE CONTEXT (The "Care" Layer)
-    # v120.1 FIX: Ensure we check weeks explicitly to avoid 'starting out' assumption for missing data
+    # 2. LIFE STAGE CONTEXT (The "Care" Layer - SIGNIFICANTLY ENHANCED in v121.0)
+    
+    # A. Postnatal / Parenting (New Granular Logic)
+    if details.get('is_parent'):
+        age_details = calculate_baby_age_details(profile)
+        if age_details and milestones_data:
+            bucket_key = age_details['bucket_key']
+            bucket_data = milestones_data.get("postnatal_by_age", {}).get(bucket_key, {})
+            
+            # Specific trigger: Vaccination/Milestone Nudge based on proactive_greeting field in JSON
+            if bucket_data.get("proactive_greeting"):
+                return f"User's baby is in the '{bucket_data['title']}' stage. GOAL: {bucket_data['proactive_greeting']}"
+            
+            # Fallback based on specific calculated weeks if JSON greeting is missing
+            weeks = age_details['weeks']
+            if weeks == 6:
+                return "Baby is 6 weeks old. GOAL: Ask if they have scheduled the 6-week vaccination (Pentavalent-1)."
+            elif weeks == 16:
+                return "Baby is around 4 months. GOAL: Gently ask about sleep, as the 4-month sleep regression is common."
+            elif age_details['months'] == 6:
+                return "Baby is 6 months old. GOAL: Ask if they have started solid foods (Annaprashan/First Rice) yet."
+
+    # B. Pregnancy (Enhanced Week-by-Week)
     if details.get('is_pregnant'):
         weeks = details.get('weeks_gestation', 0)
-        if weeks >= 30:
-            return f"User is {weeks} weeks pregnant (3rd Trimester). GOAL: Suggest a quick, specific physical relief tip (like a pelvic tilt or breathing) or ask about physical comfort (back pain/swelling)."
+        # Fetch specific data from milestones if available
+        week_data = milestones_data.get("pregnancy_by_week", {}).get(str(weeks)) if milestones_data else None
+        
+        if week_data and week_data.get('mom_tip'):
+             return f"User is {weeks} weeks pregnant. GOAL: Share this specific tip: \"{week_data['mom_tip']}\" and ask how she is feeling."
+        
+        if weeks >= 37:
+            return f"User is {weeks} weeks pregnant (Full Term). GOAL: Ask about signs of labor or if the hospital bag is ready."
         elif weeks > 0:
             return f"User is {weeks} weeks pregnant. GOAL: Ask a warm question about how the pregnancy is going or how they are bonding with the baby."
         else:
-            # Fallback if is_pregnant is True but weeks are 0/missing
             return "User is pregnant but exact weeks are currently unknown. GOAL: Gently ask how far along they are so you can provide better support."
 
-    # Check Parenting (New Mom context)
-    if details.get('is_parent'):
-        # General check for parenting context if specific age calc isn't granular enough
-        return "User is a parent. GOAL: Ask how they are balancing their own wellness with parenting duties today. Validate that self-care is hard."
-
-    # Check Teen
+    # C. Teenager (Granular)
     if profile.get('age', 25) <= 19:
-        return "User is a teenager. GOAL: Do a casual 'vibe check'. Ask about school, stress, or just energy levels in a non-cringy way."
+        age = profile.get('age')
+        if age <= 15:
+            return "User is a young teenager (13-15). GOAL: Ask about school or hobbies in a light, supportive 'big sister' tone."
+        else:
+            return "User is an older teenager (16-19). GOAL: Do a casual 'vibe check'. Ask about stress levels or social life in a non-judgmental way."
 
-    # Check Menopause
+    # D. Menopause (Symptom Pattern)
     if details.get('is_perimenopausal') or details.get('is_menopausal'):
-        return "User is navigating perimenopause/menopause. GOAL: Gently ask about sleep quality or energy levels, as these are common pain points."
+        return "User is navigating perimenopause/menopause. GOAL: Gently ask about sleep quality or hot flashes, as these are common pain points."
 
-    # 3. CYCLE PHASE (The "Living UI" Hook)
+    # 3. CYCLE PHASE (The "Living UI" Hook - Preserved)
     period_data = profile.get("period_data", {})
     if period_data.get("tracking_enabled") and period_data.get("cycles"):
         last_start = period_data["cycles"][0].get("start_date")
@@ -180,6 +274,8 @@ def generate_proactive_instruction(profile):
                 days_since = (now.date() - datetime.strptime(last_start, "%Y-%m-%d").date()).days + 1
                 if 1 <= days_since <= 5:
                     return "User is likely on their period (Day " + str(days_since) + "). GOAL: Be cozy and comforting. Ask if they need any tips for cramps or just want to vent."
+                elif 14 <= days_since <= 16:
+                     return "User is likely Ovulating (Day " + str(days_since) + "). GOAL: Mention high energy levels. Ask if they are feeling energetic today."
                 elif 20 <= days_since <= 28:
                     return "User is likely in the Luteal phase (Day " + str(days_since) + "). GOAL: Acknowledge that energy might be lower or emotions higher. Encourage gentleness."
             except: pass
@@ -194,7 +290,8 @@ def generate_proactive_instruction(profile):
         return "It is evening. GOAL: Ask if they are ready to wind down or how the day went."
 
 
-def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of_day=False, suggested_program_object=None, is_follow_up=False, proactive_context=None, special_context=None, enable_realtime_log_context=False, enable_ovulation_tracker=False, last_discussed_program_context=None, is_summary_request=False, education_tidbit=None, is_proactive_greeting=False):
+# --- MODIFIED in v121.0: To accept milestones_data ---
+def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of_day=False, suggested_program_object=None, is_follow_up=False, proactive_context=None, special_context=None, enable_realtime_log_context=False, enable_ovulation_tracker=False, last_discussed_program_context=None, is_summary_request=False, education_tidbit=None, is_proactive_greeting=False, milestones_data=None):
     if not profile: return f"You are a helpful AI assistant named {chatbot_name}."
     
     lang_code = profile.get("language", "en")
@@ -216,7 +313,7 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
         "2.  **CRITICAL RULE:** Even in professional mode, remain polite."
     )
 
-    # Age-Adaptive Tone Adjustment (FIXED in v119.4: Supports persona instead of overriding)
+    # Age-Adaptive Tone Adjustment
     if profile.get('age', 30) <= 19:
         if selected_persona == "professional":
             persona_instruction += "\n(Context: User is a Teenager. Maintain your Professional tone, but simplify medical jargon. Ensure they feel respected, not lectured.)"
@@ -225,9 +322,10 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
     elif profile.get('age', 35) > 50:
         persona_instruction += "\n(Context: User is an older adult. Ensure clarity and respect life experience.)"
 
-    # --- MODIFIED in v120.0: Proactive Greeting Mode Logic ---
+    # --- MODIFIED in v120.0 & v121.0: Proactive Greeting Mode Logic ---
     if is_proactive_greeting:
-        proactive_instruction = generate_proactive_instruction(profile)
+        # Pass milestones_data for deep postnatal logic
+        proactive_instruction = generate_proactive_instruction(profile, milestones_data)
         main_instruction = (
             f"--- PROACTIVE GREETING MODE ---\n"
             f"You are initiating the conversation with {name}. Do NOT wait for a user question.\n"
@@ -235,7 +333,7 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
             f"Keep the greeting short (under 2 sentences), engaging, and strictly adherent to your {selected_persona} persona. End with a question."
         )
     else:
-        # Standard Reactive Logic (Preserved from v119.3)
+        # Standard Reactive Logic
         memory_protocol = (
             "--- MEMORY PROTOCOL ---\n"
             "The system will automatically save important user-mentioned future events (like appointments or exams) to your memory. You can occasionally reference these past events to show you remember the user's journey."
@@ -280,10 +378,18 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
     
     if details.get('is_trying_to_conceive'): context_lines.append(f"- Is trying to conceive for {details.get('months_trying', 'N/A')} months.")
     if details.get('is_pregnant'): context_lines.append(f"- Is currently pregnant: {details.get('weeks_gestation', 'N/A')} weeks gestation ({details.get('current_trimester', 'N/A')}).")
+    
+    # --- MODIFIED in v121.0: Deeper Parenting Context ---
     if details.get('is_parent'):
         num_children = details.get('num_children', 0)
         ages_str = ", ".join([f"{age.get('years', 0)}y {age.get('months', 0)}m" for age in details.get('calculated_child_ages', [])]) or "not specified"
         context_lines.append(f"- Is a parent of {num_children} child/children. Last child born {details.get('last_child_birth_ago', 'not specified')} ago. Ages: {ages_str}.")
+        
+        # Inject detailed Postnatal/Development context if available
+        postnatal_block = get_postnatal_context_block(profile, milestones_data)
+        if postnatal_block:
+            context_lines.append(postnatal_block)
+            
     if details.get('is_perimenopausal'): context_lines.append("- Is experiencing perimenopause symptoms.")
     
     # --- MODIFIED in v120.0: Only add deep context if NOT a proactive greeting ---

@@ -538,67 +538,72 @@ We will analyze the last 30 days of logs (`mood`, `sleep`, `stress`) to assign o
 | **Text** | Simple paragraph summary. | **Poster Style:** Huge, bold typography ("CHAOS COORDINATOR"). |
 | **Format** | Square (1:1) | **Story (9:16)** - Full screen mobile. |
 
-
-Here is the structured detail for the new **Feature #7: Proactive Engagement Engine**.
-
 ***
 
-### **8: "Proactive Engagement Engine" (Context-Aware Greeting)**
-**Complexity:** ⭐⭐⭐ (Moderate - Backend Logic Tree + Frontend Hooks)
-**Impact:** ⭐⭐⭐⭐⭐ (Retention - Transforms the bot from "reactive tool" to "caring companion").
+### **8: "Lifecycle Companion Engine" (Proactive & Interactive)**
+**Version:** v121.0
+**Complexity:** ⭐⭐⭐⭐ (High - Granular Age Logic + Dynamic Data Injection + UI Bridges)
+**Impact:** ⭐⭐⭐⭐⭐ (Utility - Transforms the bot from a "tracker" into a "digital pediatrician & wellness coach").
 
-### **Why this is next:**
-1.  **Breaking the "Empty Chat" Syndrome:** Currently, Tyra waits for the user to speak. This puts the cognitive load on the user. A proactive greeting ("Hi Sarah, how did that exam go?") removes friction and invites interaction.
-2.  **Emotional Continuity:** Users feel "heard" when a bot remembers their state from yesterday (e.g., high stress) and follows up. This builds trust faster than any feature.
-3.  **Life-Stage Relevance:** A teenager needs a different opening line ("How's school?") than a pregnant woman in her third trimester ("Time for a breathing exercise?"). This makes the app feel bespoke to every user segment.
+### **Why this is a breakthrough:**
+1.  **Granular "Nitty-Gritty" Awareness:** Instead of a generic "Postpartum" bucket, Tyra now calculates exact age (e.g., "6 weeks" vs. "4 months"). This allows for medically accurate nudges like vaccination reminders (IAP 2025) or sleep regression warnings.
+2.  **From Text to Tools:** The engine doesn't just *say* "calm down"; it renders a **Breathing Animation**. It doesn't just *list* vaccines; it creates an **Interactive Checklist**. This moves the value from "Conversation" to "Action."
+3.  **Cultural Intelligence:** The logic prioritizes localized context (e.g., suggesting "Dal water" for weaning in India vs. generic Western advice), creating deeper trust.
 
 ---
 
-### **Implementation Plan for v120.0**
-We will implement a **Decision Tree Logic** that runs *before* the user types anything. When the widget opens, Tyra will "think" and generate a custom opening line.
+### **Implemented Logic in v121.0**
+The **Decision Tree** has been expanded significantly. It runs every time the widget opens or a chat context is refreshed.
 
 #### **1. The Logic Tree (Priority Hierarchy)**
-The engine evaluates conditions in this strict order. The first match determines the greeting.
+The engine evaluates conditions in this strict order.
 
-1.  🔴 **Safety/Continuity (Highest Priority)**
-    *   *Trigger:* User logged "High Stress," "Severe Pain," or "Depression" in the last 24 hours.
-    *   *Action:* Gentle, empathetic follow-up. *"I know yesterday was tough. How are you holding up?"*
-2.  📅 **Weekly "Value Add" (Once/Week)**
-    *   *Trigger:* >7 days since last "Growth" event.
-    *   *Action:* Delivers a specific nugget based on persona.
-        *   *Pregnant:* "Week 32 Update: Baby is the size of a squash!"
-        *   *Teen:* "Myth Buster: Periods don't sync!"
-        *   *General:* "Weekly Growth: What's one small win you had?"
-3.  👶 **Life Stage Context (The "Care" Layer)**
-    *   *Teen:* School/Social check-in.
-    *   *Pregnant (30+ wks):* Immediate suggestion for **Physical Relief** (Breathing/Pelvic tilt).
-    *   *Menopause:* Check for **Sleep/Hot Flashes**.
-    *   *Senior:* Check for **Mobility/Joints**.
-4.  🔄 **Cycle Phase (The "Living UI" Hook)**
-    *   *Trigger:* None of the above apply, but tracking is enabled.
-    *   *Action:* Phase-specific advice. (e.g., Luteal = "Be gentle with yourself today.").
+1.  🔴 **Safety & Immediate Relief (Highest Priority)**
+    *   *Trigger:* User log indicates "High Stress," "Panic," or "Overwhelm."
+    *   *Action:* **Immediate UI Intervention.** Renders a **Breathing Tool (Animation)** overlay to guide the user through a calm-down exercise.
+2.  👶 **Postnatal & Child Development (The "Pediatric" Layer)**
+    *   *Trigger:* `is_parent` is True. Calculates `baby_age` in weeks/months.
+    *   *Action:* Precise, age-based nudges derived from `milestones_data.json`.
+        *   *6 Weeks:* "Vaccination Alert: Pentavalent-1 & IPV-1 due."
+        *   *4 Months:* "Sleep Regression Warning."
+        *   *6 Months:* "Nutrition Start: Introduction to solids (Mashed Rice/Dal)."
+3.  🤰 **Pregnancy (Week-by-Week)**
+    *   *Trigger:* `is_pregnant` is True.
+    *   *Action:* Weekly tip + Medical Nudge.
+        *   *Week 20:* "Anatomy Scan reminder."
+        *   *Week 37:* "Hospital Bag checklist offer."
+4.  🔄 **Cycle Phase (The "Hormonal Weather Report")**
+    *   *Trigger:* Tracking enabled.
+    *   *Action:* Hormonal context (e.g., "Estrogen rising today – great day for a workout!").
 5.  ☀️ **Time of Day (Fallback)**
-    *   *Trigger:* No data available.
-    *   *Action:* "Good morning/evening."
-
-#### **2. Technical Changes**
-
-**Backend (`app.py`):**
-*   **New Route:** `/api/v1/greet` (POST).
-*   **New Logic Function:** `_get_proactive_instruction(profile)`. This implements the Decision Tree above and returns a specific *System Instruction string*.
-*   **LLM Integration:** The route injects this instruction into a specialized prompt: *"You are initiating the conversation. GOAL: [Instruction]. Keep it under 2 sentences."*
-*   **Spam Prevention:** The route checks the last interaction timestamp. If `< 2 hours`, it returns `no_greet_needed` to avoid annoying the user.
-
-**Frontend (`tyra_widget.js`):**
-*   **Trigger Hook:** Inside `initSession()` (which runs on load), add a call to `triggerProactiveGreeting()`.
-*   **Delay:** Add a `setTimeout(1000ms)` so the chat window opens *before* the message appears, simulating a "typing" effect.
+    *   *Trigger:* No specific data.
+    *   *Action:* "Good morning/evening" with a gentle check-in.
 
 ---
 
-### **User Experience (Before vs. After)**
+### **2. Technical Architecture**
 
-| Scenario | v119.8 (Reactive) | v120.0 (Proactive Engine) |
+**Data Layer (`milestones_data.json`):**
+*   **Structure:** Now contains deep objects for `postnatal_by_age` (0-4 weeks, 1-3 months, etc.).
+*   **Content:** IAP 2025 Vaccination Schedules, WHO Growth Standards, and Indian Dietary Norms.
+
+**Backend (`app.py` & `user_profiler.py`):**
+*   **Context Injection:** A "Hidden Context Block" is injected into the LLM system prompt.
+    *   *Example:* `Context: User's baby is 6 weeks old; Vaccines due: Pentavalent-1; Red Flag: Jaundice.`
+*   **Intent Bridging:** `app.py` intercepts intents like `request_checklist` and sends a structured JSON payload (`ui_component: "checklist"`) instead of text.
+
+**Frontend (`tyra_widget.js`):**
+*   **Interactive Renderers:** New JS functions to render:
+    *   `checklist`: Clickable checkboxes for vaccines/tasks.
+    *   `breathing_tool`: CSS-based expanding/contracting circle animation.
+
+---
+
+### **User Experience (Before vs. After v121.0)**
+
+| Scenario | v120.0 (Basic Proactive) | v121.0 (Lifecycle Engine) |
 | :--- | :--- | :--- |
-| **High Stress Yesterday** | *User opens app.*<br>(Silence)<br>**User:** "I'm still stressed." | *User opens app.*<br>**Tyra:** "Hey. I know yesterday was really heavy for you. How are you feeling this morning? 💜" |
-| **34 Weeks Pregnant** | *User opens app.*<br>(Silence)<br>**User:** "Back hurts." | *User opens app.*<br>**Tyra:** "Hi [Name]! At 34 weeks, that pressure is real. Shall we do a quick 60-second breathing reset together?" |
-| **Teenager (Morning)** | *User opens app.*<br>(Silence) | *User opens app.*<br>**Tyra:** "Good morning! ☀️ Ready to slay the day, or do we need a vibe check first?" |
+| **New Mom (6 Weeks Postpartum)** | **Tyra:** "Hi! How is the baby doing?"<br>*(Generic)* | **Tyra:** "Baby is 6 weeks old today! 🍼 Have you scheduled the **Pentavalent-1** vaccine yet?"<br>*(Specific & Actionable)* |
+| **High Stress / Panic** | **Tyra:** "I'm sorry you feel that way. Try to breathe."<br>*(Passive Advice)* | **Tyra:** "I hear you. Let's reset together."<br>*(Auto-launches **Breathing Bubble Animation**)* |
+| **Vaccine Question** | **Tyra:** "You should check with your doctor."<br>*(Deflection)* | **Tyra:** "Here is the IAP Schedule for 6 weeks:"<br>*(Renders **Interactive Checklist** with Pentavalent, Rotavirus, IPV)* |
+| **6 Months Old** | **Tyra:** "Baby is growing fast!" | **Tyra:** "Happy Half-Birthday! 🎂 Is today the day for **first solids** (Dal water/Rice)?" |

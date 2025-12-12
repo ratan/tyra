@@ -104,5 +104,101 @@
         "text": "Choosing a birth control method is a personal decision. It's always a great idea to chat with a healthcare provider to discuss the pros and cons of different options for you."
       }
     ]
+  },
+  "prenatal": {
+    "general": [
+      {
+        "id": "prenatal_1",
+        "text": "Myth Buster: You don't need to 'eat for two' in terms of calories! It's more about eating twice as healthy. Focus on nutrient-dense foods rather than just volume."
+      },
+      {
+        "id": "prenatal_2",
+        "text": "Hydration is crucial during pregnancy, not just for you but for forming amniotic fluid. Keep a water bottle handy!"
+      },
+      {
+        "id": "prenatal_3",
+        "text": "Your center of gravity shifts as the bump grows. Wearing flat, comfortable shoes can help prevent back pain and falls."
+      }
+    ]
+  },
+  "postnatal_mom": {
+    "adult": [
+      {
+        "id": "pn_mom_1",
+        "text": "Did you know 'baby blues' affect up to 80% of new moms? It usually peaks around day 3-5. However, if deep sadness lasts more than 2 weeks, it might be Postpartum Depression. You are not alone—please speak up."
+      },
+      {
+        "id": "pn_mom_nutrition",
+        "text": "Traditional foods like Panjeeri, Gond Ladoo, or Methi (fenugreek) are great for recovery, but remember to balance them with plenty of warm water to help milk production."
+      },
+      {
+        "id": "pn_mom_body",
+        "text": "Postpartum hair loss (Telogen Effluvium) usually starts around 3 months. It can be shocking, but it is temporary and normal! Your hair growth cycle will reset."
+      }
+    ]
+  },
+  "postnatal_baby": {
+    "general": [
+      {
+        "id": "pn_baby_1",
+        "text": "Tummy time is essential for building neck strength, but it counts even if baby is lying on your chest while you recline! It's a great way to bond."
+      },
+      {
+        "id": "pn_baby_2",
+        "text": "In India, 'Malish' (oil massage) is a beautiful tradition. It improves blood circulation and helps baby sleep better. Use gentle, natural oils like coconut or almond."
+      }
+    ]
+  },
+  "perimenopause": {
+    "adult": [
+      {
+        "id": "peri_1",
+        "text": "Perimenopause can start as early as your mid-30s or 40s. If your cycles are getting irregular or shorter, it's a natural part of the transition, not necessarily a problem."
+      },
+      {
+        "id": "peri_2",
+        "text": "Track your symptoms! 'Brain fog' and sleep disruptions are common perimenopause symptoms that often get dismissed as just stress."
+      }
+    ]
+  },
+  "menopause": {
+    "adult": [
+      {
+        "id": "meno_1",
+        "text": "Cooling foods can help with hot flashes. Try incorporating cucumber, melon, and peppermint tea into your diet."
+      },
+      {
+        "id": "meno_2",
+        "text": "Bone health becomes critical now as estrogen drops. Ensure you are getting enough Calcium and Vitamin D, and try to include some resistance exercises."
+      }
+    ]
+  },
+  "senior": {
+    "adult": [
+      {
+        "id": "senior_1",
+        "text": "Balance exercises are key to preventing falls. Simple things like standing on one foot (while holding a chair) can make a big difference."
+      },
+      {
+        "id": "senior_2",
+        "text": "Social connection is a health metric! Staying connected with friends and community is just as important for longevity as diet and exercise."
+      }
+    ]
+  },
+  "myths": {
+    "general": [
+      {
+        "id": "myth_period_sour",
+        "text": "Myth: You shouldn't eat sour foods like pickles (achar) during your period. Fact: There is no scientific reason to avoid them if they don't upset your stomach!"
+      },
+      {
+        "id": "myth_period_exercise",
+        "text": "Myth: You shouldn't exercise on your period. Fact: Gentle movement like walking or yoga can actually help relieve cramping."
+      },
+      {
+        "id": "myth_morning_sickness",
+        "text": "Myth: Morning sickness only happens in the morning. Fact: Nausea during pregnancy can strike at any time of day or night."
+      }
+    ]
   }
 }
