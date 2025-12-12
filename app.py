@@ -1,4 +1,6 @@
-# app.py (v121.0 - Lifecycle Companion: Deep Postnatal & Granular Proactive Logic)
+# app.py (v121.2 - Lifecycle Companion: Deep Postnatal & Granular Proactive Logic)
+# FIX v121.2: Fixed visualization type mismatch (cycle_calendar vs calendar) to ensure frontend rendering.
+
 import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets, random, requests
 from datetime import datetime, timedelta, timezone, date
 from flask import Flask, Response, render_template, request, jsonify, session, redirect, url_for, send_from_directory, g
@@ -489,6 +491,8 @@ Today's date is {today_date}. Resolve all relative dates to 'YYYY-MM-DD' format.
     a. A `potential_reminder` object with `text` and `date`.
     b. A `suggested_memory` string containing the full fact (e.g., "User has an appointment on Friday").
 7.  **CHARTING OVERRIDE:** If the message contains 'chart', 'calendar', 'graph', or 'visualize', you MUST return a `query_chart` intent.
+    - **CRITICAL:** If the user asks to "visualize my period" or see a "calendar", map this to `{{ "type": "cycle_calendar" }}`.
+    - If the user asks for "length", "duration trends", or "cycle chart", map this to `{{ "type": "cycle_length" }}`.
 8.  **SET GOAL:** For phrases like "my goal is..." or "I want to start...", return a `set_goal` intent.
 9.  **MEDICATION LOG:** For phrases about taking or logging medicine, return `medication_log`.
 10. **REMINDERS (EXPLICIT):** For command-like phrases ("remind me to", "set a reminder"), return `reminder_action`.
@@ -545,11 +549,17 @@ User: 'my date of birth is 1st feb 1992'
 User: 'my period started on july 1st'
 {{"period_action": {{"type": "log_period_start", "date": "{datetime.now().year}-07-01"}}}}
 
-User: 'graph my period length over the last few months'
-{{"query_chart": {{"type": "cycle_length"}}}}
+User: 'visualize my period'
+{{"query_chart": {{"type": "cycle_calendar"}}}}
+
+User: 'show me a calendar of my cycle'
+{{"query_chart": {{"type": "cycle_calendar"}}}}
 
 User: 'show my period calendar for june month'
 {{"query_chart": {{"type": "cycle_calendar", "target_date": "{datetime.now().year}-06-01"}}}}
+
+User: 'graph my period length'
+{{"query_chart": {{"type": "cycle_length"}}}}
 
 User: 'Remind me to call the doctor tomorrow.'
 {{"reminder_action": {{"text": "call the doctor", "due_date": "{(datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')}"}}}}
@@ -934,11 +944,13 @@ def update_and_predict_cycles(profile, enable_ovulation_tracker=False):
     valid_cycles = [c for c in cycles if c.get('start_date') and isinstance(c['start_date'], str)]
     valid_cycles.sort(key=lambda x: x['start_date'], reverse=True)
     
+    # FIX v121.1: Correctly calculate cycle length (assign to previous/completed cycle)
     for i in range(len(valid_cycles) - 1):
         try:
             start_current = datetime.strptime(valid_cycles[i]['start_date'], "%Y-%m-%d")
             start_previous = datetime.strptime(valid_cycles[i+1]['start_date'], "%Y-%m-%d")
-            valid_cycles[i]['cycle_length'] = (start_current - start_previous).days
+            # The gap between the previous start and current start is the length of the PREVIOUS cycle
+            valid_cycles[i+1]['cycle_length'] = (start_current - start_previous).days
         except (ValueError, KeyError):
             continue
 
@@ -1355,6 +1367,154 @@ def _process_quick_log_response(profile, category, value):
     
     return {"reply": rendered_reply}
 
+# FIX v121.1: Extracted helper to generate chart data payload for injection
+def _generate_chart_data(profile, chart_type, target_date_str=None):
+    if not ENABLE_CHART_VISUALIZATION:
+        return {"error": "Chart visualization feature is disabled."}
+
+    if chart_type == 'cycle_length':
+        cycles = profile.get("period_data", {}).get("cycles", [])
+        cycles_with_length = [c for c in cycles if 'cycle_length' in c]
+        if len(cycles_with_length) < 1:
+            return {"error": "Not enough cycle data to generate a chart."}
+        
+        cycles_with_length.sort(key=lambda x: x['start_date'])
+        
+        labels = [datetime.strptime(c['start_date'], '%Y-%m-%d').strftime('%b %Y') for c in cycles_with_length]
+        cycle_lengths = [c['cycle_length'] for c in cycles_with_length]
+        
+        return {
+            "type": "bar",
+            "data": {
+                "labels": labels,
+                "datasets": [{"label": "Cycle Length (Days)", "data": cycle_lengths, "backgroundColor": "rgba(168, 85, 168, 0.7)"}]
+            },
+            "options": {
+                "scales": {"y": {"beginAtZero": True, "title": {"display": True, "text": "Days"}}}
+            }
+        }
+
+    elif chart_type == 'interaction_time':
+        history = profile.get("interaction_log", [])
+        if not history:
+            return {"error": "No interaction history to display."}
+        
+        interactions_per_day = defaultdict(int)
+        for entry in history:
+            try:
+                entry_date_str = datetime.fromisoformat(entry['timestamp']).strftime('%Y-%m-%d')
+                interactions_per_day[entry_date_str] += 1
+            except (ValueError, KeyError):
+                continue
+        
+        sorted_dates = sorted(interactions_per_day.keys())
+        labels = [datetime.strptime(d, '%Y-%m-%d').strftime('%b %d') for d in sorted_dates]
+        interaction_counts = [interactions_per_day[d] for d in sorted_dates]
+        
+        return {
+            "type": "line",
+            "data": {
+                "labels": labels,
+                "datasets": [{"label": "Interactions", "data": interaction_counts, "fill": True, "borderColor": "rgba(139, 74, 156, 1)", "backgroundColor": "rgba(168, 85, 156, 0.5)"}]
+            },
+            "options": {
+                "scales": {"y": {"beginAtZero": True, "ticks": {"stepSize": 1}, "title": {"display": True, "text": "Count"}}}
+            }
+        }
+    elif chart_type == 'cycle_calendar':
+        period_data = profile.get("period_data", {})
+        today = datetime.today()
+
+        if target_date_str:
+            target_date = dateparser.parse(target_date_str, settings={'RELATIVE_BASE': datetime.now()})
+            if not target_date: target_date = today
+        else:
+            target_date = today
+
+        year, month = target_date.year, target_date.month
+        
+        predicted_days, fertile_days, logged_days = [], [], []
+        avg_period = period_data.get("average_period_length") or 5
+        avg_cycle = period_data.get("average_cycle_length") or 28
+        cycles = period_data.get("cycles", [])
+
+        # --- BUG FIX v96.0: RENDER LOGGED AND FERTILE DAYS CORRECTLY ---
+        # A "logged" cycle is one that exists in the cycles list. We visualize its
+        # period and fertile window based on stored data.
+        for cycle in cycles:
+            if 'start_date' not in cycle:
+                continue
+
+            # --- Populate Logged Days (Period) ---
+            start_dt = datetime.strptime(cycle['start_date'], '%Y-%m-%d')
+            # Use actual end date if available, or fall back to the average for visualization
+            if 'end_date' in cycle:
+                end_dt = datetime.strptime(cycle['end_date'], '%Y-%m-%d')
+            else:
+                end_dt = start_dt + timedelta(days=avg_period - 1)
+            
+            current = start_dt
+            while current <= end_dt:
+                if current.year == year and current.month == month:
+                    if current.day not in logged_days:
+                        logged_days.append(current.day)
+                current += timedelta(days=1)
+            
+            # --- Populate Fertile Days for this logged cycle if data exists ---
+            if ENABLE_OVULATION_TRACKER and 'fertile_start' in cycle and 'fertile_end' in cycle:
+                f_start = datetime.strptime(cycle['fertile_start'], '%Y-%m-%d')
+                f_end = datetime.strptime(cycle['fertile_end'], '%Y-%m-%d')
+                current = f_start
+                while current <= f_end:
+                    if current.year == year and current.month == month:
+                         if current.day not in fertile_days:
+                            fertile_days.append(current.day)
+                    current += timedelta(days=1)
+        
+        # --- RENDER PREDICTED future cycles ---
+        # This part only projects forward from the last known cycle's predicted next start.
+        next_pred_start_str = period_data.get("predicted_next_start_date")
+        if next_pred_start_str:
+            current_pred_start = datetime.strptime(next_pred_start_str, '%Y-%m-%d')
+            
+            for _ in range(12): # Project up to 12 months forward
+                # Render predicted period
+                for i in range(avg_period):
+                    day = current_pred_start + timedelta(days=i)
+                    if day.year == year and day.month == month: 
+                        if day.day not in logged_days and day.day not in predicted_days:
+                             predicted_days.append(day.day)
+
+                # Render predicted fertile window for the cycle starting on `current_pred_start`
+                if ENABLE_OVULATION_TRACKER:
+                    # Ovulation for this cycle occurs ~14 days before the *next* one starts.
+                    next_cycle_start = current_pred_start + timedelta(days=avg_cycle)
+                    ovulation_dt = next_cycle_start - timedelta(days=14)
+                    f_start = ovulation_dt - timedelta(days=5)
+                    f_end = ovulation_dt + timedelta(days=1)
+                    current = f_start
+                    while current <= f_end:
+                        if current.year == year and current.month == month:
+                            if current.day not in logged_days and current.day not in fertile_days:
+                                fertile_days.append(current.day)
+                        current += timedelta(days=1)
+
+                current_pred_start += timedelta(days=avg_cycle)
+
+        return {
+            "type": "calendar",
+            "data": {
+                "year": year,
+                "month": month,
+                "month_name": calendar.month_name[month],
+                "predicted_days": sorted(list(set(predicted_days))),
+                "logged_days": sorted(list(set(logged_days))),
+                "fertile_days": sorted(list(set(fertile_days))),
+                "current_day": today.day if today.year == year and today.month == month else None
+            }
+        }
+    else:
+        return {"error": "Invalid chart type requested."}
 
 def _get_dashboard_data(profile):
     lang_code = profile.get('language', 'en') if ENABLE_MULTI_LANGUAGE else 'en'
@@ -1578,9 +1738,28 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
 
     # --- Start of Core Action Handlers ---
 
+    # FIX v121.2: Immediate data injection for chart requests with CORRECT TYPE OVERRIDE
     if ENABLE_CHART_VISUALIZATION and insights.get('query_chart'):
         chart_query = insights.get('query_chart')
-        json_response = {"reply": md.render("Of course, here is the visualization you requested."), "chart_type": chart_query.get('type')}
+        chart_type = chart_query.get('type')
+        
+        # Generate chart data payload immediately
+        chart_payload = _generate_chart_data(profile, chart_type, chart_query.get('target_date'))
+        
+        json_response = {
+            "reply": md.render("Of course, here is the visualization you requested."),
+            "chart_type": chart_type # Required for widget switch logic
+        }
+        
+        # Inject the full payload if generation succeeded
+        if chart_payload and 'error' not in chart_payload:
+            json_response.update(chart_payload) # Merges 'type', 'data', 'options'
+            # FIX v121.2: Force chart_type to match the specific visualization type (e.g. 'calendar' or 'bar')
+            # This is critical because the frontend JS checks for 'calendar' but the intent is 'cycle_calendar'
+            json_response['chart_type'] = chart_payload.get('type')
+        else:
+             json_response = {"reply": md.render(chart_payload.get('error', "I couldn't generate that chart right now."))}
+
         if chart_query.get('target_date'):
             json_response["target_date"] = chart_query.get('target_date')
         if proactive_summary:
@@ -2409,13 +2588,18 @@ if app.config['ENABLE_WIDGET_MODE']:
             return jsonify({"status": "success"})
         return jsonify({"status": "error", "message": "Reminder not found"}), 404
         
-    # Chart data endpoint for API is the same as for monolith, just token-protected
+    # Chart data endpoint for API now uses the centralized helper
     @app.route('/api/v1/chart_data', methods=['GET'])
     @token_required
     def api_chart_data():
         if g.is_guest: return jsonify({"error": "This feature requires an account."}), 403
-        # The logic is identical, so we reuse the monolith endpoint's function
-        return chart_data(g.profile)
+        # FIX v121.1: Use helper directly
+        chart_type = request.args.get('type')
+        target_date = request.args.get('target_date')
+        data = _generate_chart_data(g.profile, chart_type, target_date)
+        if 'error' in data:
+            return jsonify(data), 400
+        return jsonify(data)
 
     # NEW in v119.1: Burner Mode Endpoint
     @app.route('/api/v1/privacy/burn_history', methods=['POST'])
@@ -2494,9 +2678,6 @@ if app.config['ENABLE_WIDGET_MODE']:
 # This function can now be called directly by the API route
 @app.route('/chart_data', methods=['GET'])
 def chart_data(profile_override=None):
-    if not ENABLE_CHART_VISUALIZATION:
-        return jsonify({"error": "Chart visualization feature is disabled."}), 403
-
     # In monolith mode, get profile from session. In API mode, profile is passed in.
     if profile_override:
         profile = profile_override
@@ -2506,152 +2687,14 @@ def chart_data(profile_override=None):
         profile = load_profile(profile_hash)
         if not profile: return jsonify({"error": "Profile not found."}), 404
 
+    # FIX v121.1: Use centralized helper
     chart_type = request.args.get('type')
+    target_date = request.args.get('target_date')
+    data = _generate_chart_data(profile, chart_type, target_date)
     
-    if chart_type == 'cycle_length':
-        cycles = profile.get("period_data", {}).get("cycles", [])
-        cycles_with_length = [c for c in cycles if 'cycle_length' in c]
-        if len(cycles_with_length) < 1:
-            return jsonify({"error": "Not enough cycle data to generate a chart."}), 400
-        
-        cycles_with_length.sort(key=lambda x: x['start_date'])
-        
-        labels = [datetime.strptime(c['start_date'], '%Y-%m-%d').strftime('%b %Y') for c in cycles_with_length]
-        cycle_lengths = [c['cycle_length'] for c in cycles_with_length]
-        
-        return jsonify({
-            "type": "bar",
-            "data": {
-                "labels": labels,
-                "datasets": [{"label": "Cycle Length (Days)", "data": cycle_lengths, "backgroundColor": "rgba(168, 85, 168, 0.7)"}]
-            },
-            "options": {
-                "scales": {"y": {"beginAtZero": False, "title": {"display": True, "text": "Days"}}}
-            }
-        })
-
-    elif chart_type == 'interaction_time':
-        history = profile.get("interaction_log", [])
-        if not history:
-            return jsonify({"error": "No interaction history to display."}), 400
-        
-        interactions_per_day = defaultdict(int)
-        for entry in history:
-            try:
-                entry_date_str = datetime.fromisoformat(entry['timestamp']).strftime('%Y-%m-%d')
-                interactions_per_day[entry_date_str] += 1
-            except (ValueError, KeyError):
-                continue
-        
-        sorted_dates = sorted(interactions_per_day.keys())
-        labels = [datetime.strptime(d, '%Y-%m-%d').strftime('%b %d') for d in sorted_dates]
-        interaction_counts = [interactions_per_day[d] for d in sorted_dates]
-        
-        return jsonify({
-            "type": "line",
-            "data": {
-                "labels": labels,
-                "datasets": [{"label": "Interactions", "data": interaction_counts, "fill": True, "borderColor": "rgba(139, 74, 156, 1)", "backgroundColor": "rgba(168, 85, 156, 0.5)"}]
-            },
-            "options": {
-                "scales": {"y": {"beginAtZero": True, "ticks": {"stepSize": 1}, "title": {"display": True, "text": "Count"}}}
-            }
-        })
-    elif chart_type == 'cycle_calendar':
-        period_data = profile.get("period_data", {})
-        target_date_str = request.args.get('target_date')
-        today = datetime.today()
-
-        if target_date_str:
-            target_date = dateparser.parse(target_date_str, settings={'RELATIVE_BASE': datetime.now()})
-            if not target_date: target_date = today
-        else:
-            target_date = today
-
-        year, month = target_date.year, target_date.month
-        
-        predicted_days, fertile_days, logged_days = [], [], []
-        avg_period = period_data.get("average_period_length") or 5
-        avg_cycle = period_data.get("average_cycle_length") or 28
-        cycles = period_data.get("cycles", [])
-
-        # --- BUG FIX v96.0: RENDER LOGGED AND FERTILE DAYS CORRECTLY ---
-        # A "logged" cycle is one that exists in the cycles list. We visualize its
-        # period and fertile window based on stored data.
-        for cycle in cycles:
-            if 'start_date' not in cycle:
-                continue
-
-            # --- Populate Logged Days (Period) ---
-            start_dt = datetime.strptime(cycle['start_date'], '%Y-%m-%d')
-            # Use actual end date if available, or fall back to the average for visualization
-            if 'end_date' in cycle:
-                end_dt = datetime.strptime(cycle['end_date'], '%Y-%m-%d')
-            else:
-                end_dt = start_dt + timedelta(days=avg_period - 1)
-            
-            current = start_dt
-            while current <= end_dt:
-                if current.year == year and current.month == month:
-                    if current.day not in logged_days:
-                        logged_days.append(current.day)
-                current += timedelta(days=1)
-            
-            # --- Populate Fertile Days for this logged cycle if data exists ---
-            if ENABLE_OVULATION_TRACKER and 'fertile_start' in cycle and 'fertile_end' in cycle:
-                f_start = datetime.strptime(cycle['fertile_start'], '%Y-%m-%d')
-                f_end = datetime.strptime(cycle['fertile_end'], '%Y-%m-%d')
-                current = f_start
-                while current <= f_end:
-                    if current.year == year and current.month == month:
-                         if current.day not in fertile_days:
-                            fertile_days.append(current.day)
-                    current += timedelta(days=1)
-        
-        # --- RENDER PREDICTED future cycles ---
-        # This part only projects forward from the last known cycle's predicted next start.
-        next_pred_start_str = period_data.get("predicted_next_start_date")
-        if next_pred_start_str:
-            current_pred_start = datetime.strptime(next_pred_start_str, '%Y-%m-%d')
-            
-            for _ in range(12): # Project up to 12 months forward
-                # Render predicted period
-                for i in range(avg_period):
-                    day = current_pred_start + timedelta(days=i)
-                    if day.year == year and day.month == month: 
-                        if day.day not in logged_days and day.day not in predicted_days:
-                             predicted_days.append(day.day)
-
-                # Render predicted fertile window for the cycle starting on `current_pred_start`
-                if ENABLE_OVULATION_TRACKER:
-                    # Ovulation for this cycle occurs ~14 days before the *next* one starts.
-                    next_cycle_start = current_pred_start + timedelta(days=avg_cycle)
-                    ovulation_dt = next_cycle_start - timedelta(days=14)
-                    f_start = ovulation_dt - timedelta(days=5)
-                    f_end = ovulation_dt + timedelta(days=1)
-                    current = f_start
-                    while current <= f_end:
-                        if current.year == year and current.month == month:
-                            if current.day not in logged_days and current.day not in fertile_days:
-                                fertile_days.append(current.day)
-                        current += timedelta(days=1)
-
-                current_pred_start += timedelta(days=avg_cycle)
-
-        return jsonify({
-            "type": "calendar",
-            "data": {
-                "year": year,
-                "month": month,
-                "month_name": calendar.month_name[month],
-                "predicted_days": sorted(list(set(predicted_days))),
-                "logged_days": sorted(list(set(logged_days))),
-                "fertile_days": sorted(list(set(fertile_days))),
-                "current_day": today.day if today.year == year and today.month == month else None
-            }
-        })
-    else:
-        return jsonify({"error": "Invalid chart type requested."}), 400
+    if 'error' in data:
+        return jsonify(data), 400
+    return jsonify(data)
 
 
 # --- REFACTORED SHARED EXPORT/SHARE LOGIC ---
@@ -2714,7 +2757,8 @@ def _generate_pdf_report(profile):
         for c in cycles[:12]:
             start = c.get('start_date', 'N/A')
             length = c.get('cycle_length', 'N/A')
-            cycle_text = f"- Cycle started {start}, lasted {length} days."
+            # FIX v121.1: Clarified label for PDF report
+            cycle_text = f"- Cycle started {start}, lasted {length} days (Total Cycle Length)."
             pdf.set_x(pdf.l_margin)
             pdf.multi_cell(0, 5, text=sanitize(cycle_text))
     else:

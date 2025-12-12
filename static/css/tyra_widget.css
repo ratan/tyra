@@ -1,4 +1,6 @@
-/* static/css/tyra_widget.css (v121.0 - Lifecycle Companion: Checklists & Tool Styles) */
+/* static/css/tyra_widget.css (v121.1 - Lifecycle Companion: Visualizations, Checklists & Tools) */
+/* FIX v121.1: Added missing calendar and chart visualization styles */
+
 :root {
     /* --- BASE VARIABLES (Layout & Fonts) --- */
     --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -18,7 +20,7 @@
     --ai-msg-bg: #ffffff;
     --ai-msg-text: #333333;
     
-    /* Calendar */
+    /* Calendar Colors (Used for Visualization) */
     --logged-day-bg: rgba(139, 74, 156, 0.7);
     --predicted-day-bg: rgba(230, 164, 230, 0.6);
     --fertile-day-bg: rgba(76, 175, 80, 0.6);
@@ -430,6 +432,86 @@
     text-decoration: line-through;
     color: #888;
 }
+
+/* --- FIX v121.1: Chart & Calendar Visualization Styles --- */
+.tyra-chart-container {
+    width: 100%;
+    height: 220px;
+    margin-top: 10px;
+    background: #fff;
+    padding: 10px;
+    border-radius: 12px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.tyra-calendar-container {
+    width: 100%;
+    padding: 10px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    margin-top: 10px;
+}
+.tyra-calendar-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+.tyra-calendar-table th {
+    font-size: 0.75em;
+    color: #777;
+    padding-bottom: 5px;
+}
+.tyra-calendar-table td {
+    text-align: center;
+    height: 30px;
+    padding: 1px;
+}
+.tyra-calendar-day {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    font-size: 0.85em;
+}
+/* Visual Indicators */
+.tyra-calendar-day.logged-day {
+    background-color: var(--logged-day-bg);
+    color: white;
+}
+.tyra-calendar-day.predicted-day {
+    background-color: var(--predicted-day-bg);
+}
+.tyra-calendar-day.fertile-day {
+    background-color: var(--fertile-day-bg);
+}
+.tyra-calendar-day.current-day {
+    border: 2px solid var(--current-day-border);
+}
+/* Legend */
+.tyra-calendar-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 10px;
+    font-size: 0.75em;
+    color: #666;
+    justify-content: center;
+}
+.legend-item {
+    display: flex;
+    align-items: center;
+}
+.legend-color {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 4px;
+}
+/* --- End v121.1 Visualization Styles --- */
+
 
 /* --- Quick Log Buttons --- */
 .tyra-chat-form-container {
