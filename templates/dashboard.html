@@ -11,75 +11,189 @@
     <style>
         :root {
             --primary-gradient: linear-gradient(135deg, #8B4A9C 0%, #A855A8 100%);
-            --background-color: #fcfaff;
+            --primary-color: #8B4A9C;
+            --background-color: #f8f9fa; /* Softer grey background */
             --text-color: #333;
             --light-text-color: #666;
-            --card-bg: #fff;
-            --card-shadow: 0 8px 30px rgba(139, 74, 156, 0.1);
+            --card-bg: #ffffff;
+            --card-shadow: 0 10px 30px rgba(0, 0, 0, 0.05); /* Soft shadow */
+            --border-radius: 20px;
         }
+        
         body {
             font-family: 'Poppins', sans-serif;
             background-color: var(--background-color);
             color: var(--text-color);
             margin: 0;
-            padding: 20px;
+            padding: 40px 20px;
         }
-        .dashboard-container { max-width: 800px; margin: auto; }
-        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+
+        .dashboard-container { 
+            max-width: 900px; 
+            margin: auto; 
+        }
+
+        /* Header Styling */
+        header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            margin-bottom: 30px; 
+        }
         header h1 {
-            background: var(--primary-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            font-size: 2.5em; margin: 0;
+            font-size: 2.2em; 
+            margin: 0;
+            font-weight: 700;
+            color: var(--text-color);
         }
-        header .header-controls { display: flex; align-items: center; gap: 20px; }
-        header a { color: #8B4A9C; text-decoration: none; font-weight: 500; }
-        .widget-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
-        .widget { background: var(--card-bg); border-radius: 16px; padding: 20px; box-shadow: var(--card-shadow); transition: opacity 0.3s, transform 0.3s; }
+        header .header-controls { 
+            display: flex; 
+            align-items: center; 
+            gap: 15px; 
+        }
+        header a { 
+            color: var(--primary-color); 
+            text-decoration: none; 
+            font-weight: 600; 
+            font-size: 0.95em;
+            padding: 8px 16px;
+            background: white;
+            border-radius: 30px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+            transition: transform 0.2s;
+        }
+        header a:hover { transform: translateY(-2px); }
+
+        /* Grid Layout */
+        .widget-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); 
+            gap: 25px; 
+        }
+
+        /* Card UI */
+        .widget { 
+            background: var(--card-bg); 
+            border-radius: var(--border-radius); 
+            padding: 25px; 
+            box-shadow: var(--card-shadow); 
+            transition: transform 0.3s ease;
+            border: 1px solid rgba(0,0,0,0.02);
+        }
+        .widget:hover { transform: translateY(-3px); }
         .widget.hidden { display: none; }
-        .widget h2 { margin-top: 0; font-size: 1.2em; border-bottom: 2px solid #f3eef7; padding-bottom: 10px; margin-bottom: 15px; }
+
+        .widget h2 { 
+            margin-top: 0; 
+            font-size: 1.1em; 
+            color: var(--primary-color);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* List Styling */
         .widget ul { list-style: none; padding: 0; margin: 0; }
         .widget li {
-            padding: 8px 0; border-bottom: 1px solid #f8f5fa; font-size: 0.9em; color: var(--light-text-color);
-            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px 0; 
+            border-bottom: 1px solid #f0f0f0; 
+            font-size: 0.95em; 
+            color: var(--text-color);
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
         }
         .widget li:last-child { border-bottom: none; }
-        .widget li strong { color: var(--text-color); }
-        .meds-item .meds-details {
-            display: block; font-size: 0.9em; color: var(--light-text-color);
+        
+        /* Custom Rounded Checkbox */
+        .custom-checkbox {
+            appearance: none;
+            width: 22px;
+            height: 22px;
+            border: 2px solid #ddd;
+            border-radius: 50%;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.2s;
         }
-        .goals-item { padding: 10px 5px; font-size: 1em; color: var(--text-color); }
-        .cycle-stats p { margin: 5px 0; font-size: 1.1em; }
-        .cycle-stats .stat-value { font-weight: 700; font-size: 1.5em; color: #8B4A9C; }
-        .chart-widget { height: 250px; }
-        .done-btn { background: none; border: none; color: #a0a0a0; font-size: 1.5em; cursor: pointer; padding: 0 5px; line-height: 1; transition: color 0.2s; }
-        .done-btn:hover { color: #4CAF50; }
-        .export-buttons { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
-        .export-btn, .customize-btn, #save-prefs-btn, #share-report-btn, #copy-link-btn {
-            background-image: var(--primary-gradient); color: white; font-weight: bold; border: none;
-            cursor: pointer; padding: 10px 15px; border-radius: 8px; transition: transform 0.2s;
+        .custom-checkbox:checked {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
         }
-        #share-report-btn { background: #6c5ce7; }
-        .export-btn:hover, .customize-btn:hover, #save-prefs-btn:hover, #share-report-btn:hover, #copy-link-btn:hover { transform: translateY(-1px); }
-        .customize-btn { padding: 8px 12px; font-size: 0.9em; }
+        .custom-checkbox:checked::after {
+            content: '✓';
+            position: absolute;
+            color: white;
+            font-size: 14px;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        /* Hero Cycle Stats */
+        .cycle-stats { text-align: center; padding: 30px 20px; }
+        .cycle-stats p { margin: 8px 0; color: var(--light-text-color); }
+        .stat-highlight {
+            font-size: 3em;
+            font-weight: 700;
+            background: var(--primary-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: block;
+            margin: 10px 0;
+        }
+
+        /* Buttons */
+        .export-buttons { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 15px; }
+        
+        .btn-primary {
+            background-image: var(--primary-gradient);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 30px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(139, 74, 156, 0.3);
+            transition: transform 0.2s;
+            flex-grow: 1;
+        }
+        .btn-secondary {
+            background: white;
+            color: var(--light-text-color);
+            border: 1px solid #ddd;
+            padding: 10px 20px;
+            border-radius: 30px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+            flex-grow: 1;
+        }
+        .btn-primary:hover { transform: translateY(-2px); }
+        .btn-secondary:hover { background: #f8f8f8; color: var(--text-color); }
+
+        .chart-widget { height: 300px; } /* Slightly taller for breathing room */
 
         /* Modal Styles */
         .modal {
             display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%;
-            overflow: auto; background-color: rgba(0,0,0,0.5);
+            overflow: auto; background-color: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
         }
         .modal-content {
-            background-color: #fefefe; margin: 15% auto; padding: 20px; border: 1px solid #888;
-            width: 80%; max-width: 500px; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            background-color: #fff; margin: 15% auto; padding: 30px; border: none;
+            width: 80%; max-width: 450px; border-radius: 24px; box-shadow: 0 15px 40px rgba(0,0,0,0.2);
         }
-        .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 15px; }
-        .modal-header h2 { margin: 0; font-size: 1.4em; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .modal-header h2 { margin: 0; font-size: 1.5em; color: var(--primary-color); }
         .close-btn { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
-        .close-btn:hover, .close-btn:focus { color: black; text-decoration: none; }
-        .prefs-list { list-style: none; padding: 0; }
-        .prefs-list li { padding: 10px 5px; }
-        .prefs-list label { font-size: 1.1em; cursor: pointer; display: flex; align-items: center; gap: 10px; }
-        .prefs-list input[type="checkbox"] { width: 20px; height: 20px; }
+        
+        .prefs-list label { padding: 8px 0; display: block; cursor: pointer; }
+        
         #share-link-container { margin-top: 15px; display: flex; gap: 10px; }
-        #share-link { flex-grow: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        #share-link { flex-grow: 1; padding: 10px; border: 1px solid #eee; border-radius: 8px; background: #f9f9f9; }
     </style>
 </head>
 <body>
@@ -88,38 +202,41 @@
             <h1>{{ lang.dashboard_title.replace('{name}', data.name) }}</h1>
             <div class="header-controls">
                 {% if enable_dashboard_customization and not is_widget_context %}
-                <button id="customize-dashboard-btn" class="customize-btn">{{ lang.dashboard_customize_link }}</button>
+                <button id="customize-dashboard-btn" class="btn-secondary">{{ lang.dashboard_customize_link }}</button>
                 {% endif %}
                 <a href="{{ url_for('index') }}">{{ lang.back_to_chat_link }}</a>
             </div>
         </header>
 
         <div class="widget-grid">
+            <!-- Cycle Widget -->
             <div class="widget cycle-stats" id="cycle-widget">
                 <h2>{{ lang.widget_title_cycle }}</h2>
                 {% if data.cycle_stats.current_day %}
-                    {# BUG FIX v92.3: Convert integer to string before using .replace() #}
-                    <p>{{ lang.cycle_current_day_p1 }} <span class="stat-value">{{ lang.cycle_day_N.replace('{day}', data.cycle_stats.current_day|string) }}</span></p>
+                    <p>{{ lang.cycle_current_day_p1 }}</p>
+                    <span class="stat-highlight">{{ lang.cycle_day_N.replace('{day}', data.cycle_stats.current_day|string) }}</span>
                 {% elif data.cycle_stats.predicted_next %}
                     <p>{{ lang.cycle_no_active_cycle }}</p>
                 {% else %}
                     <p>{{ lang.cycle_log_first_period }}</p>
                 {% endif %}
+                
                 {% if data.cycle_stats.predicted_next %}
                     <p>{{ lang.cycle_predicted_next }}: <strong>{{ data.cycle_stats.predicted_next }}</strong></p>
                 {% endif %}
-                 {% if data.cycle_stats.avg_cycle_length %}
-                    <p>{{ lang.cycle_avg_length }}: <strong>{{ lang.cycle_N_days.replace('{days}', data.cycle_stats.avg_cycle_length|string) }}</strong></p>
-                {% endif %}
             </div>
             
+            <!-- Reminders Widget -->
             <div class="widget" id="reminders-widget">
                 <h2>{{ lang.widget_title_reminders }}</h2>
                 <ul id="reminders-list">
                     {% for reminder in data.reminders %}
                         <li data-reminder-id="{{ reminder.id }}">
-                            <span><strong>{{ reminder.text }}</strong> {{ lang.reminder_on_date }} {{ reminder.date }}</span>
-                            <button class="done-btn" title="Mark as Done">✓</button>
+                            <div>
+                                <strong>{{ reminder.text }}</strong><br>
+                                <small style="color:#888">{{ lang.reminder_on_date }} {{ reminder.date }}</small>
+                            </div>
+                            <input type="checkbox" class="custom-checkbox done-btn" title="Mark as Done">
                         </li>
                     {% else %}
                         <li>{{ lang.no_reminders_text }}</li>
@@ -135,7 +252,7 @@
                     <li class="meds-item">
                         <div>
                             <strong>{{ med.name }}</strong>
-                            <span class="meds-details">{{ lang.meds_dosage }}: {{ med.dosage }} | {{ lang.meds_freq }}: {{ med.frequency }}</span>
+                            <div style="font-size:0.85em; color:#666; margin-top:4px;">{{ lang.meds_dosage }}: {{ med.dosage }} • {{ lang.meds_freq }}: {{ med.frequency }}</div>
                         </div>
                     </li>
                     {% else %}
@@ -160,17 +277,19 @@
             </div>
             {% endif %}
 
+            <!-- Charts -->
             <div class="widget chart-widget" id="cycle-chart-widget">
                 <h2>{{ lang.widget_title_cycle_history }}</h2>
                 <canvas id="cycleLengthChart"></canvas>
-                <p id="cycleChartStatus" style="text-align:center; display:none;">{{ lang.no_chart_data_text }}</p>
+                <p id="cycleChartStatus" style="text-align:center; display:none; color:#888;">{{ lang.no_chart_data_text }}</p>
             </div>
             <div class="widget chart-widget" id="interaction-chart-widget">
                 <h2>{{ lang.widget_title_interaction }}</h2>
                 <canvas id="interactionTimeChart"></canvas>
-                <p id="interactionChartStatus" style="text-align:center; display:none;">{{ lang.no_chart_data_text }}</p>
+                <p id="interactionChartStatus" style="text-align:center; display:none; color:#888;">{{ lang.no_chart_data_text }}</p>
             </div>
 
+            <!-- Recent Logs -->
             <div class="widget" id="logs-widget">
                 <h2>{{ lang.widget_title_health_logs }}</h2>
                 <ul>
@@ -186,19 +305,21 @@
             {% if not is_widget_context %}
             <div class="widget" id="export-widget">
                 <h2>{{ lang.widget_title_export }}</h2>
-                <p>{{ lang.export_description }}</p>
+                <p style="font-size:0.9em; color:#666;">{{ lang.export_description }}</p>
                 <div class="export-buttons">
-                    <form action="{{ url_for('export') }}" method="post" style="display: inline;">
+                    <form action="{{ url_for('export') }}" method="post" style="flex-grow:1;">
                         <input type="hidden" name="format" value="pdf">
-                        <button type="submit" class="export-btn">{{ lang.export_pdf_button }}</button>
-                    </form>
-                    <form action="{{ url_for('export') }}" method="post" style="display: inline;">
-                        <input type="hidden" name="format" value="csv">
-                        <button type="submit" class="export-btn">{{ lang.export_csv_button }}</button>
+                        <button type="submit" class="btn-primary" style="width:100%">📄 {{ lang.export_pdf_button }}</button>
                     </form>
                     {% if enable_shareable_reports %}
-                    <button id="share-report-btn" class="export-btn" style="background: #6c5ce7;">{{ lang.share_report_button }}</button>
+                    <button id="share-report-btn" class="btn-primary" style="background: #6c5ce7;">🔗 {{ lang.share_report_button }}</button>
                     {% endif %}
+                </div>
+                <div style="margin-top:10px;">
+                    <form action="{{ url_for('export') }}" method="post">
+                        <input type="hidden" name="format" value="csv">
+                        <button type="submit" class="btn-secondary" style="width:100%; font-size:0.85em;">{{ lang.export_csv_button }}</button>
+                    </form>
                 </div>
             </div>
             {% endif %}
@@ -227,7 +348,7 @@
                 <li><label><input type="checkbox" data-widget-id="logs-widget"> {{ lang.widget_title_health_logs }}</label></li>
                 <li><label><input type="checkbox" data-widget-id="export-widget"> {{ lang.widget_title_export }}</label></li>
             </ul>
-            <button id="save-prefs-btn">{{ lang.customize_modal_save_button }}</button>
+            <button id="save-prefs-btn" class="btn-primary" style="width:100%; margin-top:15px;">{{ lang.customize_modal_save_button }}</button>
         </div>
     </div>
     {% endif %}
@@ -242,7 +363,7 @@
             <p>{{ lang.share_modal_description }}</p>
             <div id="share-link-container">
                 <input type="text" id="share-link" readonly>
-                <button id="copy-link-btn" class="export-btn">{{ lang.copy_button }}</button>
+                <button id="copy-link-btn" class="btn-primary">{{ lang.copy_button }}</button>
             </div>
         </div>
     </div>
@@ -253,6 +374,14 @@
             // CRITICAL FIX: Get the auth token if it was passed to the template
             const AUTH_TOKEN = {{ auth_token | tojson }};
 
+            // Helper to create gradient for charts
+            function getGradient(ctx, chartArea) {
+                const gradient = ctx.createLinearGradient(0, chartArea.bottom, 0, chartArea.top);
+                gradient.addColorStop(0, 'rgba(139, 74, 156, 0.1)'); // Light Purple
+                gradient.addColorStop(1, 'rgba(139, 74, 156, 0.6)'); // Dark Purple
+                return gradient;
+            }
+
             // --- Chart Rendering Logic ---
             async function renderChart(canvasId, statusId, endpoint) {
                 const canvas = document.getElementById(canvasId);
@@ -260,7 +389,6 @@
                 if (!canvas) return;
                 
                 const fetchOptions = {};
-                // CRITICAL FIX: Add auth header if this page was loaded via token
                 if (AUTH_TOKEN) {
                     fetchOptions.headers = { 'Authorization': `Bearer ${AUTH_TOKEN}` };
                 }
@@ -269,7 +397,49 @@
                     const response = await fetch(endpoint, fetchOptions);
                     if (response.ok) {
                         const config = await response.json();
-                        new Chart(canvas.getContext('2d'), config);
+                        
+                        // NEW v122.0: Aesthetic Chart Config Overrides
+                        const ctx = canvas.getContext('2d');
+                        
+                        // Apply styling overrides
+                        if (config.data && config.data.datasets) {
+                            config.data.datasets.forEach(dataset => {
+                                dataset.backgroundColor = (context) => {
+                                    const chart = context.chart;
+                                    const {ctx, chartArea} = chart;
+                                    if (!chartArea) return null;
+                                    return getGradient(ctx, chartArea);
+                                };
+                                dataset.borderColor = '#8B4A9C';
+                                dataset.borderWidth = 2;
+                                dataset.borderRadius = 8; // Rounded bars
+                                dataset.pointBackgroundColor = '#fff';
+                                dataset.pointBorderColor = '#8B4A9C';
+                                dataset.pointBorderWidth = 2;
+                                dataset.pointRadius = 4;
+                                dataset.tension = 0.4; // Smooth lines
+                            });
+                        }
+                        
+                        // Cleaner Scales
+                        config.options = config.options || {};
+                        config.options.scales = config.options.scales || {};
+                        config.options.plugins = { legend: { display: false } }; // Hide legend for cleaner look
+                        
+                        const commonScaleOptions = {
+                            grid: { display: false, drawBorder: false }, // Remove grid lines
+                            ticks: { font: { family: "'Poppins', sans-serif", size: 11 }, color: '#888' }
+                        };
+                        
+                        config.options.scales.x = { ...commonScaleOptions };
+                        config.options.scales.y = { 
+                            ...commonScaleOptions, 
+                            beginAtZero: true,
+                            ticks: { display: true, font: { family: "'Poppins', sans-serif", size: 10 }, color: '#888' }, 
+                            border: { display: false } 
+                        };
+
+                        new Chart(ctx, config);
                     } else {
                         canvas.style.display = 'none';
                         if(status) status.style.display = 'block';
@@ -290,9 +460,14 @@
             if (remindersList) {
                 remindersList.addEventListener('click', async function(e) {
                     if (e.target && e.target.classList.contains('done-btn')) {
+                        // Prevent multi-click
+                        if (e.target.disabled) return;
+                        
                         const listItem = e.target.closest('li');
                         const reminderId = listItem.getAttribute('data-reminder-id');
                         if (!reminderId) return;
+
+                        e.target.disabled = true;
 
                         const endpoint = isWidgetContext ? '/api/v1/reminders/delete' : '/delete_reminder';
                         const fetchOptions = {
@@ -307,8 +482,9 @@
                         try {
                             const response = await fetch(endpoint, fetchOptions);
                             if (response.ok) {
-                                listItem.style.transition = 'opacity 0.5s';
+                                listItem.style.transition = 'all 0.5s ease';
                                 listItem.style.opacity = '0';
+                                listItem.style.transform = 'translateX(20px)';
                                 setTimeout(() => {
                                     listItem.remove();
                                     if (remindersList.children.length === 0) {
@@ -316,7 +492,9 @@
                                     }
                                 }, 500);
                             } else {
-                                alert('Could not mark reminder as done.');
+                                e.target.checked = false; // Revert check
+                                e.target.disabled = false;
+                                alert('Could not update reminder.');
                             }
                         } catch (error) {
                             console.error('Error deleting reminder:', error);
@@ -408,10 +586,11 @@
                 const closeShareBtn = document.getElementById('close-share-modal');
                 const shareLinkInput = document.getElementById('share-link');
                 const copyLinkBtn = document.getElementById('copy-link-btn');
-                const originalShareBtnText = shareBtn.textContent;
+                const originalShareBtnText = shareBtn.innerHTML; // Use innerHTML to preserve icon
                 const originalCopyBtnText = copyLinkBtn.textContent;
 
-                shareBtn.onclick = async () => {
+                shareBtn.onclick = async (e) => {
+                    e.preventDefault(); // Prevent form submission
                     shareBtn.textContent = "Generating...";
                     shareBtn.disabled = true;
                     try {
@@ -426,7 +605,7 @@
                     } catch (e) {
                         alert('A network error occurred. Please try again.');
                     } finally {
-                        shareBtn.textContent = originalShareBtnText;
+                        shareBtn.innerHTML = originalShareBtnText;
                         shareBtn.disabled = false;
                     }
                 };
@@ -442,20 +621,16 @@
 
             // General modal closing logic
             window.onclick = (event) => {
-                const modal = document.querySelector('.modal.active');
-                if (modal && event.target == modal) {
+                const modal = document.querySelector('.modal');
+                if (modal && event.target == modal && modal.style.display === "block") {
                     modal.style.display = "none";
                 }
             };
 
             // --- FIX v100.1: Instant, deterministic dashboard refresh ---
-            // This replaces the unreliable timer-based reload.
             document.addEventListener('visibilitychange', function() {
-                // When the tab becomes visible again...
                 if (document.visibilityState === 'visible') {
-                    // Check if the chat page has set the refresh flag.
                     if (localStorage.getItem('dashboardNeedsRefresh') === 'true') {
-                        // IMPORTANT: Clear the flag immediately to prevent reload loops.
                         localStorage.removeItem('dashboardNeedsRefresh');
                         window.location.reload();
                     }

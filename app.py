@@ -1,5 +1,6 @@
-# app.py (v121.2 - Lifecycle Companion: Deep Postnatal & Granular Proactive Logic)
+# app.py (v122.0 - Aesthetic Upgrade: Professional PDF Reports & Dashboard Polish)
 # FIX v121.2: Fixed visualization type mismatch (cycle_calendar vs calendar) to ensure frontend rendering.
+# NEW v122.0: Overhauled PDF Engine for professional, doctor-ready reports with tables and improved cycle logic.
 
 import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets, random, requests
 from datetime import datetime, timedelta, timezone, date
@@ -9,7 +10,7 @@ from markdown_it import MarkdownIt
 from google.api_core import exceptions
 import dateparser
 from difflib import SequenceMatcher
-from collections import defaultdict
+from collections import defaultdict, Counter # MODIFIED v122.0: Added Counter for report stats
 from werkzeug.utils import secure_filename
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos # BUG FIX v93.0: Import necessary enums
@@ -2449,7 +2450,7 @@ if app.config['ENABLE_WIDGET_MODE']:
         if 'action' in request_data:
             return _handle_internal_action(request_data, g.profile)
 
-        user_message = request_data.get('message', '')
+        user_message = request.json.get('message', '')
         if not user_message:
             return jsonify({"error": "Message cannot be empty."}), 400
         
@@ -2699,71 +2700,170 @@ def chart_data(profile_override=None):
 
 # --- REFACTORED SHARED EXPORT/SHARE LOGIC ---
 
+# NEW v122.0: Comprehensive PDF Generator with Tables, Logo, and Insights
 def _generate_pdf_report(profile):
     user_name = profile.get("name", "User")
     def sanitize(text): return str(text).encode('latin-1', 'replace').decode('latin-1')
+    
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Helvetica", size=16)
-    pdf.cell(0, 10, text=sanitize(f"{user_name}'s Health Report"), new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
-    pdf.set_font("Helvetica", 'I', 8)
-    pdf.cell(0, 10, text=f"Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
-    pdf.ln(10)
-
-    pdf.set_font("Helvetica", 'B', 12)
-    pdf.cell(0, 10, text="Upcoming Reminders", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-    pdf.set_font("Helvetica", '', 10)
-    reminders = profile.get("proactive_assistance", {}).get("reminders", [])
-    if reminders:
-        for r in reminders:
-            pdf.set_x(pdf.l_margin)
-            pdf.multi_cell(0, 5, text=sanitize(f"- {r.get('text')}"))
-    else:
-        pdf.multi_cell(0, 5, text="No reminders set.")
-    pdf.ln(5)
-
-    pdf.set_font("Helvetica", 'B', 12)
-    pdf.cell(0, 10, text="Recent Health Logs", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-    pdf.set_font("Helvetica", '', 10)
-    logs = profile.get("health_logs", [])
-    if logs:
-        for log in logs[:15]:
-            log_date = dateparser.parse(log['timestamp']).strftime('%Y-%m-%d')
-            log_text = f"- {log_date}: Noted {log.get('value')} for {log.get('category')}"
-            pdf.set_x(pdf.l_margin)
-            pdf.multi_cell(0, 5, text=sanitize(log_text))
-    else:
-        pdf.multi_cell(0, 5, text="No health logs recorded.")
+    
+    # 1. Header with Logo & Brand Color
+    pdf.set_fill_color(139, 74, 156) # Tyra Purple
+    pdf.rect(0, 0, 210, 20, 'F') # Top color strip
+    
+    # Try to add logo if it exists
+    logo_path = os.path.join('static', 'images', 'tyra_avatar.png')
+    if os.path.exists(logo_path):
+        pdf.image(logo_path, x=10, y=5, w=12) # Overlay on strip
+    
+    pdf.set_y(25)
+    pdf.set_font("Helvetica", 'B', 18)
+    pdf.set_text_color(51, 51, 51)
+    pdf.cell(0, 10, text=sanitize(f"{user_name}'s Health Report"), new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='L')
+    
+    pdf.set_font("Helvetica", 'I', 10)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(0, 6, text=f"Generated on {datetime.now().strftime('%B %d, %Y')}", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='L')
     pdf.ln(5)
     
+    pdf.set_font("Helvetica", '', 11)
+    pdf.set_text_color(0, 0, 0)
+    pdf.multi_cell(0, 6, text=sanitize(f"Hi {user_name}, here is a summary of your health journey to share with your healthcare provider or keep for your records."))
+    pdf.ln(8)
+
+    # 2. Two-Column Layout for Reminders & Meds
+    y_start_columns = pdf.get_y()
+    
+    # Left Column: Reminders
+    pdf.set_xy(10, y_start_columns)
     pdf.set_font("Helvetica", 'B', 12)
-    pdf.cell(0, 10, text="Medications & Supplements", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_text_color(139, 74, 156) # Purple Heading
+    pdf.cell(90, 8, text="Upcoming Reminders", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    
     pdf.set_font("Helvetica", '', 10)
+    pdf.set_text_color(0, 0, 0)
+    reminders = profile.get("proactive_assistance", {}).get("reminders", [])
+    if reminders:
+        for r in reminders[:5]:
+            pdf.cell(90, 6, text=sanitize(f"- {r.get('text')}"), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    else:
+        pdf.cell(90, 6, text="No active reminders.", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    
+    y_end_left = pdf.get_y()
+    
+    # Right Column: Medications
+    pdf.set_xy(105, y_start_columns)
+    pdf.set_font("Helvetica", 'B', 12)
+    pdf.set_text_color(139, 74, 156)
+    pdf.cell(90, 8, text="Medications", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    
+    pdf.set_font("Helvetica", '', 10)
+    pdf.set_text_color(0, 0, 0)
     meds = profile.get("medication_log", [])
     if meds:
         for med in meds:
-            med_text = f"- {med.get('name')} (Dosage: {med.get('dosage', 'N/A')}, Freq: {med.get('frequency', 'N/A')})"
-            pdf.set_x(pdf.l_margin)
-            pdf.multi_cell(0, 5, text=sanitize(med_text))
+            pdf.set_x(105) # Force indent for right column
+            med_text = f"- {med.get('name')} ({med.get('dosage', 'N/A')})"
+            pdf.cell(90, 6, text=sanitize(med_text), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     else:
-        pdf.multi_cell(0, 5, text="No medications logged.")
-    pdf.ln(5)
+        pdf.set_x(105)
+        pdf.cell(90, 6, text="No medications logged.", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     
+    y_end_right = pdf.get_y()
+    
+    # Reset Y to the bottom of the longer column
+    pdf.set_y(max(y_end_left, y_end_right) + 10)
+
+    # 3. Health Insights (Symptom Frequency)
     pdf.set_font("Helvetica", 'B', 12)
+    pdf.set_text_color(139, 74, 156)
+    pdf.cell(0, 10, text="Health Insights (Recent Logs)", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    
+    logs = profile.get("health_logs", [])
+    if logs:
+        # Count frequency of Moods/Symptoms
+        insight_counts = Counter()
+        for log in logs:
+            val = log.get('value', '').title()
+            cat = log.get('category', '')
+            if cat in ['mood', 'physical_symptom', 'stress']:
+                insight_counts[f"{val} ({cat})"] += 1
+        
+        pdf.set_font("Helvetica", '', 10)
+        pdf.set_text_color(0, 0, 0)
+        
+        top_insights = insight_counts.most_common(3)
+        if top_insights:
+            summary_text = "Most frequent patterns recently: " + ", ".join([f"{k} x{v}" for k, v in top_insights])
+            pdf.multi_cell(0, 6, text=sanitize(summary_text))
+        else:
+            pdf.cell(0, 6, text="Not enough data for patterns yet.", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    else:
+        pdf.set_font("Helvetica", '', 10)
+        pdf.set_text_color(0, 0, 0)
+        pdf.cell(0, 6, text="No health logs recorded yet.", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    
+    pdf.ln(5)
+
+    # 4. Cycle History Table
+    pdf.set_font("Helvetica", 'B', 12)
+    pdf.set_text_color(139, 74, 156)
     pdf.cell(0, 10, text="Cycle History", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    
+    # Table Header
+    pdf.set_fill_color(240, 240, 240)
+    pdf.set_font("Helvetica", 'B', 10)
+    pdf.set_text_color(0, 0, 0)
+    pdf.cell(50, 8, "Start Date", border=1, fill=True)
+    pdf.cell(40, 8, "Duration", border=1, fill=True)
+    pdf.cell(90, 8, "Status/Notes", border=1, fill=True, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    
     pdf.set_font("Helvetica", '', 10)
     cycles = profile.get("period_data", {}).get("cycles", [])
+    
     if cycles:
-        for c in cycles[:12]:
+        for c in cycles[:6]: # Show last 6 cycles
             start = c.get('start_date', 'N/A')
-            length = c.get('cycle_length', 'N/A')
-            # FIX v121.1: Clarified label for PDF report
-            cycle_text = f"- Cycle started {start}, lasted {length} days (Total Cycle Length)."
-            pdf.set_x(pdf.l_margin)
-            pdf.multi_cell(0, 5, text=sanitize(cycle_text))
+            length = c.get('cycle_length')
+            
+            # Logic to handle current vs completed
+            if length:
+                duration_str = f"{length} Days"
+                status_str = "Completed"
+            else:
+                # Calculate current duration for active cycle
+                try:
+                    start_dt = datetime.strptime(start, "%Y-%m-%d")
+                    current_day = (datetime.now() - start_dt).days + 1
+                    duration_str = f"Day {current_day}"
+                    status_str = "Current Cycle"
+                except:
+                    duration_str = "N/A"
+                    status_str = "Unknown"
+
+            pdf.cell(50, 8, sanitize(start), border=1)
+            pdf.cell(40, 8, sanitize(duration_str), border=1)
+            pdf.cell(90, 8, sanitize(status_str), border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     else:
-        pdf.multi_cell(0, 5, text="No cycle data recorded.")
-    pdf.ln(5)
+        pdf.cell(180, 8, "No cycle data recorded.", border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+    pdf.ln(10)
+
+    # 5. Doctor's Notes Section (Box)
+    pdf.set_font("Helvetica", 'B', 12)
+    pdf.set_text_color(139, 74, 156)
+    pdf.cell(0, 10, text="Doctor's Notes / Action Plan", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    
+    pdf.set_draw_color(200, 200, 200)
+    pdf.rect(pdf.get_x(), pdf.get_y(), 190, 40) # Empty box
+    pdf.ln(45)
+
+    # 6. Disclaimer Footer
+    pdf.set_y(-25)
+    pdf.set_font("Helvetica", 'I', 8)
+    pdf.set_text_color(128, 128, 128)
+    pdf.multi_cell(0, 4, text="Disclaimer: This report is generated by Tyra AI based on user logs. It is not a medical diagnosis. Please consult with a healthcare professional for medical advice.", align='C')
 
     return bytes(pdf.output())
 

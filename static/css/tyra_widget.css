@@ -1,5 +1,6 @@
-/* static/css/tyra_widget.css (v121.1 - Lifecycle Companion: Visualizations, Checklists & Tools) */
+/* static/css/tyra_widget.css (v122.0 - Aesthetic Upgrade: Card UI & Modern Polish) */
 /* FIX v121.1: Added missing calendar and chart visualization styles */
+/* NEW v122.0: Added Card UI styles for dashboard view consistency */
 
 :root {
     /* --- BASE VARIABLES (Layout & Fonts) --- */
@@ -710,4 +711,85 @@
     border-radius: 20px;
     cursor: pointer;
     font-weight: 600;
+}
+
+/* --- NEW v122.0: Widget Dashboard Card Styles --- */
+.tyra-dashboard-card {
+    background: var(--ai-msg-bg);
+    border-radius: var(--border-radius);
+    padding: 15px;
+    margin-bottom: 15px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    border: 1px solid rgba(0,0,0,0.03);
+}
+.tyra-dashboard-card h4 {
+    margin-top: 0;
+    color: var(--primary-color);
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+    font-size: 1em;
+}
+.tyra-dashboard-card ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+.tyra-dashboard-card li {
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(0,0,0,0.03);
+    font-size: 0.9em;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.tyra-dashboard-card li:last-child {
+    border-bottom: none;
+}
+
+/* Rounded Checkbox for Widget Dashboard */
+.tyra-custom-checkbox {
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border: 2px solid #ccc;
+    border-radius: 50%;
+    cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
+}
+.tyra-custom-checkbox:checked {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+.tyra-custom-checkbox:checked::after {
+    content: '✓';
+    position: absolute;
+    color: white;
+    font-size: 10px;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+/* Widget Buttons */
+.tyra-btn-primary, .tyra-btn-secondary {
+    display: block;
+    width: 100%;
+    padding: 8px 12px;
+    border-radius: 20px;
+    font-size: 0.9em;
+    font-weight: 600;
+    text-align: center;
+    cursor: pointer;
+    margin-top: 5px;
+    border: none;
+}
+.tyra-btn-primary {
+    background: var(--primary-color);
+    color: white;
+}
+.tyra-btn-secondary {
+    background: transparent;
+    border: 1px solid #ccc;
+    color: var(--text-color);
 }

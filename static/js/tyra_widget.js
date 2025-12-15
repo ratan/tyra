@@ -1,4 +1,4 @@
-// static/js/tyra_widget.js (v121.0 - Lifecycle Companion: Interactive Checklists & Tools)
+// static/js/tyra_widget.js (v122.0 - Aesthetic Upgrade: Card UI & Modern Polish)
 (function() {
     'use strict';
 
@@ -286,7 +286,8 @@
                     <button type="submit" class="tyra-send-button" aria-label="Send">➤</button>
                 </form>
             </div>`,
-        dashboardView: () => `<div class="tyra-dashboard-view"></div>`,
+        // NEW v122.0: Updated to use a real container for card UI
+        dashboardView: () => `<div class="tyra-dashboard-view" style="padding: 10px;"></div>`,
         calendar: (data) => {
             const { year, month, month_name, predicted_days, logged_days, fertile_days, current_day } = data;
             let date = new Date(year, month - 1, 1);
@@ -1403,7 +1404,7 @@
         }
     }
     
-    // --- DASHBOARD-SPECIFIC RENDERING ---
+    // --- DASHBOARD-SPECIFIC RENDERING (v122.0 Overhaul) ---
     async function renderDashboard() {
         const container = state.targetElement.querySelector('.tyra-dashboard-view');
         container.innerHTML = '<p>Loading dashboard...</p>';
@@ -1417,59 +1418,59 @@
             const widgets = {
                 cycle: () => {
                     if (!data.cycle_stats || Object.keys(data.cycle_stats).length === 0) return '';
-                    let w = `<div class="tyra-widget tyra-cycle-stats"><h4>${state.lang.widget_title_cycle || 'Cycle'}</h4>`;
-                    if(data.cycle_stats.current_day) w += `<p>${(state.lang.cycle_current_day_p1 || "You are on")} <span class="stat-value">${(state.lang.cycle_day_N || "Day {day}").replace("{day}", data.cycle_stats.current_day)}</span></p>`;
+                    let w = `<div class="tyra-dashboard-card"><h4>${state.lang.widget_title_cycle || 'Cycle'}</h4>`;
+                    if(data.cycle_stats.current_day) w += `<p>${(state.lang.cycle_current_day_p1 || "You are on")} <span class="stat-value" style="font-weight:bold;color:var(--primary-color)">${(state.lang.cycle_day_N || "Day {day}").replace("{day}", data.cycle_stats.current_day)}</span></p>`;
                     if(data.cycle_stats.predicted_next) w += `<p>${state.lang.cycle_predicted_next || 'Next Period'}: <strong>${data.cycle_stats.predicted_next}</strong></p>`;
                     if(data.cycle_stats.avg_cycle_length) w += `<p>${state.lang.cycle_avg_length || 'Avg. Length'}: <strong>${data.cycle_stats.avg_cycle_length} days</strong></p>`;
                     return w + '</div>';
                 },
                 reminders: () => {
-                    let w = `<div class="tyra-widget"><h4>${state.lang.widget_title_reminders || 'Reminders'}</h4><ul>`;
+                    let w = `<div class="tyra-dashboard-card"><h4>${state.lang.widget_title_reminders || 'Reminders'}</h4><ul>`;
                     (data.reminders.length > 0 ? data.reminders : [{text: state.lang.no_reminders_text || 'No reminders.'}]).forEach(r => {
-                        w += `<li class="tyra-reminder-item"><span><strong>${r.text}</strong><br><small>${r.id ? new Date(r.date).toDateString() : ''}</small></span>${r.id ? `<button data-id="${r.id}">✓</button>` : ''}</li>`;
+                        w += `<li class="tyra-reminder-item"><span><strong>${r.text}</strong><br><small style="color:#888">${r.id ? new Date(r.date).toDateString() : ''}</small></span>${r.id ? `<input type="checkbox" class="tyra-custom-checkbox" data-id="${r.id}">` : ''}</li>`;
                     });
                     return w + '</ul></div>';
                 },
                 meds: () => {
-                    let w = `<div class="tyra-widget"><h4>${state.lang.widget_title_meds || 'Medications'}</h4><ul>`;
+                    let w = `<div class="tyra-dashboard-card"><h4>${state.lang.widget_title_meds || 'Medications'}</h4><ul>`;
                     (data.medications.length > 0 ? data.medications : [{name: state.lang.no_meds_logged || 'No medications logged.'}]).forEach(m => {
-                        w += `<li><strong>${m.name}</strong>${m.dosage ? `<span class="meds-details">${m.dosage}, ${m.frequency}</span>` : ''}</li>`;
+                        w += `<li><strong>${m.name}</strong>${m.dosage ? `<span class="meds-details" style="font-size:0.85em;color:#666">${m.dosage}, ${m.frequency}</span>` : ''}</li>`;
                     });
                     return w + '</ul></div>';
                 },
                 goals: () => {
-                    let w = `<div class="tyra-widget"><h4>${state.lang.widget_title_goals || 'Goals'}</h4><ul>`;
+                    let w = `<div class="tyra-dashboard-card"><h4>${state.lang.widget_title_goals || 'Goals'}</h4><ul>`;
                     (data.goals.length > 0 ? data.goals : [{text: state.lang.no_goals_set || 'No goals set.'}]).forEach(g => { w += `<li>${g.text}</li>`; });
                     return w + '</ul></div>';
                 },
                 logs: () => {
-                    let w = `<div class="tyra-widget"><h4>${state.lang.widget_title_health_logs || 'Recent Logs'}</h4><ul>`;
+                    let w = `<div class="tyra-dashboard-card"><h4>${state.lang.widget_title_health_logs || 'Recent Logs'}</h4><ul>`;
                     (data.health_logs.length > 0 ? data.health_logs : [{text: state.lang.no_logs_text || 'No logs recorded.'}]).forEach(l => { w += `<li>${l.text}</li>`; });
                     return w + '</ul></div>';
                 },
                 charts: () => `
-                    <div class="tyra-widget tyra-chart-widget"><h4>${state.lang.widget_title_cycle_history || 'Cycle History'}</h4><canvas id="tyra-cycle-chart"></canvas></div>
-                    <div class="tyra-widget tyra-chart-widget"><h4>${state.lang.widget_title_interaction || 'Interaction History'}</h4><canvas id="tyra-interaction-chart"></canvas></div>
+                    <div class="tyra-dashboard-card"><h4>${state.lang.widget_title_cycle_history || 'Cycle History'}</h4><div style="height:180px"><canvas id="tyra-cycle-chart"></canvas></div></div>
+                    <div class="tyra-dashboard-card"><h4>${state.lang.widget_title_interaction || 'Interaction History'}</h4><div style="height:180px"><canvas id="tyra-interaction-chart"></canvas></div></div>
                 `,
                 export: () => `
-                    <div class="tyra-widget tyra-export-widget">
+                    <div class="tyra-dashboard-card">
                         <h4>${state.lang.widget_title_export || 'Export & Share'}</h4>
-                        <p>${state.lang.export_description || 'Download or share your health report.'}</p>
+                        <p style="font-size:0.9em;color:#666">${state.lang.export_description || 'Download or share your health report.'}</p>
                         <div class="tyra-export-buttons">
-                            <button data-action="export-pdf">${state.lang.export_pdf_button || 'Download PDF'}</button>
-                            <button data-action="export-csv">${state.lang.export_csv_button || 'Download CSV'}</button>
-                            <button data-action="share">${state.lang.share_report_button || 'Get Share Link'}</button>
+                            <button class="tyra-btn-primary" data-action="export-pdf">📄 ${state.lang.export_pdf_button || 'Download PDF'}</button>
+                            <button class="tyra-btn-secondary" data-action="export-csv">${state.lang.export_csv_button || 'Download CSV'}</button>
+                            <button class="tyra-btn-primary" data-action="share" style="background-color:#6c5ce7; margin-top:10px;">🔗 ${state.lang.share_report_button || 'Get Share Link'}</button>
                         </div>
-                        <div class="tyra-share-link-container hidden">
-                            <input type="text" readonly>
-                            <button data-action="copy">${state.lang.copy_button || 'Copy'}</button>
+                        <div class="tyra-share-link-container hidden" style="margin-top:10px">
+                            <input type="text" readonly style="width:100%;margin-bottom:5px">
+                            <button class="tyra-btn-secondary" data-action="copy">${state.lang.copy_button || 'Copy'}</button>
                         </div>
                     </div>`
             };
             
             container.innerHTML = Object.values(widgets).map(w => w()).join('');
             
-            container.querySelectorAll('.tyra-reminder-item button').forEach(btn => btn.addEventListener('click', onReminderDoneClick));
+            container.querySelectorAll('.tyra-reminder-item input').forEach(btn => btn.addEventListener('click', onReminderDoneClick));
             renderDashboardCharts();
 
         } catch (e) {
@@ -1478,14 +1479,52 @@
         }
     }
     
+    // NEW v122.0: Aesthetic Chart Config Overrides
     async function renderDashboardCharts() {
+        function getGradient(ctx, chartArea) {
+            const gradient = ctx.createLinearGradient(0, chartArea.bottom, 0, chartArea.top);
+            gradient.addColorStop(0, 'rgba(139, 74, 156, 0.1)'); 
+            gradient.addColorStop(1, 'rgba(139, 74, 156, 0.6)');
+            return gradient;
+        }
+
+        const setupChart = (canvasId, config) => {
+            const canvas = document.getElementById(canvasId);
+            if(!canvas) return;
+            const ctx = canvas.getContext('2d');
+            
+            if (config.data && config.data.datasets) {
+                config.data.datasets.forEach(dataset => {
+                    dataset.backgroundColor = (context) => {
+                        const chart = context.chart;
+                        const {ctx, chartArea} = chart;
+                        if (!chartArea) return null;
+                        return getGradient(ctx, chartArea);
+                    };
+                    dataset.borderColor = '#8B4A9C';
+                    dataset.borderWidth = 2;
+                    dataset.borderRadius = 6;
+                    dataset.tension = 0.4;
+                });
+            }
+            config.options = config.options || {};
+            config.options.maintainAspectRatio = false;
+            config.options.plugins = { legend: { display: false } };
+            config.options.scales = {
+                x: { grid: { display: false, drawBorder: false }, ticks: { font: { size: 10 }, color: '#888' } },
+                y: { grid: { display: false, drawBorder: false }, ticks: { display: true, font: { size: 10 }, color: '#888' }, border: { display: false }, beginAtZero: true }
+            };
+            new Chart(ctx, config);
+        };
+
         try {
             const cycleChartConfig = await api.get('chart_data', { type: 'cycle_length' });
-            new Chart(document.getElementById('tyra-cycle-chart').getContext('2d'), cycleChartConfig);
+            setupChart('tyra-cycle-chart', cycleChartConfig);
         } catch(e) { console.error("Could not render cycle chart:", e); }
+        
         try {
             const interactionChartConfig = await api.get('chart_data', { type: 'interaction_time' });
-            new Chart(document.getElementById('tyra-interaction-chart').getContext('2d'), interactionChartConfig);
+            setupChart('tyra-interaction-chart', interactionChartConfig);
         } catch(e) { console.error("Could not render interaction chart:", e); }
     }
 
@@ -1544,6 +1583,7 @@
             btn.closest('li').style.display = 'none';
         } else {
             btn.disabled = false;
+            btn.checked = false; // Revert check
         }
     }
 

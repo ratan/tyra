@@ -607,3 +607,47 @@ The engine evaluates conditions in this strict order.
 | **High Stress / Panic** | **Tyra:** "I'm sorry you feel that way. Try to breathe."<br>*(Passive Advice)* | **Tyra:** "I hear you. Let's reset together."<br>*(Auto-launches **Breathing Bubble Animation**)* |
 | **Vaccine Question** | **Tyra:** "You should check with your doctor."<br>*(Deflection)* | **Tyra:** "Here is the IAP Schedule for 6 weeks:"<br>*(Renders **Interactive Checklist** with Pentavalent, Rotavirus, IPV)* |
 | **6 Months Old** | **Tyra:** "Baby is growing fast!" | **Tyra:** "Happy Half-Birthday! 🎂 Is today the day for **first solids** (Dal water/Rice)?" |
+
+
+### **9: "Aesthetic & Report Engine Upgrade" (Card UI & Professional PDF)**
+**Version:** v122.0
+**Complexity:** ⭐⭐⭐ (Medium - CSS Overhaul + PDF Logic Refactor)
+**Impact:** ⭐⭐⭐⭐⭐ (Trust & Retention - Transforms the UI from "Admin Panel" to "Modern Wellness App" and reports from "Logs" to "Medical Tools").
+
+### **Why this is a breakthrough:**
+1.  **Card UI Modernization:** Moves away from a text-heavy, utilitarian layout to a soft, modern **"Card UI"** design (white containers, soft shadows, rounded corners). This aligns the visual experience with premium wellness apps (like Flo or Clue), increasing user trust and engagement.
+2.  **Doctor-Ready Reports:** The PDF generator was completely rewritten. It no longer just dumps raw text; it now produces a **formatted medical document** with data tables, frequency analysis ("Top Symptoms"), and a dedicated "Doctor's Notes" section. This bridges the gap between digital tracking and clinical utility.
+3.  **Visual Softening:** Charts now use **gradients** instead of flat blocks, and harsh grid lines are removed, making complex health data feel approachable and less intimidating.
+
+---
+
+### **Implemented Logic in v122.0**
+
+#### **1. Visual Architecture (CSS & Chart.js)**
+*   **Card Containers:** Introduced `.widget` / `.tyra-dashboard-card` classes with `box-shadow` and `border-radius: 20px` to group related data visually.
+*   **Chart Polish:**
+    *   **Gradients:** Implemented a canvas linear gradient fill for charts (fading purple) instead of solid blocks.
+    *   **Cleanliness:** `grid: { display: false }` removes visual noise.
+    *   **Readability:** Restored Y-Axis ticks (`ticks: { display: true }`) so users can actually read values while keeping the graph clean.
+*   **Interaction Design:** Added CSS transitions (`transform: translateX`) when checking off reminders for a smooth "done" effect.
+
+#### **2. The New Reporting Engine (PDF)**
+The backend logic (`_generate_pdf_report`) was transformed from a simple string-dumper to a layout engine.
+*   **Header Branding:** Injects the Tyra logo and a brand-colored header strip.
+*   **Smart Layouts:**
+    *   **2-Column Grid:** Reminders and Medications are now side-by-side to save vertical space.
+    *   **Data Tables:** Cycle history is rendered in a bordered table with explicit headers (Start Date | Duration | Status).
+*   **Analytical Insight:** Added `collections.Counter` logic to auto-calculate symptom frequency (e.g., "High Stress: 3x") and display it as a high-level summary.
+*   **Clinical Utility:** Added a dedicated, empty box for "Doctor's Notes / Action Plan" to encourage printing and physical use during appointments.
+
+---
+
+### **User Experience (Before vs. After v122.0)**
+
+| Feature | v121.4 (Functional) | v122.0 (Aesthetic) |
+| :--- | :--- | :--- |
+| **Dashboard Look** | Plain text on grey background. Lists looked like spreadsheets. | **White cards** with soft shadows. Rounded corners. Feels like a premium app. |
+| **Charts** | Solid purple blocks with heavy grid lines. | **Gradient purple fills** with no grid lines. Rounded bar tops. Soft and modern. |
+| **Reminders** | A plain list with a generic "Done" button. | **Interactive Card** with custom rounded checkboxes that animate when clicked. |
+| **PDF Report** | A raw text dump of logs. Hard to scan. | **Formatted Document** with logo, 2-column layout, cycle tables, and symptom stats. |
+| **Clinical Value** | "Here is a list of my logs." | "Here is my cycle table and top symptoms for the month, plus space for your notes." |
