@@ -651,3 +651,13 @@ The backend logic (`_generate_pdf_report`) was transformed from a simple string-
 | **Reminders** | A plain list with a generic "Done" button. | **Interactive Card** with custom rounded checkboxes that animate when clicked. |
 | **PDF Report** | A raw text dump of logs. Hard to scan. | **Formatted Document** with logo, 2-column layout, cycle tables, and symptom stats. |
 | **Clinical Value** | "Here is a list of my logs." | "Here is my cycle table and top symptoms for the month, plus space for your notes." |
+
+### **10: "Clinical Reporting Precision & Sync" (Detailed Tables & CSV Alignment)**
+**Version:** v123.2
+**Complexity:** ⭐⭐⭐ (Medium - PDF Table Logic + CSV Structure Rewrite)
+**Impact:** ⭐⭐⭐⭐⭐ (Clinical Utility & Data Integrity - Transforms the report from a "Calendar" to a "Diagnostic Tool" and ensures cross-format consistency).
+
+### **Why this is a breakthrough:**
+1.  **Granular Cycle Analysis:** The Cycle History table in the PDF was significantly upgraded to separate **"Period Duration"** (bleeding days) from **"Cycle Length"** (interval between periods). It now also includes specific columns for **Flow Intensity** and **Symptoms**, turning a simple date log into a powerful diagnostic tool for identifying conditions like irregular cycles or menorrhagia.
+2.  **Cross-Format Data Integrity:** The CSV export logic was rewritten to exactly mirror the hierarchy and detail of the PDF report. Previously, the CSV was a raw dump that missed calculated insights; now, it provides the same rich data (including calculated period durations and flow details) in the same order (Reminders -> Meds -> Logs -> Cycles), ensuring users get consistent information regardless of the file format they choose.
+3.  **Layout Optimization:** The PDF table was fine-tuned with specific column widths and font adjustments (8pt/9pt) to fit 7 columns of detailed clinical data onto a standard A4/Letter page without overcrowding or truncation, maintaining professional readability.

@@ -1,6 +1,7 @@
-# app.py (v122.0 - Aesthetic Upgrade: Professional PDF Reports & Dashboard Polish)
+# app.py (v123.0 - Cycle Reporting Upgrade: Detailed PDF Table)
 # FIX v121.2: Fixed visualization type mismatch (cycle_calendar vs calendar) to ensure frontend rendering.
 # NEW v122.0: Overhauled PDF Engine for professional, doctor-ready reports with tables and improved cycle logic.
+# MODIFIED v123.0: Enhanced Cycle History Table in PDF to show Period Duration, Flow, and Symptoms separately.
 
 import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets, random, requests
 from datetime import datetime, timedelta, timezone, date
@@ -2700,7 +2701,6 @@ def chart_data(profile_override=None):
 
 # --- REFACTORED SHARED EXPORT/SHARE LOGIC ---
 
-# NEW v122.0: Comprehensive PDF Generator with Tables, Logo, and Insights
 def _generate_pdf_report(profile):
     user_name = profile.get("name", "User")
     def sanitize(text): return str(text).encode('latin-1', 'replace').decode('latin-1')
@@ -2776,6 +2776,7 @@ def _generate_pdf_report(profile):
     pdf.set_y(max(y_end_left, y_end_right) + 10)
 
     # 3. Health Insights (Symptom Frequency)
+    pdf.set_x(10)
     pdf.set_font("Helvetica", 'B', 12)
     pdf.set_text_color(139, 74, 156)
     pdf.cell(0, 10, text="Health Insights (Recent Logs)", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
@@ -2806,47 +2807,74 @@ def _generate_pdf_report(profile):
     
     pdf.ln(5)
 
-    # 4. Cycle History Table
+    # 4. Cycle History Table (MODIFIED v123.0: Enhanced Columns)
     pdf.set_font("Helvetica", 'B', 12)
     pdf.set_text_color(139, 74, 156)
     pdf.cell(0, 10, text="Cycle History", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     
-    # Table Header
-    pdf.set_fill_color(240, 240, 240)
-    pdf.set_font("Helvetica", 'B', 10)
-    pdf.set_text_color(0, 0, 0)
-    pdf.cell(50, 8, "Start Date", border=1, fill=True)
-    pdf.cell(40, 8, "Duration", border=1, fill=True)
-    pdf.cell(90, 8, "Status/Notes", border=1, fill=True, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    # Table Header (Detailed)
+    # Total Width available approx 190. 
+    # Cols: Start(25), Period(20), Flow(20), Cycle(20), Symp(65), Notes(40)
+    w_start, w_period, w_flow, w_cycle, w_symp, w_notes = 25, 20, 20, 20, 65, 40
     
-    pdf.set_font("Helvetica", '', 10)
+    pdf.set_fill_color(240, 240, 240)
+    pdf.set_font("Helvetica", 'B', 9) # Smaller font for detailed table
+    pdf.set_text_color(0, 0, 0)
+    
+    pdf.cell(w_start, 8, "Start Date", border=1, fill=True)
+    pdf.cell(w_period, 8, "Period", border=1, fill=True)
+    pdf.cell(w_flow, 8, "Flow", border=1, fill=True)
+    pdf.cell(w_cycle, 8, "Cycle Len", border=1, fill=True)
+    pdf.cell(w_symp, 8, "Symptoms", border=1, fill=True)
+    pdf.cell(w_notes, 8, "Status/Notes", border=1, fill=True, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    
+    pdf.set_font("Helvetica", '', 8) # Content font size
     cycles = profile.get("period_data", {}).get("cycles", [])
     
     if cycles:
-        for c in cycles[:6]: # Show last 6 cycles
-            start = c.get('start_date', 'N/A')
-            length = c.get('cycle_length')
+        now = datetime.now()
+        for i, c in enumerate(cycles[:10]): # Show up to 10 cycles
+            start_str = c.get('start_date', 'N/A')
             
-            # Logic to handle current vs completed
-            if length:
-                duration_str = f"{length} Days"
-                status_str = "Completed"
-            else:
-                # Calculate current duration for active cycle
+            # Period Duration Calculation
+            period_len = c.get('period_length')
+            if not period_len and i == 0: # Active/First cycle in list might be current
                 try:
-                    start_dt = datetime.strptime(start, "%Y-%m-%d")
-                    current_day = (datetime.now() - start_dt).days + 1
-                    duration_str = f"Day {current_day}"
-                    status_str = "Current Cycle"
+                    start_dt = datetime.strptime(start_str, "%Y-%m-%d")
+                    current_day = (now - start_dt).days + 1
+                    period_dur_str = f"Day {current_day}"
                 except:
-                    duration_str = "N/A"
-                    status_str = "Unknown"
+                    period_dur_str = "Ongoing"
+            elif period_len:
+                period_dur_str = f"{period_len} Days"
+            else:
+                period_dur_str = "-"
 
-            pdf.cell(50, 8, sanitize(start), border=1)
-            pdf.cell(40, 8, sanitize(duration_str), border=1)
-            pdf.cell(90, 8, sanitize(status_str), border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            # Flow
+            flow_str = str(c.get('flow', '-')).capitalize()
+            
+            # Cycle Length
+            cycle_len = c.get('cycle_length')
+            cycle_len_str = f"{cycle_len} Days" if cycle_len else "Current"
+            
+            # Symptoms (Truncate to fit column)
+            symps = ", ".join(c.get('symptoms', []))
+            if len(symps) > 35: symps = symps[:32] + "..." # Truncate long lists
+            if not symps: symps = "-"
+            
+            # Notes / Status
+            # If it's the most recent cycle and has no end date, it's Current.
+            # Otherwise, Completed.
+            notes_str = "Current Cycle" if (i == 0 and not c.get('end_date')) else "Completed"
+
+            pdf.cell(w_start, 8, sanitize(start_str), border=1)
+            pdf.cell(w_period, 8, sanitize(period_dur_str), border=1)
+            pdf.cell(w_flow, 8, sanitize(flow_str), border=1)
+            pdf.cell(w_cycle, 8, sanitize(cycle_len_str), border=1)
+            pdf.cell(w_symp, 8, sanitize(symps), border=1)
+            pdf.cell(w_notes, 8, sanitize(notes_str), border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     else:
-        pdf.cell(180, 8, "No cycle data recorded.", border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.cell(190, 8, "No cycle data recorded.", border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
     pdf.ln(10)
 
@@ -2867,18 +2895,65 @@ def _generate_pdf_report(profile):
 
     return bytes(pdf.output())
 
+# MODIFIED v123.2: Reordered CSV sections to match PDF (Logs before Cycles)
 def _generate_csv_response(profile):
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["Log Type", "Date", "Detail 1", "Detail 2"])
-    for log in profile.get("health_logs", []):
-        writer.writerow(["Health Log", log.get('timestamp'), log.get('category'), log.get('value')])
-    for cycle in profile.get("period_data", {}).get("cycles", []):
-        writer.writerow(["Cycle", cycle.get('start_date'), f"Cycle Length: {cycle.get('cycle_length', 'N/A')}", f"Period Ends: {cycle.get('end_date', 'N/A')}"])
+
+    # 1. Reminders (Match PDF Top Section)
+    writer.writerow(["--- UPCOMING REMINDERS ---"])
+    writer.writerow(["Due Date", "Reminder Text"])
     for r in profile.get("proactive_assistance", {}).get("reminders", []):
-        writer.writerow(["Reminder", r.get('start_date'), r.get('text'), ""])
+        writer.writerow([r.get('start_date', 'N/A'), r.get('text', '')])
+    writer.writerow([]) # Spacer
+
+    # 2. Medications (Match PDF Top Section)
+    writer.writerow(["--- MEDICATIONS ---"])
+    writer.writerow(["Medication Name", "Dosage", "Frequency", "Date Logged"])
     for med in profile.get("medication_log", []):
-        writer.writerow(["Medication", med.get('logged_date'), med.get('name'), f"Dosage: {med.get('dosage')}"])
+        writer.writerow([med.get('name'), med.get('dosage', 'N/A'), med.get('frequency', 'N/A'), med.get('logged_date', '')])
+    writer.writerow([])
+
+    # 3. Recent Logs (Match PDF: This section comes BEFORE Cycle History)
+    writer.writerow(["--- RECENT HEALTH LOGS ---"])
+    writer.writerow(["Date", "Category", "Value"])
+    for log in profile.get("health_logs", []):
+        writer.writerow([log.get('timestamp'), log.get('category'), log.get('value')])
+    writer.writerow([])
+
+    # 4. Cycle History (Match PDF: This section comes AFTER Health Logs)
+    writer.writerow(["--- CYCLE HISTORY ---"])
+    writer.writerow(["Start Date", "Period Duration", "Flow", "Cycle Length", "Symptoms", "Status/Notes"])
+    
+    cycles = profile.get("period_data", {}).get("cycles", [])
+    now = datetime.now()
+    
+    for i, c in enumerate(cycles):
+        start_str = c.get('start_date', 'N/A')
+        
+        # Logic borrowed from PDF generator for consistency
+        period_len = c.get('period_length')
+        if not period_len and i == 0:
+            try:
+                start_dt = datetime.strptime(start_str, "%Y-%m-%d")
+                current_day = (now - start_dt).days + 1
+                period_dur_str = f"Day {current_day}"
+            except: period_dur_str = "Ongoing"
+        elif period_len:
+            period_dur_str = f"{period_len} Days"
+        else: period_dur_str = "-"
+
+        flow_str = str(c.get('flow', '-')).capitalize()
+        
+        cycle_len = c.get('cycle_length')
+        cycle_len_str = f"{cycle_len} Days" if cycle_len else "Current"
+        
+        symps = ", ".join(c.get('symptoms', []))
+        if not symps: symps = "-"
+        
+        notes_str = "Current Cycle" if (i == 0 and not c.get('end_date')) else "Completed"
+
+        writer.writerow([start_str, period_dur_str, flow_str, cycle_len_str, symps, notes_str])
     
     csv_bytes = output.getvalue().encode('utf-8')
     user_name = profile.get("name", "User")
