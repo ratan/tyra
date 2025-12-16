@@ -1,4 +1,4 @@
-// static/js/tyra_widget.js (v122.0 - Aesthetic Upgrade: Card UI & Modern Polish)
+// static/js/tyra_widget.js (v123.3 - Aesthetic "Soft UI" Upgrade + Adaptive Arrows)
 (function() {
     'use strict';
 
@@ -99,6 +99,7 @@
         // MODIFIED in v119.1: Add Burn History Button
         // MODIFIED in v119.2: Added "Change Vibe" button
         // MODIFIED in v119.5: Added "Cycle Sync" toggle button
+        // MODIFIED in v123.3: Updated HTML Structure for "Soft UI" Menu Icons AND Adaptive Arrows
         widgetShell: (title) => {
             // Logic to pick the correct icon for the header
             const iconKey = state.launcherIconKey || 'default';
@@ -107,7 +108,7 @@
             const fullUrl = iconPath.startsWith('http') ? iconPath : `${state.apiUrl}/${iconPath}`;
             
             // Determine toggle text based on state
-            const syncToggleText = state.syncThemeToCycle ? "🔄 Cycle Sync: ON" : "🔄 Cycle Sync: OFF";
+            const syncToggleText = state.syncThemeToCycle ? "Cycle Sync: ON" : "Cycle Sync: OFF";
 
             return `
             <div class="tyra-widget-container" data-theme="${state.themeKey}">
@@ -121,16 +122,16 @@
                         <button id="tyra-dashboard-btn" class="tyra-header-button" style="display: none;"></button>
                         <button id="tyra-settings-btn" class="tyra-settings-btn" style="display: none;">⋮</button>
                         <div id="tyra-settings-dropdown" class="tyra-settings-dropdown">
-                            <a href="https://fitcommunity.in/privacyPolicy.php" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
+                            <a href="https://fitcommunity.in/privacyPolicy.php" target="_blank"><span class="tyra-menu-icon">🔒</span> Privacy Policy</a>
                             <div class="tyra-settings-separator"></div>
-                            <button id="tyra-change-theme-btn">🎨 Change Theme</button>
-                            <button id="tyra-sync-theme-btn" title="Auto-match theme to your cycle">${syncToggleText}</button>
-                            <button id="tyra-change-icon-btn">🎭 Change Icon</button>
-                            <button id="tyra-change-persona-btn">✨ Change Vibe</button>
+                            <button id="tyra-change-theme-btn"><span class="tyra-menu-icon">🎨</span> Change Theme</button>
+                            <button id="tyra-sync-theme-btn"><span class="tyra-menu-icon">🔄</span> ${syncToggleText}</button>
+                            <button id="tyra-change-icon-btn"><span class="tyra-menu-icon">🎭</span> Change Icon</button>
+                            <button id="tyra-change-persona-btn"><span class="tyra-menu-icon">✨</span> Change Vibe</button>
                             <div class="tyra-settings-separator"></div>
-                            <button id="tyra-burn-history-btn" class="tyra-danger-btn">🔥 Burn History</button>
+                            <button id="tyra-burn-history-btn" class="tyra-danger-btn"><span class="tyra-menu-icon">🔥</span> Burn History</button>
                             <div class="tyra-settings-separator"></div>
-                            <a href="#" id="tyra-logout-link">Logout</a>
+                            <a href="#" id="tyra-logout-link"><span class="tyra-menu-icon">🚪</span> Logout</a>
                         </div>
                         <button id="tyra-close-btn" class="tyra-close-btn">×</button>
                     </div>
@@ -274,10 +275,15 @@
                     <button type="submit">${state.lang.button_start_chatting || 'Start Chatting'}</button>
                 </form>
             </div>`,
+        // UPDATED v123.3: Chat View now includes Adaptive Navigation Arrows
         chatView: () => `
             <div class="tyra-chat-log"></div>
             <div class="tyra-chat-form-container">
+                 <!-- Floating Arrows for Desktop Navigation -->
+                 <button class="tyra-scroll-arrow tyra-scroll-left hidden">❮</button>
                  <div class="tyra-quick-log-buttons"></div>
+                 <button class="tyra-scroll-arrow tyra-scroll-right hidden">❯</button>
+
                  <form class="tyra-chat-form">
                     <label for="tyra-file-input" class="tyra-icon-button" title="Upload file">📎</label>
                     <input type="file" id="tyra-file-input" style="display:none;" accept=".pdf,image/*">
@@ -449,11 +455,69 @@
                 loadChatHistory();
             }
             populateQuickLogButtons();
+            
+            // NEW v123.3: Initialize the adaptive scroll logic
+            setupQuickLogScroll(); 
+            
         } else if (state.currentView === 'dashboard') {
             renderDashboard();
         } else if (state.currentView === 'profile_creation') {
             initializeProfileFormLogic();
         }
+    }
+
+    // --- NEW v123.3: Adaptive Scroll Logic ---
+    function setupQuickLogScroll() {
+        const container = state.targetElement.querySelector('.tyra-quick-log-buttons');
+        const leftBtn = state.targetElement.querySelector('.tyra-scroll-left');
+        const rightBtn = state.targetElement.querySelector('.tyra-scroll-right');
+        
+        if(!container || !leftBtn || !rightBtn) return;
+
+        // Function to check scroll position and toggle arrows
+        const updateArrows = () => {
+            const tolerance = 2; // pixel tolerance
+            const maxScrollLeft = container.scrollWidth - container.clientWidth;
+            
+            // Hide Left arrow if at start
+            if (container.scrollLeft <= tolerance) {
+                leftBtn.classList.add('hidden');
+            } else {
+                leftBtn.classList.remove('hidden');
+            }
+
+            // Hide Right arrow if at end
+            if (container.scrollLeft >= maxScrollLeft - tolerance) {
+                rightBtn.classList.add('hidden');
+            } else {
+                rightBtn.classList.remove('hidden');
+            }
+        };
+
+        // Scroll Listeners for Arrows
+        leftBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            container.scrollBy({ left: -200, behavior: 'smooth' });
+        });
+
+        rightBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            container.scrollBy({ left: 200, behavior: 'smooth' });
+        });
+
+        // Mouse Wheel Logic for horizontal scroll (Pro feature)
+        container.addEventListener('wheel', (e) => {
+            if (e.deltaY !== 0) {
+                e.preventDefault();
+                container.scrollLeft += e.deltaY;
+            }
+        });
+
+        // Update arrows on scroll event
+        container.addEventListener('scroll', updateArrows);
+        
+        // Initial check (needs slight delay for layout to settle)
+        setTimeout(updateArrows, 100);
     }
     
     // MODIFIED in v117.4: Handle weekly insight card and robust download
@@ -907,7 +971,7 @@
                         
                         // MODIFIED v119.7: Updated label to "Cycle Sync"
                         const syncBtn = state.targetElement.querySelector('#tyra-sync-theme-btn');
-                        if(syncBtn) syncBtn.textContent = "🔄 Cycle Sync: OFF";
+                        if(syncBtn) syncBtn.textContent = "Cycle Sync: OFF";
                     }
                     
                     changeTheme(selectedKey);
@@ -963,7 +1027,7 @@
         
         const btn = e.target;
         // MODIFIED v119.7: Updated label to "Cycle Sync"
-        btn.textContent = state.syncThemeToCycle ? "🔄 Cycle Sync: ON" : "🔄 Cycle Sync: OFF";
+        btn.textContent = state.syncThemeToCycle ? "Cycle Sync: ON" : "Cycle Sync: OFF";
         
         // Apply logic immediately
         if (state.syncThemeToCycle) {

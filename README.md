@@ -661,3 +661,17 @@ The backend logic (`_generate_pdf_report`) was transformed from a simple string-
 1.  **Granular Cycle Analysis:** The Cycle History table in the PDF was significantly upgraded to separate **"Period Duration"** (bleeding days) from **"Cycle Length"** (interval between periods). It now also includes specific columns for **Flow Intensity** and **Symptoms**, turning a simple date log into a powerful diagnostic tool for identifying conditions like irregular cycles or menorrhagia.
 2.  **Cross-Format Data Integrity:** The CSV export logic was rewritten to exactly mirror the hierarchy and detail of the PDF report. Previously, the CSV was a raw dump that missed calculated insights; now, it provides the same rich data (including calculated period durations and flow details) in the same order (Reminders -> Meds -> Logs -> Cycles), ensuring users get consistent information regardless of the file format they choose.
 3.  **Layout Optimization:** The PDF table was fine-tuned with specific column widths and font adjustments (8pt/9pt) to fit 7 columns of detailed clinical data onto a standard A4/Letter page without overcrowding or truncation, maintaining professional readability.
+
+### **11: "Aesthetic Soft UI & Adaptive Navigation" (Visual Polish & UX Refinement)**
+**Version:** v123.3
+**Complexity:** ⭐⭐ (Low/Medium - CSS Overhaul + JS Event Logic)
+**Impact:** ⭐⭐⭐⭐⭐ (User Experience & Brand Perception - Elevates the interface from "Functional" to "Premium Consumer App").
+
+### **Why this is a breakthrough:**
+1.  **"Soft UI" Design Language:** The entire widget interface was modernized with a cohesive "Card UI" aesthetic. The **Settings Menu** transformed from a standard list into a beautiful **floating card** with soft shadows and generous padding. The **Header** now features a subtle gradient and glassmorphism effects ("Ghost Pills"), and buttons use pastel colors with rounded corners, making the app feel tactile, friendly, and high-end.
+2.  **Adaptive Navigation Arrows:** Solved a critical desktop usability issue where horizontal scrolling (for Quick Logs) was invisible to mouse users. Implemented **smart navigation arrows** that appear conditionally (only when scrolling is possible) and match the user's selected theme color dynamically. This bridges the gap between mobile touch-swiping and desktop clicking without cluttering the UI.
+3.  **Typography Unification:** Enforced the geometric **Poppins** font across all UI elements (headers, menus, buttons), eliminating the jarring mix of system fonts. This subtle change significantly boosts the perceived quality and consistency of the brand identity.
+
+### **Modified Files:**
+*   **`static/css/tyra_widget.css`**: Major overhaul. Implemented "Soft UI" variables (softer shadows, larger border-radius), updated Settings Menu styles, added pastel button styles, enforced `Poppins` font stack, and added CSS classes for the new navigation arrows (`.tyra-scroll-arrow`).
+*   **`static/js/tyra_widget.js`**: Updated HTML template strings for the Settings Menu (added icon spans) and Chat View (injected navigation arrow elements). Added a new function `setupQuickLogScroll()` to handle scroll detection, arrow visibility logic, click events, and mouse wheel support.
