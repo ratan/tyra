@@ -1,4 +1,7 @@
-# user_profiler.py (v121.0 - Lifecycle Companion Engine)
+# user_profiler.py (v124.0 - Smart Memory & Lifecycle Engine)
+# NEW v124.0: Added Medical Biography support for Smart Summarization context injection.
+# NEW v121.0: Lifecycle Companion Engine (Postnatal/Pregnancy logic).
+
 from datetime import datetime, timedelta
 import dateparser 
 import random 
@@ -76,9 +79,11 @@ def create_user_profile(name, email, phone, age, details, lang_code='en'):
             "pending_program_offer": None,
             "last_summary_date": None, # NEW in v105.1
             "last_insight_offered_date": None, # NEW in v117.0
-            "last_proactive_greet_ts": None # NEW in v120.0: Track last proactive greeting
+            "last_proactive_greet_ts": None, # NEW in v120.0: Track last proactive greeting
+            "last_analysis_result": {} # NEW in v124.0: Cache for On-Demand Analysis
         },
         "behavioral_synopsis": {},
+        "medical_biography": [], # NEW in v124.0: Smart Summarization storage
         "health_logs": [],
         "medication_log": [],
         "goals": [],
@@ -394,6 +399,15 @@ def format_profile_for_prompt(profile, chatbot_name="Tyra", is_first_greeting_of
     
     # --- MODIFIED in v120.0: Only add deep context if NOT a proactive greeting ---
     if not is_proactive_greeting:
+        
+        # --- NEW in v124.0: Inject Medical Biography (Smart Summarization) ---
+        med_bio = profile.get("medical_biography", [])
+        if med_bio:
+            context_lines.append("\n--- MEDICAL BIOGRAPHY (RECURRING PATTERNS) ---")
+            for item in med_bio:
+                context_lines.append(f"- {item}")
+            context_lines.append("INSTRUCTION: Use these recurring patterns to provide deeper, more personalized insights if relevant to the user's question.")
+        
         # --- NEW in v116.3: Comprehensive UI Context for feature awareness ---
         ui_context = ["\n--- UI CONTEXT (For your awareness of the app's features) ---", "- The user is interacting with you inside a chat widget."]
         streaks = profile.get("streaks", {})

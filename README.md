@@ -675,3 +675,21 @@ The backend logic (`_generate_pdf_report`) was transformed from a simple string-
 ### **Modified Files:**
 *   **`static/css/tyra_widget.css`**: Major overhaul. Implemented "Soft UI" variables (softer shadows, larger border-radius), updated Settings Menu styles, added pastel button styles, enforced `Poppins` font stack, and added CSS classes for the new navigation arrows (`.tyra-scroll-arrow`).
 *   **`static/js/tyra_widget.js`**: Updated HTML template strings for the Settings Menu (added icon spans) and Chat View (injected navigation arrow elements). Added a new function `setupQuickLogScroll()` to handle scroll detection, arrow visibility logic, click events, and mouse wheel support.
+
+### **12: "Advanced Intelligence & Adaptive Empathy" (Memory, Accessibility & Insights)**
+**Version:** v124.0
+**Complexity:** ⭐⭐⭐ (Medium - Backend Logic + Frontend State + CSS Architecture)
+**Impact:** ⭐⭐⭐⭐⭐ (Core Functionality - Transforms Tyra from a "Passive Tracker" into a "Proactive Companion").
+
+### **Why this is a breakthrough:**
+1.  **Smart Summarization (Long-Term Semantic Memory):** Solved the "Goldfish Memory" problem inherent in chat windows. Tyra now actively compresses frequent user logs (e.g., "3x migraines this month") into a structured **"Medical Biography"** stored in the profile. This biography is injected into the AI's context window, allowing Tyra to recall and reference a user's chronic patterns from months ago without needing an expensive Vector Database.
+2.  **Adaptive UI (Age-Responsive Design):** Moved beyond simple color themes to true **inclusive design**. Tyra now automatically detects the user's age and radically alters the CSS architecture:
+    *   **Seniors (60+):** Activates "High Contrast Mode" (solid backgrounds, bold text, removed glassmorphism) for readability.
+    *   **Teens (<20):** Activates "Vibe Mode" (gradients, sharper bubbles) for aesthetic appeal.
+3.  **On-Demand Analysis (Just-in-Time Insights):** Introduced a "Zero-Cost" analysis engine optimized for Render.com. Instead of running expensive background cron jobs, Tyra triggers a correlation analysis *only* when the user opens the Dashboard. She correlates disparate metrics (e.g., "Stress" vs. "Sleep") and presents a synthesized observation card ("Tyra's Observation") at the top of the dashboard, mimicking a doctor's review of a chart.
+
+### **Modified Files:**
+*   **`app.py`**: Added Feature Flags (`ENABLE_SMART_SUMMARIZATION`, `ENABLE_ADAPTIVE_UI`, `ENABLE_ON_DEMAND_ANALYSIS`). Implemented `_update_medical_biography` (data compression logic) and `_perform_on_demand_analysis` (LLM correlation logic with 24h caching).
+*   **`user_profiler.py`**: Updated the profile schema to include `medical_biography`. Updated `format_profile_for_prompt` to inject the compressed biography into the system prompt, giving the LLM "long-term memory."
+*   **`static/js/tyra_widget.js`**: Updated `api_config` handling to read `ui_mode` and apply CSS classes to the `<body>`. Updated the Dashboard renderer to inject the new **"Tyra's Observation"** hero widget at the top of the grid.
+*   **`static/css/tyra_widget.css`**: Added the foundational CSS classes for the adaptive modes: `.tyra-high-contrast` (overrides for seniors) and `.tyra-vibe-mode` (overrides for teens).

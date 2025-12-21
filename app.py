@@ -1,7 +1,8 @@
-# app.py (v123.0 - Cycle Reporting Upgrade: Detailed PDF Table)
+# app.py (v124.0 - Advanced Intelligence Upgrade: Smart Memory, Adaptive UI, On-Demand Analysis)
+# NEW v124.0: Added Smart Summarization (Medical Bio), Adaptive UI modes, and Just-in-Time Dashboard Analysis.
+# MODIFIED v123.0: Enhanced Cycle History Table in PDF to show Period Duration, Flow, and Symptoms separately.
 # FIX v121.2: Fixed visualization type mismatch (cycle_calendar vs calendar) to ensure frontend rendering.
 # NEW v122.0: Overhauled PDF Engine for professional, doctor-ready reports with tables and improved cycle logic.
-# MODIFIED v123.0: Enhanced Cycle History Table in PDF to show Period Duration, Flow, and Symptoms separately.
 
 import os, json, hashlib, google.generativeai as genai, calendar, time, io, csv, uuid, re, secrets, random, requests
 from datetime import datetime, timedelta, timezone, date
@@ -77,6 +78,9 @@ ALLOWED_ORIGINS = [
 ]
 
 # --- Feature Flags ---
+ENABLE_SMART_SUMMARIZATION = True # NEW v124.0: Compresses logs into a 'Medical Biography'
+ENABLE_ADAPTIVE_UI = True # NEW v124.0: High Contrast for Seniors, Vibe Mode for Teens
+ENABLE_ON_DEMAND_ANALYSIS = True # NEW v124.0: Analyzes data when dashboard opens
 ENABLE_DEEP_LIFECYCLE_ENGINE = True # NEW in v121.0: Enables granular postnatal & age-specific logic (Vaccines, Indian context)
 ENABLE_PROACTIVE_GREETING = True # NEW in v120.0: Enables the system to initiate conversation.
 ENABLE_CYCLE_SYNCED_UI = True # NEW in v119.5: Enables automatic theme switching based on cycle phase.
@@ -670,6 +674,90 @@ def get_visual_triage_prompt(user_query, image_file):
         "Now, analyze the following image and generate the response based on these instructions:",
         image_file
     ]
+
+# --- NEW v124.0: Smart Summarization (Medical Biography) Logic ---
+def _update_medical_biography(profile):
+    """
+    Compresses frequent log patterns into a structured Medical Biography list.
+    Runs reactively after logs are updated.
+    """
+    if not ENABLE_SMART_SUMMARIZATION: return profile
+    
+    logs = profile.get("health_logs", [])
+    if not logs: return profile
+    
+    # 1. Frequency Analysis (Last 60 days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=60)
+    recent_logs = []
+    
+    for log in logs:
+        try:
+            log_dt = dateparser.parse(log['timestamp'])
+            if log_dt and log_dt.tzinfo is None: log_dt = log_dt.replace(tzinfo=timezone.utc)
+            if log_dt > cutoff: recent_logs.append(log)
+        except: continue
+        
+    counts = defaultdict(int)
+    for log in recent_logs:
+        key = f"{log.get('category', 'unknown')}: {log.get('value', 'unknown')}"
+        counts[key] += 1
+        
+    # 2. Threshold Filtering (Recurring Issues)
+    # If a symptom/feeling happens > 3 times in 60 days, it's biography-worthy.
+    biography = []
+    for key, count in counts.items():
+        if count >= 3:
+            biography.append(f"Frequent {key} ({count}x in last 60 days)")
+            
+    profile.setdefault("medical_biography", [])
+    # Update the profile if biography changed significantly
+    profile["medical_biography"] = biography
+    
+    return profile
+
+# --- NEW v124.0: On-Demand Analysis Logic ---
+def _perform_on_demand_analysis(profile):
+    """
+    Uses LLM to find correlations in recent data triggered by dashboard view.
+    Includes caching logic (once per 24 hours).
+    """
+    proactive_data = profile.setdefault("proactive_assistance", {})
+    last_analysis = proactive_data.get("last_analysis_result", {})
+    today_str = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    
+    # Cache Check
+    if last_analysis.get("date") == today_str:
+        return last_analysis.get("text")
+        
+    # Gather Data
+    logs = profile.get("health_logs", [])[:30] # Last 30 logs
+    cycles = profile.get("period_data", {}).get("cycles", [])
+    
+    if len(logs) < 5: 
+        return "Keep logging to see insights here!"
+        
+    # Prompt Construction
+    analysis_prompt = (
+        "Analyze these health logs for patterns or correlations. "
+        "Focus on links between sleep, stress, mood, and cycle phase. "
+        "Output a single, insightful sentence observation. "
+        "Example: 'Your sleep quality tends to drop when your stress is high.' "
+        "Do NOT state the obvious. Be insightful. "
+        f"Logs: {json.dumps(logs, default=str)}"
+    )
+    
+    response = _call_llm_with_fallback(analysis_prompt)
+    
+    if response:
+        result_text = response.text.strip()
+        # Save to cache
+        proactive_data["last_analysis_result"] = {
+            "date": today_str,
+            "text": result_text
+        }
+        return result_text
+        
+    return "Analyzing your patterns..."
 
 def analyze_general_correlations(profile):
     if not ENABLE_EXPANDED_LOGGING: return None
@@ -1562,6 +1650,10 @@ def _get_dashboard_data(profile):
     if ENABLE_MEDICATION_TRACKING: dashboard_data["medications"] = profile.get("medication_log", [])[:5]
     if ENABLE_GOAL_TRACKING: dashboard_data["goals"] = profile.get("goals", [])[:5]
     
+    # NEW v124.0: Trigger On-Demand Analysis if enabled
+    if ENABLE_ON_DEMAND_ANALYSIS:
+        dashboard_data["analysis"] = _perform_on_demand_analysis(profile)
+
     return dashboard_data
 
 # --- NEW in v119.5: Cycle Phase Calculation Helper ---
@@ -2131,6 +2223,10 @@ def _process_chat_message_for_auth_user(user_message, profile, profile_hash):
     ])
     profile['chat_log'] = profile['chat_log'][-MAX_CHAT_LOG_ENTRIES:]
 
+    # NEW in v124.0: Trigger Smart Summarization (Medical Bio) update at the end of interaction
+    if ENABLE_SMART_SUMMARIZATION:
+        profile = _update_medical_biography(profile)
+
     # BUGFIX in v116.1: Ensure streak is updated and profile is saved on EVERY interaction.
     profile = _update_daily_streak(profile)
     save_profile(profile_hash, profile)
@@ -2161,17 +2257,29 @@ def index():
     is_session_active = 'profile_hash' in session or session.get('is_guest')
     user_name = ''
     lang_code = 'en'
+    ui_mode = 'default' # Default UI mode
+
     if 'profile_hash' in session:
         profile = load_profile(session['profile_hash'])
         if profile: 
             user_name = profile.get('name', '')
             lang_code = profile.get('language', 'en')
+            
+            # --- FIX v124.2: Adaptive UI Logic for Monolith (using dashed class names) ---
+            if app.config.get('ENABLE_ADAPTIVE_UI'):
+                age = profile.get("age", 30)
+                if age >= 60:
+                    ui_mode = "high-contrast" # DASHERIZED
+                elif age <= 19:
+                    ui_mode = "vibe-mode" # DASHERIZED
+            # -----------------------------------------------------------------------------
+
     lang_data = load_language_data(lang_code)
     is_rtl = lang_code in ['ur', 'ar']
     
     js_config = {
         'ENABLE_EMAIL_OTP_VERIFICATION': app.config.get('ENABLE_EMAIL_OTP_VERIFICATION'),
-        'ENABLE_CONVERSATIONAL_ONBOARDING': app.config.get('ENABLE_CONVERSATIONAL_ONBOARDING') # NEW in v103.0
+        'ENABLE_CONVERSATIONAL_ONBOARDING': app.config.get('ENABLE_CONVERSATIONAL_ONBOARDING')
     }
 
     return render_template(
@@ -2181,6 +2289,7 @@ def index():
         lang=lang_data, 
         is_rtl=is_rtl,
         config=js_config,
+        ui_mode=ui_mode, # Pass ui_mode to template
         chatbot_name=CHATBOT_NAME,
         enable_document_upload=ENABLE_DOCUMENT_UPLOAD,
         enable_visual_triage=ENABLE_VISUAL_TRIAGE,
@@ -2189,7 +2298,7 @@ def index():
         enable_dashboard=ENABLE_DASHBOARD,
         enable_guest_mode=ENABLE_GUEST_MODE,
         enable_multi_language=ENABLE_MULTI_LANGUAGE,
-        enable_conversational_onboarding=app.config.get('ENABLE_CONVERSATIONAL_ONBOARDING') # NEW in v103.0
+        enable_conversational_onboarding=app.config.get('ENABLE_CONVERSATIONAL_ONBOARDING')
     )
 
 @app.route('/dashboard')
@@ -2245,6 +2354,7 @@ if app.config['ENABLE_WIDGET_MODE']:
     # MODIFIED in v116.0: Add streak data to config payload
     # MODIFIED in v119.2: Return current persona in config
     # MODIFIED in v119.5: Return current cycle phase for UI syncing
+    # MODIFIED in v124.0: Determine UI Mode based on Age (Adaptive UI)
     @app.route('/api/v1/config')
     @token_required
     def api_config():
@@ -2253,6 +2363,7 @@ if app.config['ENABLE_WIDGET_MODE']:
         streak_data = {"current": 0} # Default for guests
         persona = "bestie" # Default persona
         current_phase = None # NEW in v119.5
+        ui_mode = "default" # NEW in v124.0
 
         if g.profile and not g.is_guest:
             lang_code = g.profile.get('language', 'en')
@@ -2261,6 +2372,14 @@ if app.config['ENABLE_WIDGET_MODE']:
                 streak_data = g.profile.get("streaks", {"current": 0})
             if ENABLE_CYCLE_SYNCED_UI:
                 current_phase = _calculate_cycle_phase(g.profile) # Calculate phase
+            
+            # NEW in v124.0: Adaptive UI Logic
+            if ENABLE_ADAPTIVE_UI:
+                age = g.profile.get("age", 30)
+                if age >= 60:
+                    ui_mode = "high-contrast"
+                elif age <= 19:
+                    ui_mode = "vibe_mode"
         
         lang_data = load_language_data(lang_code)
 
@@ -2269,7 +2388,8 @@ if app.config['ENABLE_WIDGET_MODE']:
             "lang": lang_data,
             "streaks": streak_data,
             "persona": persona,
-            "current_phase": current_phase # Return to frontend
+            "current_phase": current_phase, # Return to frontend
+            "ui_mode": ui_mode # Return Adaptive UI setting
         })
 
     # The config route for a user who is not yet authenticated

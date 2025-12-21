@@ -1,4 +1,9 @@
-// static/js/tyra_widget.js (v123.3 - Aesthetic "Soft UI" Upgrade + Adaptive Arrows)
+// static/js/tyra_widget.js (v124.2 - Theme Override Fix)
+// FIX v124.2: Adaptive UI now respects manual theme selection (overrides age-based defaults).
+// FIX v124.1: Applied Adaptive UI class to both body and container for robust CSS targeting.
+// NEW v124.0: Added logic to read 'ui_mode' from config and apply CSS classes.
+// NEW v124.0: Added rendering for the new 'analysis' widget in the dashboard.
+
 (function() {
     'use strict';
 
@@ -24,7 +29,8 @@
         themeKey: 'default', // NEW in v119.0: Track selected theme
         persona: 'bestie', // NEW in v119.2: Track current persona
         currentPhase: null, // NEW in v119.5: Track biological cycle phase
-        syncThemeToCycle: false // NEW in v119.5: User preference
+        syncThemeToCycle: false, // NEW in v119.5: User preference
+        uiMode: 'default' // NEW in v124.0: Tracks adaptive UI mode (high_contrast/vibe_mode)
     };
 
     // --- CONSTANTS ---
@@ -1360,6 +1366,9 @@
     // MODIFIED in v119.2: Update state.persona from config
     // MODIFIED in v119.5: Check phase and auto-sync theme
     // MODIFIED in v120.0: Trigger Proactive Greeting
+    // MODIFIED in v124.0: Apply Adaptive UI Mode
+    // FIX v124.1: Double Tap Class Application
+    // FIX v124.2: Respect manual theme selection
     async function initializeAuthenticatedSession() {
         try {
             const config = await api.get('config');
@@ -1373,6 +1382,21 @@
             }
             if(config.current_phase) {
                 state.currentPhase = config.current_phase; // Load phase
+            }
+            
+            // --- FIX v124.2: Robust Adaptive UI Application with Manual Override ---
+            // Only apply adaptive UI if the user has NOT manually set a theme
+            const userHasManualTheme = state.themeKey !== 'default';
+            
+            if(config.ui_mode && config.ui_mode !== 'default' && !userHasManualTheme) {
+                // 1. Apply to Body (for broad scoping)
+                document.body.classList.add(`tyra-${config.ui_mode}`);
+                
+                // 2. Apply to Container (for specific component styling)
+                const container = state.targetElement.querySelector('.tyra-widget-container');
+                if(container) {
+                    container.classList.add(`tyra-${config.ui_mode}`);
+                }
             }
 
             // Apply Cycle Sync Logic if enabled
@@ -1480,6 +1504,15 @@
             const data = state.dashboardData;
             
             const widgets = {
+                // NEW v124.0: Weekly Observation / Analysis Widget (Placed at top)
+                analysis: () => {
+                    if (!data.analysis) return '';
+                    return `
+                    <div class="tyra-dashboard-card" style="background: linear-gradient(135deg, rgba(139, 74, 156, 0.1), #fff); border-left: 4px solid var(--primary-color);">
+                        <h4>💡 Tyra's Observation</h4>
+                        <p style="font-size:0.95em; color:#444; font-style:italic;">${data.analysis}</p>
+                    </div>`;
+                },
                 cycle: () => {
                     if (!data.cycle_stats || Object.keys(data.cycle_stats).length === 0) return '';
                     let w = `<div class="tyra-dashboard-card"><h4>${state.lang.widget_title_cycle || 'Cycle'}</h4>`;
@@ -1532,7 +1565,9 @@
                     </div>`
             };
             
-            container.innerHTML = Object.values(widgets).map(w => w()).join('');
+            // Reordered for logical flow: Analysis -> Cycle -> Reminders -> Meds -> ...
+            const widgetOrder = ['analysis', 'cycle', 'reminders', 'meds', 'goals', 'charts', 'logs', 'export'];
+            container.innerHTML = widgetOrder.map(k => widgets[k] ? widgets[k]() : '').join('');
             
             container.querySelectorAll('.tyra-reminder-item input').forEach(btn => btn.addEventListener('click', onReminderDoneClick));
             renderDashboardCharts();

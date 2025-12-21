@@ -1,4 +1,7 @@
-/* static/css/tyra_widget.css (v123.3 - Aesthetic "Soft UI" Upgrade + Adaptive Arrows) */
+/* static/css/tyra_widget.css (v124.2 - Adaptive UI Fix & Advanced Intelligence) */
+/* FIX v124.2: Switched High Contrast mode to use CSS Variable overrides for guaranteed cascading. */
+/* FIX v124.1: Strengthened High Contrast selectors to ensure override works in all contexts. */
+/* NEW v124.0: Added .tyra-high-contrast (Senior) and .tyra-vibe-mode (Teen) accessibility styles. */
 /* FIX v121.1: Added missing calendar and chart visualization styles */
 /* NEW v122.0: Added Card UI styles for dashboard view consistency */
 /* NEW v123.3: Refined "Soft UI" design for Settings Menu, Header, and Buttons */
@@ -111,6 +114,70 @@
     --logged-day-bg: #FF7043;
     --current-day-border: #FF7043;
 }
+
+/* --- NEW v124.0: ADAPTIVE UI OVERRIDES --- */
+
+/* Senior Mode: High Contrast via Variable Redefinition */
+/* FIX v124.2: Override root variables for robustness */
+body.tyra-high-contrast,
+.tyra-widget-container.tyra-high-contrast {
+    /* Force High Contrast Colors */
+    --primary-color: #4A148C !important; /* Deep Purple */
+    --secondary-color: #4A148C !important; /* No Gradient */
+    --background-color: #FFFFFF !important;
+    --text-color: #000000 !important;
+    --border-color: #000000 !important;
+    
+    --user-msg-bg: #E1BEE7 !important; /* Light Purple */
+    --user-msg-text: #000000 !important;
+    --ai-msg-bg: #FFFFFF !important;
+    --ai-msg-text: #000000 !important;
+    
+    /* Force Fonts */
+    --font-family: 'Verdana', sans-serif !important; /* More readable than Poppins */
+}
+
+/* Specific Element Overrides that can't be handled by variables */
+body.tyra-high-contrast .tyra-widget-container,
+.tyra-widget-container.tyra-high-contrast {
+    border: 3px solid #000 !important;
+    box-shadow: none !important;
+    font-size: 18px !important;
+}
+
+body.tyra-high-contrast .tyra-widget-header,
+.tyra-widget-container.tyra-high-contrast .tyra-widget-header {
+    background: #4A148C !important; 
+    border-bottom: 2px solid #000 !important;
+}
+
+body.tyra-high-contrast .tyra-header-button,
+.tyra-widget-container.tyra-high-contrast .tyra-header-button {
+    background: #FFF !important;
+    color: #000 !important;
+    border: 2px solid #000 !important;
+    font-weight: 800 !important;
+}
+
+/* Ensure messages have borders */
+body.tyra-high-contrast .tyra-message,
+.tyra-widget-container.tyra-high-contrast .tyra-message {
+    border: 1px solid #000 !important;
+}
+
+/* Teen Mode: Vibe Mode */
+body.tyra-vibe-mode .tyra-widget-container,
+.tyra-widget-container.tyra-vibe-mode {
+    background: linear-gradient(180deg, #FAF7FB 0%, #F3E5F5 100%);
+}
+
+body.tyra-vibe-mode .tyra-user-message,
+.tyra-widget-container.tyra-vibe-mode .tyra-user-message {
+    border-radius: 20px 20px 4px 20px !important; /* Sharper 'chat' look */
+    background: linear-gradient(135deg, var(--user-msg-bg), #fff);
+}
+
+/* --- End Adaptive UI Modes --- */
 
 
 /* --- Launcher Icon --- */
