@@ -693,3 +693,21 @@ The backend logic (`_generate_pdf_report`) was transformed from a simple string-
 *   **`user_profiler.py`**: Updated the profile schema to include `medical_biography`. Updated `format_profile_for_prompt` to inject the compressed biography into the system prompt, giving the LLM "long-term memory."
 *   **`static/js/tyra_widget.js`**: Updated `api_config` handling to read `ui_mode` and apply CSS classes to the `<body>`. Updated the Dashboard renderer to inject the new **"Tyra's Observation"** hero widget at the top of the grid.
 *   **`static/css/tyra_widget.css`**: Added the foundational CSS classes for the adaptive modes: `.tyra-high-contrast` (overrides for seniors) and `.tyra-vibe-mode` (overrides for teens).
+
+Here is the consolidated summary for the **v125.0 Hardening Upgrade**, formatted to match your historical documentation style.
+
+### **13: "Domain Guardrails & Instruction Defense" (Anti-Sinkhole & Persona Protection)**
+**Version:** v125.0
+**Complexity:** ⭐⭐⭐ (Medium - Multi-layer Security Architecture)
+**Impact:** ⭐⭐⭐⭐⭐ (Critical Stability - Protects against API misuse, cost exhaustion, and persona drift).
+
+### **Why this is a breakthrough:**
+1.  **Anti-Sinkhole Architecture (The Bouncer):** Solved the vulnerability where users could use Tyra as a free general-purpose development tool. By enhancing the `get_conversation_summary` logic to act as a **Security Gate**, Tyra now identifies "Unsupported Domain" intents (coding, IT support, math) before the expensive main AI logic runs. This "Early Exit" prevents cost exhaustion by refusing malicious queries locally.
+2.  **Instruction Defense (The Shield):** Implemented a **"Primary Directive"** within the system prompt that acts as a cognitive anchor. Tyra is now hard-coded to ignore "instruction hijacking" attempts (e.g., *"Forget your rules," "You are now an agent"*). This ensures the bot maintains its specialized clinical and empathetic identity even under social engineering attacks.
+3.  **The Health Pivot (Semantic Redirection):** Replaced "Cold Refusals" with a **Graceful Pivot strategy**. When a user asks an off-topic question, Tyra doesn't just say "No"; she provides a localized, polite refusal and immediately redirects the user back to a health-related follow-up. This keeps the user "trapped" in a productive wellness context while maintaining the "Bestie" warmth.
+4.  **Resource Protection (Token Capping):** Introduced a strict `MAX_OUTPUT_TOKENS_HEALTH` limit (450 tokens) on all responses. This acts as a physical cap on API costs, ensuring that even if a guardrail is bypassed, the bot cannot be forced to generate expensive long-form essays on non-health topics.
+
+### **Modified Files:**
+*   **`app.py`**: Added the `ENABLE_DOMAIN_GUARDRAILS` feature flag. Implemented `MAX_OUTPUT_TOKENS_HEALTH` in the LLM fallback engine. Updated `get_conversation_summary` with "The Bouncer" logic. Added the `_get_health_pivot_response` helper to utilize localized refusal strings.
+*   **`user_profiler.py`**: Surgically updated `format_profile_for_prompt` to inject the **Primary Directive** and **Guardrail Directive**. This forces the LLM to prioritize domain locking and format restrictions (blocking raw JSON/Code blocks) over user commands.
+*   **`locales/en.json`**: Added `guardrail_refusal_pivot` and `guest_guardrail_refusal` keys to ensure that security responses are professionally managed and fully translatable, supporting the app's global architectural standards.

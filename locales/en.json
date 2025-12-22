@@ -117,5 +117,7 @@
   "onboarding_complete": "Perfect, we're all set up, {name}! Your profile is ready. How can I help you today?",
   "onboarding_complete_parent": "Perfect, we're all set up, {name}! I've noted your baby's details. How can I help you on your journey today?",
   "onboarding_invalid_name": "That name seems a bit short. Could you please provide a valid name?",
-  "onboarding_invalid_age": "Please enter a valid age between 13 and 100."
+  "onboarding_invalid_age": "Please enter a valid age between 13 and 100.",
+  "guardrail_refusal_pivot": "I'm here to support your journey in women's health and wellness, {name}! I can't assist with technical support, programming, or tasks outside of health. Speaking of your wellness, how are you feeling today?",
+  "guest_guardrail_refusal": "I'm here to support your health journey! I can't assist with technical or non-health tasks."
 }
