@@ -1373,7 +1373,11 @@
         try {
             const config = await api.get('config');
             state.lang = config.lang || {};
-            
+
+            if(config.name && !state.userName) {
+                state.userName = config.name.split(' ')[0]; // Fills in the name for sessions started with a pre-supplied token
+            }
+
             if(config.streaks) {
                 state.streaks = config.streaks;
             }

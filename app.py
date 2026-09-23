@@ -29,6 +29,13 @@ from user_profiler import create_user_profile, format_profile_for_prompt, LANG_M
 # On Render, it does nothing. On local, it loads the .env file into the OS environment.
 load_dotenv()
 
+# --- Environment Mode ---
+# Single on/off switch for local-testing-only conveniences (currently: OTP console
+# fallback when ZeptoMail isn't configured). Driven by an env var, never hardcoded,
+# so it can't accidentally ship on in production. Set LOCAL_DEV_MODE=true in your
+# local .env; leave it unset on Render.
+LOCAL_DEV_MODE = os.environ.get('LOCAL_DEV_MODE', 'False').lower() == 'true'
+
 # --- Configuration Constants ---
 MAX_HISTORY_ENTRIES = 50
 CHATBOT_NAME = "Tyra"
@@ -52,10 +59,12 @@ MAX_OUTPUT_TOKENS_HEALTH = 450 # NEW in v125.0: Response cap to prevent cost "si
 
 # NEW in v105.4: Define an ordered list of models for fallback on rate limiting.
 GEMINI_MODEL_CASCADE_LIST = [
-    'gemini-2.5-flash-lite',    # Primary model
-    'gemini-2.0-flash-lite',    # First fallback
-    'gemini-2.0-flash',         # Second fallback (text-only)
-    'gemini-2.5-flash'          # Third fallback (text-only)
+    'gemini-3.5-flash-lite',    # Primary model
+    'gemini-3.5-flash',         # First fallback
+    'gemini-2.5-flash-lite',    # Second fallback (legacy, may be unavailable on newer keys)
+    'gemini-2.0-flash-lite',    # Third fallback
+    'gemini-2.0-flash',         # Fourth fallback (text-only)
+    'gemini-2.5-flash'          # Fifth fallback (text-only)
 ]
 
 # NEW in v105.0: Badge Definitions
@@ -121,7 +130,7 @@ ENABLE_WIDGET_MODE = True
 ENABLE_EMAIL_OTP_VERIFICATION = True
 ENABLE_EMAIL_OTP_API_VERIFICATION = True
 ENABLE_BEHAVIORAL_SYNOPSIS = True
-ENABLE_SECURE_CORS_POLICY = False # !!! SET TO TRUE FOR PRODUCTION DEPLOYMENT !!!
+ENABLE_SECURE_CORS_POLICY = not LOCAL_DEV_MODE # Secure by default; relaxed only under LOCAL_DEV_MODE
 # ---
 app = Flask(__name__)
 
@@ -325,6 +334,10 @@ def send_otp_email(to_email, otp):
     sender_email = app.config.get("SENDER_EMAIL")
 
     if not zeptomail_token or not sender_email:
+        if LOCAL_DEV_MODE:
+            # Local testing only: print the OTP instead of emailing it.
+            print(f"!!! DEV MODE: ZeptoMail not configured. OTP for {to_email} is: {otp}")
+            return True
         print("!!! CRITICAL ERROR: ZeptoMail Token or Sender Email not configured in app.config.")
         return False
 
@@ -2411,8 +2424,10 @@ if app.config['ENABLE_WIDGET_MODE']:
         persona = "bestie" # Default persona
         current_phase = None # NEW in v119.5
         ui_mode = "default" # NEW in v124.0
+        user_name = None
 
         if g.profile and not g.is_guest:
+            user_name = g.profile.get('name')
             lang_code = g.profile.get('language', 'en')
             persona = g.profile.get('persona', 'bestie') # Load persona
             if ENABLE_GAMIFICATION_STREAKS:
@@ -2436,7 +2451,8 @@ if app.config['ENABLE_WIDGET_MODE']:
             "streaks": streak_data,
             "persona": persona,
             "current_phase": current_phase, # Return to frontend
-            "ui_mode": ui_mode # Return Adaptive UI setting
+            "ui_mode": ui_mode, # Return Adaptive UI setting
+            "name": user_name # NEW: so a session started from a pre-supplied token (e.g. native app) knows the user's name
         })
 
     # The config route for a user who is not yet authenticated

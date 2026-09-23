@@ -43,11 +43,11 @@ This creates an isolated environment for the project's dependencies.
 
 **1. Open a terminal** in your project directory.
 
-**2. Create the virtual environment:**
+**2. Create the virtual environment (use Python 3.12, matching `runtime.txt`):**
 ```bash
-python3 -m venv venv
 python3.12 -m venv venv
 ```
+**Important:** Don't use a newer Python (e.g. 3.13/3.14) for this. `requirements.txt` pins exact versions of packages with native extensions (`grpcio`, `pillow`, `protobuf`) that may not have prebuilt wheels yet for very new Python releases — pip will fall back to compiling from source, which can take 10-15+ minutes or fail outright. If you don't have Python 3.12, install it first: `brew install python@3.12` (macOS) and use `$(brew --prefix python@3.12)/bin/python3.12` in the command above.
 
 **3. Activate the environment:**
 ```bash
@@ -76,19 +76,29 @@ The `.env` file holds your secret keys for local development.
    *   Generate a `FLASK_SECRET_KEY` by running this in your terminal: `python3 -c 'import secrets; print(secrets.token_hex(24))'`
    *   Add your `GEMINI_API_KEY` from Google AI Studio. Currently it is linked with GEMINI API dummy project.
    *   https://aistudio.google.com/ -> Get API Key -> Project -> Import Project -> Gemini API -> Key (Select API Key) (Later Set Up billing)
-   *   Add your `SENDGRID_API_KEY` and verified `SENDER_EMAIL` from SendGrid.
+   *   **Never paste this key anywhere it could be committed or publicly logged.** Google auto-revokes keys it detects as leaked (e.g. from GitHub commit history), and once revoked a key cannot be un-revoked — you'd have to generate a new one.
+   *   Add your `ZEPTOMAIL_TOKEN` and verified `SENDER_EMAIL` from ZeptoMail (used for OTP emails; SendGrid was replaced by ZeptoMail in v110.0 — `SENDGRID_API_KEY` in `requirements.txt`/older docs is a leftover and no longer used by the app).
    *   Add a temporary `ADMIN_SECRET_KEY` for local testing of the download endpoint.
+   *   Set `LOCAL_DEV_MODE="true"` for local testing (see below). Leave it unset in production.
 
 Your `.env` file should look like this:
 ```
 # .env
 FLASK_SECRET_KEY="a_long_random_hex_string_generated_by_the_command"
 GEMINI_API_KEY="AIzaSy...your_gemini_key"
-SENDGRID_API_KEY="SG.AbCd...your_sendgrid_key"
+ZEPTOMAIL_TOKEN="your_zeptomail_token"
 SENDER_EMAIL="your_verified_email@example.com"
 ADMIN_SECRET_KEY="a_temporary_secret_for_local_testing"
+LOCAL_DEV_MODE="true"
 ```
 **Note:** You do **not** need to set `PERSISTENT_DATA_PATH` locally. The application code will correctly default to using the current directory.
+
+**`LOCAL_DEV_MODE` (added in v125.1):** a single on/off switch for local-testing-only behavior, driven entirely by this env var (never hardcoded in `app.py`) so it can't accidentally ship on in production:
+   *   When `true`: if `ZEPTOMAIL_TOKEN`/`SENDER_EMAIL` aren't set, OTP codes are printed to the server console instead of emailed (so you can log in without real email credentials), and `ENABLE_SECURE_CORS_POLICY` relaxes to allow any origin.
+   *   When unset/`false` (e.g. on Render): a missing ZeptoMail config fails loudly instead of silently "succeeding," and `ENABLE_SECURE_CORS_POLICY` auto-resolves to `True`, restricting the API to the origins in `ALLOWED_ORIGINS`.
+   *   You only need to set this locally — never set it on Render.
+
+**Optional — testing the dashboard without going through OTP:** the widget also supports a native-app auth route (`/api/v1/auth/native_app_session`), gated by a shared secret you set as `NATIVE_APP_SECRET_KEY` in `.env`. Posting to it with a matching `X-App-Secret-Key` header and an `identifier`/`name`/`age` payload creates a real (non-guest) profile directly and returns a JWT — handy for skipping the OTP screens while testing account-only features like the dashboard.
 
 #### **Step 4: Run and Test the Application Locally**
 
@@ -97,10 +107,10 @@ With your virtual environment active, run:
 ```bash
 python3 app.py
 ```
-The server will start on `http://127.0.0.1:5000`. When you run it for the first time, you will see a new file named `tyra_prod.db` appear in your project folder. This is your local SQLite database.
+The server will start on `http://127.0.0.1:5001` (see the `app.run(...)` call at the bottom of `app.py`). When you run it for the first time, you will see a new file named `tyra_prod.db` appear in your project folder. This is your local SQLite database.
 
-**2. Test the Monolith Version:**
-*   Open your browser and go to **http://127.0.0.1:5000**
+**2. Test the Monolith Version** (requires `ENABLE_WIDGET_MODE = False` in `app.py`; it defaults to `True`, which serves the widget API at `/` instead — see Part 1, Step 5 below):
+*   Open your browser and go to **http://127.0.0.1:5001**
 *   You should see the full Tyra web application.
 
 **3. Test the Embeddable Widget Version (Requires two terminals):**
@@ -111,7 +121,10 @@ The server will start on `http://127.0.0.1:5000`. When you run it for the first 
     ```
 *   **In your browser, go to:** **http://localhost:8000/embedding_test.html**
 *   You should see the test page with the purple Tyra widget launcher in the bottom-right corner.
+*   `embedding_test.html` already points `TYRA_API_BASE_URL` at `http://127.0.0.1:5001` (the Render URL is commented out) — flip which line is commented to switch it between local and production.
+*   The widget served here goes through the real signup flow (email + OTP, or guest) — same as a real embed on `tribher.com` would, since no auth is pre-supplied. With `LOCAL_DEV_MODE="true"` and no `ZEPTOMAIL_TOKEN` set, the OTP code is printed to the Flask server's console instead of emailed.
 
+**Monolith vs. Widget Mode:** `ENABLE_WIDGET_MODE` in `app.py` (defaults `True`) controls which of the above two you get at `/`. `True` serves the widget API (for Step 3 above); `False` serves the full monolith web app (for Step 2 above). Toggle it and restart the server to switch between them.
 
 ### **Part 2: Production Deployment Setup (Render.com)**
 
@@ -145,12 +158,12 @@ This is where you will securely store your secret keys and tell the application 
 | `PERSISTENT_DATA_PATH`      | `/data/tyra`                                  | **Crucial:** Must exactly match the Disk Mount Path from Step 2.            |
 | `FLASK_SECRET_KEY`          | *Your long, random secret key*                | A unique, secure key for signing sessions.                                  |
 | `GEMINI_API_KEY`            | *Your Google AI Studio API Key*               | Your production key for the Gemini model.                                   |
-| `SENDGRID_API_KEY`          | *Your SendGrid API Key*                       | Your production key for sending OTP emails.                                 |
-| `SENDER_EMAIL`              | *your_verified_email@example.com*             | The "From" email address verified in SendGrid.                              |
+| `ZEPTOMAIL_TOKEN`           | *Your ZeptoMail API Key*                      | Your production key for sending OTP emails. (Replaced `SENDGRID_API_KEY` in v110.0 — do not set that one, it's unused.) |
+| `SENDER_EMAIL`              | *your_verified_email@example.com*             | The "From" email address verified in ZeptoMail.                             |
 | `ADMIN_SECRET_KEY`          | *A new, very long, unpredictable secret*      | The secret "password" for accessing the database download endpoint.         |
-| `ZEPTOMAIL_TOKEN`           | *Your ZeptoMail API Key*                      | Your production key for sending OTP emails.                                 |
+| `NATIVE_APP_SECRET_KEY`     | *A new, very long, unpredictable secret*      | Shared secret for the native mobile app's auth route. Only set this if you actually have a native app client; leave unset otherwise. |
 
-We are using ZEPTOMAIL_TOKEN instead of SENDGRID_API_KEY now.
+**Do not set `LOCAL_DEV_MODE` here.** It must stay unset on Render — it's the local-only switch described in Part 1, Step 3, and setting it in production would relax CORS and skip real OTP delivery.
 
 #### **Step 4: Configure Build and Start Commands**
 1.  Go back to the service's **"Settings"** tab.
@@ -240,7 +253,7 @@ https://tyra-ai.onrender.com/admin/backup/download_db/X7kP9mW3qT8rY2nF6vL4zJ0hB5
 
 
 #### **Point 5: Pending Item**
-1.  ENABLE_SECURE_CORS_POLICY=True (Once Tribher is connected)  
+1.  ~~ENABLE_SECURE_CORS_POLICY=True (Once Tribher is connected)~~ **Resolved in v125.1:** now automatic — `ENABLE_SECURE_CORS_POLICY = not LOCAL_DEV_MODE`, so it's `True` by default on Render (where `LOCAL_DEV_MODE` is unset) and only relaxes when `LOCAL_DEV_MODE="true"` is explicitly set locally. No manual flip needed at deploy time.
 2.  Add video in youtube and make them Public but dont list in channel (check app too)
 3.  Redis support
 4.  TBD
@@ -711,3 +724,19 @@ Here is the consolidated summary for the **v125.0 Hardening Upgrade**, formatted
 *   **`app.py`**: Added the `ENABLE_DOMAIN_GUARDRAILS` feature flag. Implemented `MAX_OUTPUT_TOKENS_HEALTH` in the LLM fallback engine. Updated `get_conversation_summary` with "The Bouncer" logic. Added the `_get_health_pivot_response` helper to utilize localized refusal strings.
 *   **`user_profiler.py`**: Surgically updated `format_profile_for_prompt` to inject the **Primary Directive** and **Guardrail Directive**. This forces the LLM to prioritize domain locking and format restrictions (blocking raw JSON/Code blocks) over user commands.
 *   **`locales/en.json`**: Added `guardrail_refusal_pivot` and `guest_guardrail_refusal` keys to ensure that security responses are professionally managed and fully translatable, supporting the app's global architectural standards.
+
+### **14: "Local Dev Mode & Native-Session Fix" (Environment Hygiene & Gemini 3.5 Migration)**
+**Version:** v125.1
+**Complexity:** ⭐⭐ (Low - Config Flag + Small Endpoint Fix)
+**Impact:** ⭐⭐⭐⭐ (Developer Experience & Deployment Safety - Removes the need to manually flip flags between local testing and Render).
+
+### **Why this is a breakthrough:**
+1.  **One Flag to Rule Local Testing:** Previously, testing locally without real ZeptoMail credentials meant OTP send would always fail, and `ENABLE_SECURE_CORS_POLICY` had to be remembered and manually flipped before every deploy (see the now-resolved Pending Item above). A single `LOCAL_DEV_MODE` env var (unset/`false` by default) now drives both behaviors, so production is secure-by-default and local dev "just works" with one line in `.env`.
+2.  **Gemini Model Deprecation:** `gemini-2.5-flash-lite` became unavailable to newer API keys/projects ("no longer available to new users" — Google's error pointed to `gemini-3.5-flash-lite`). `GEMINI_MODEL_CASCADE_LIST` now leads with the 3.5 models and falls back through the 2.x models for older keys that still have access.
+3.  **Native-App Session Bug Fix:** `/api/v1/config` never returned the user's `name`, so a widget session started from a pre-supplied token (the exact use case `/api/v1/auth/native_app_session` exists for) never displayed it anywhere in the UI. Fixed by including `name` in the config response and having `tyra_widget.js` fill in `state.userName` from it.
+4.  **Leaked Key Hygiene:** An old `.env` (with a Gemini key, SendGrid key, and Flask secret) had been committed to git history in v101.4-era commits and later "deleted" in a follow-up commit — which doesn't remove it from history. This is why Google's leak-detection revoked the Gemini key. History was scrubbed locally with `git filter-repo --path .env --invert-paths`; **a force-push to `origin` to apply this to GitHub is still pending** (deliberately not done automatically — coordinate before running `git push --force origin main`).
+
+### **Modified Files:**
+*   **`app.py`**: Added `LOCAL_DEV_MODE` (env-driven, `app.py` line ~32). `ENABLE_SECURE_CORS_POLICY` is now derived from it (`not LOCAL_DEV_MODE`) instead of being hardcoded. `send_otp_email`'s missing-credentials branch now only falls back to console-printing the OTP when `LOCAL_DEV_MODE` is true; otherwise it still fails loudly. Updated `GEMINI_MODEL_CASCADE_LIST` to lead with `gemini-3.5-flash-lite`/`gemini-3.5-flash`. `/api/v1/config` now returns `name`.
+*   **`static/js/tyra_widget.js`**: `initializeAuthenticatedSession` now sets `state.userName` from `config.name` when present.
+*   **`.env`** (local, gitignored, not committed): added `LOCAL_DEV_MODE`, `NATIVE_APP_SECRET_KEY`, switched from `SENDGRID_API_KEY` to `ZEPTOMAIL_TOKEN`.

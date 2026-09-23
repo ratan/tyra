@@ -42,6 +42,19 @@
         // For production on Render.com, use:
         //const TYRA_API_BASE_URL = 'https://tyra-ai.onrender.com';
 
+        // OPTIONAL - LOCAL DEV ONLY: to skip the OTP/guest screens and land directly on a
+        // real (non-guest) account (e.g. to test the dashboard), set NATIVE_APP_SECRET_KEY in
+        // your local .env, then generate a token with:
+        //
+        //   curl -X POST http://127.0.0.1:5001/api/v1/auth/native_app_session \
+        //     -H "Content-Type: application/json" \
+        //     -H "X-App-Secret-Key: <your NATIVE_APP_SECRET_KEY>" \
+        //     -d '{"identifier":"localtest@example.com","name":"Test User","age":"28"}'
+        //
+        // Copy the returned "token" value into TYRA_DEV_AUTH_TOKEN below, and pass it as
+        // `authToken` in the TyraWidget.init() call further down. Never commit a real token here.
+        // const TYRA_DEV_AUTH_TOKEN = 'paste_your_locally_generated_token_here';
+
         (function() {
             // --- DYNAMIC LOADER SCRIPT ---
             // This function creates and injects the necessary CSS and JS files into the page head.
@@ -61,6 +74,7 @@
                 TyraWidget.init({
                     targetElementId: 'tyra-chat-widget',
                     apiUrl: TYRA_API_BASE_URL
+                    // authToken: TYRA_DEV_AUTH_TOKEN // uncomment along with the const above to skip OTP/guest locally
                 });
             };
             
